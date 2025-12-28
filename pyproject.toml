@@ -1,0 +1,22 @@
+[project]
+name = "biopeak-nexus-fe"
+version = "0.0.1"
+description = "Biopeak Nexus Interface Backend"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "django",
+    "django-cors-headers",
+    "django-debug-toolbar",
+    "djangorestframework",
+    "djangorestframework-stubs",
+    "djangorestframework-simplejwt",
+    "gunicorn",
+    "ipython",
+    "phonenumbers",
+    "pillow",
+    "psycopg",
+    "python-decouple",
+    "requests",
+    "whitenoise",
+]

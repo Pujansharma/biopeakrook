@@ -1,0 +1,72 @@
+"""
+Type stubs for core.utils.views that override method signatures
+to use TypedRequest instead of Request
+"""
+from typing import Any
+
+from rest_framework.generics import (
+    GenericAPIView, ListAPIView, CreateAPIView,
+    RetrieveAPIView, DestroyAPIView, UpdateAPIView
+)
+from rest_framework.response import Response
+
+from core.utils.messages import APIMessageMixin
+from core.utils.request import Request
+
+
+# These stubs override the method signatures in views.py
+# Type checkers will use these instead of the actual implementations
+class BaseGenericAPIView(GenericAPIView):
+    request: Request
+
+    @classmethod
+    def send_response(cls, detail: str, data: Any = None, status: int = 200) -> Response: ...
+
+    @classmethod
+    def send_bad_request(cls, detail: str) -> Response: ...
+
+
+class BaseCreateAPIView(BaseGenericAPIView, APIMessageMixin, CreateAPIView):
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response: ...
+
+    def get_create_success_message(self) -> str: ...
+
+
+class BaseListAPIView(BaseGenericAPIView, APIMessageMixin, ListAPIView):
+    def get(self, request: Request, *args: Any, **kwargs: Any) -> Response: ...
+
+    def get_list_success_message(self) -> str: ...
+
+
+class BaseRetrieveAPIView(BaseGenericAPIView, APIMessageMixin, RetrieveAPIView):
+    def get(self, request: Request, *args: Any, **kwargs: Any) -> Response: ...
+
+    def get_retrieve_success_message(self) -> str: ...
+
+
+class BaseDestroyAPIView(BaseGenericAPIView, APIMessageMixin, DestroyAPIView):
+    def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response: ...
+
+    def get_delete_success_message(self) -> str: ...
+
+
+class BaseUpdateAPIView(BaseGenericAPIView, APIMessageMixin, UpdateAPIView):
+    def put(self, request: Request, *args: Any, **kwargs: Any) -> Response: ...
+
+    def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response: ...
+
+    def get_modify_success_message(self) -> str: ...
+
+    def get_update_success_message(self) -> str: ...
+
+
+class BaseListCreateAPIView(BaseListAPIView, BaseCreateAPIView): ...
+
+
+class BaseRetrieveUpdateAPIView(BaseRetrieveAPIView, BaseUpdateAPIView): ...
+
+
+class BaseRetrieveDestroyAPIView(BaseRetrieveAPIView, BaseDestroyAPIView): ...
+
+
+class BaseRetrieveUpdateDestroyAPIView(BaseRetrieveUpdateAPIView, BaseDestroyAPIView): ...
