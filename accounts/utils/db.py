@@ -19,6 +19,8 @@ def get_user_account(user: User) -> UserAccount:
 
 
 def get_user_account_type(user: User) -> str:
+    if user.is_anonymous:
+        return UserType.UNKNOWN
     if user.is_superuser:
         return UserType.SUPERUSER
     account = get_user_account(user)
