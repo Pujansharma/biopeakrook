@@ -1,0 +1,62 @@
+from django.db import models
+
+from accounts.centers.utils.constants import CenterStatus
+from appointments.utils.constants import ScheduleModes, AppointmentDays
+from core.utils.models import BaseUUIDModel
+
+
+class Center(BaseUUIDModel):
+    code = models.CharField(max_length=25, db_index=True, editable=False)
+    name = models.CharField(max_length=200)
+
+    address = models.TextField(null=True)
+
+    # Contact Information
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    contact_person = models.CharField(max_length=100, blank=True)
+
+    # Operating Configuration
+    modes = models.CharField(
+        choices=ScheduleModes.CHOICES, default=ScheduleModes.IN_PERSON
+    )
+    status = models.CharField(
+        choices=CenterStatus.CHOICES,
+        default=CenterStatus.SETUP  # New centers start as 'setup'
+    )
+
+    class Meta:
+        ordering = ['code', '-created_at']
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CenterOperatingHours(BaseUUIDModel):
+    """Global operating hours for the center"""
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name='operating_hours'
+    )
+
+    day_of_week = models.CharField(choices=AppointmentDays.CHOICES)
+
+    is_open = models.BooleanField(default=True)  # False for days center is closed
+
+    open_time = models.TimeField(
+        null=True, blank=True,
+        help_text="Center opens at this time"
+    )
+    close_time = models.TimeField(
+        null=True, blank=True,
+        help_text="Center closes at this time"
+    )
+
+    class Meta:
+        ordering = ['center', 'day_of_week']
+        verbose_name_plural = "Center Operating Hours"
+        constraints = [
+            models.UniqueConstraint(fields=['center', 'day_of_week'], name='uniq_center_day')
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
