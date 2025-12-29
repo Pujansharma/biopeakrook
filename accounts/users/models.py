@@ -5,7 +5,8 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from accounts.users.utils.constants import PHONE_NUMBER_MAX_LENGTH, Gender
+from accounts.users.utils.constants import Gender
+from core.utils.fields import PhoneNumberField
 from core.utils.validators import PhoneNumberValidator
 
 
@@ -92,12 +93,8 @@ class User(AbstractBaseUser, AbstractUserProfile, PermissionsMixin):
             "unique": _("A user with that email already exists."),
         },
     )
-    phone = models.CharField(
-        _("phone number"), max_length=PHONE_NUMBER_MAX_LENGTH,
-        blank=True, null=True, unique=True, db_index=False,
-        error_messages={"unique": _("A user with that phone number already exists."), },
-        help_text=_("Phone number with country code."),
-        validators=[phone_number_validator]
+    phone = PhoneNumberField(
+        _("phone number"), blank=True, null=True, unique=True, db_index=False,
     )
     is_staff = models.BooleanField(
         _("staff status"), default=False, help_text=_("Designates whether the user can log into this admin site."),
