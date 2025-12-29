@@ -1,8 +1,11 @@
 from django.db import models
 
 from accounts.centers.utils.constants import CenterStatus
+from accounts.utils import get_user_model
 from appointments.utils.constants import ScheduleModes, AppointmentDays
 from core.utils.models import BaseUUIDModel
+
+User = get_user_model()
 
 
 class Center(BaseUUIDModel):
@@ -23,6 +26,11 @@ class Center(BaseUUIDModel):
     status = models.CharField(
         choices=CenterStatus.CHOICES,
         default=CenterStatus.SETUP  # New centers start as 'setup'
+    )
+
+    # Audit
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_centers'
     )
 
     class Meta:
