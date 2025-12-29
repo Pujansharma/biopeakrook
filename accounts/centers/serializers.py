@@ -56,3 +56,6 @@ class CenterSerializer(BaseCenterSerializer):
 
     def update(self, instance, validated_data):
         """Method to update a center"""
+        validated_data.pop('code', None)
+        validated_data.pop('created_by', None)
+        return super().update(instance, validated_data)
