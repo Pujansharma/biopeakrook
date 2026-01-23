@@ -10,7 +10,7 @@ class ScheduleAdmin(admin.ModelAdmin):
     list_display = ['id', 'day_of_week', 'created_at', 'valid_until']
     list_filter = ['day_of_week', 'is_active']
     list_select_related = True
-    raw_id_fields = ['associate']
+    raw_id_fields = ['associate', 'center']
 
 
 @admin.register(BlockedPeriod)

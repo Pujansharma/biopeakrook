@@ -16,9 +16,11 @@ class Associate(BaseModel):
 
     specializations = ArrayField(
         base_field=models.CharField(choices=SpecializationType.CHOICES),
-        max_length=len(SpecializationType.CHOICES),
+        max_length=len(SpecializationType.CHOICES), null=True, blank=True
     )
-    role = models.CharField(choices=SpecializationRole.CHOICES)
+    role = models.CharField(
+        choices=SpecializationRole.CHOICES, default=SpecializationRole.OTHER
+    )
 
     is_admin = models.BooleanField(default=False)
     is_external = models.BooleanField(default=False)
@@ -47,9 +49,6 @@ class AssociateCenterAssignment(BaseUUIDModel):
 
     # Is this their primary center?
     is_primary = models.BooleanField(default=False)
-
-    # Active status per center
-    is_active = models.BooleanField(default=True)
 
     # Effective dates
     effective_from = models.DateField(null=True, blank=True)

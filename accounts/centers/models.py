@@ -11,8 +11,17 @@ User = get_user_model()
 class Center(BaseUUIDModel):
     code = models.CharField(max_length=25, db_index=True, editable=False)
     name = models.CharField(max_length=200)
+    image = models.ImageField(upload_to='centers/', null=True, blank=True)
 
-    address = models.TextField(null=True)
+    # Address information
+    address = models.CharField(null=True)
+    address_line_1 = models.CharField(null=True)
+    address_line_2 = models.CharField(null=True)
+
+    city = models.CharField(max_length=50, null=True, blank=True)
+    state = models.CharField(max_length=50, null=True, blank=True)
+    country = models.CharField(max_length=20, null=True, blank=True)
+    pincode = models.CharField(max_length=20, null=True, blank=True)
 
     # Contact Information
     phone = models.CharField(max_length=20, blank=True)
@@ -40,7 +49,7 @@ class Center(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class CenterOperatingHours(BaseUUIDModel):
+class CenterOperatingHour(BaseUUIDModel):
     """Global operating hours for the center"""
     center = models.ForeignKey(
         Center, on_delete=models.CASCADE, related_name='operating_hours'
@@ -60,11 +69,27 @@ class CenterOperatingHours(BaseUUIDModel):
     )
 
     class Meta:
-        ordering = ['center', 'day_of_week']
+        ordering = ['-created_at', 'day_of_week']
         verbose_name_plural = "Center Operating Hours"
         constraints = [
-            models.UniqueConstraint(fields=['center', 'day_of_week'], name='uniq_center_day')
+            models.UniqueConstraint(
+                fields=['center', 'day_of_week', 'is_open'], name='uniq_center_closed_day',
+                condition=models.Q(is_open=False)
+            )
         ]
 
     def __str__(self):
         return f"{self.pk}"
+
+
+class CenterHoliday(BaseUUIDModel):
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name='holidays'
+    )
+    date = models.DateField()
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['center', 'date'], name='uniq_center_holiday')
+        ]
