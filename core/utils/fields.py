@@ -55,7 +55,9 @@ class PhoneNumberSerializerField(serializers.CharField):
         kwargs.setdefault('max_length', 20)
         super().__init__(**kwargs)
         self.validators.append(PhoneNumberValidator(region=region))
-        self.error_messages = {"unique": _("A user with that phone number already exists."), },
+        self.error_messages.update({
+            "unique": _("A user with that phone number already exists."),
+        })
         self.help_text = _("Phone number with country code."),
 
     def to_internal_value(self, data):

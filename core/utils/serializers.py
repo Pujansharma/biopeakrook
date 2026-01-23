@@ -1,7 +1,12 @@
+from typing import TypeVar
+
+from django.db.models import Model
 from rest_framework import serializers
 
+_MT = TypeVar("_MT", bound=Model)
 
-class BaseModelSerializer(serializers.ModelSerializer):
+
+class BaseModelSerializer(serializers.ModelSerializer[_MT]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.context.update({

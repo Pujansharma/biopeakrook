@@ -143,3 +143,17 @@ class CenterWorkingHourSerializer(BaseModelSerializer):
                 )
 
         return super().create(validated_data)
+
+
+class AssociateAvailableCenterSerializer(BaseModelSerializer):
+    exists = serializers.BooleanField(default=False, read_only=True)
+
+    class Model:
+        model = Center
+        fields = [
+            "id",
+            "code",
+            "name",
+            "image",
+            'exists'
+        ]

@@ -20,7 +20,9 @@ class CentersView(BaseListCreateAPIView):
         if search_params:
             search |= Q(
                 name__istartswith=search_params
-            ) | Q(code__icontains=search_params)
+            ) | Q(
+                code__icontains=search_params
+            )
 
         return Center.objects.prefetch_related(
             'created_by'

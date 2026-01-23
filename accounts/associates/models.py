@@ -44,7 +44,8 @@ class AssociateCenterAssignment(BaseUUIDModel):
     # Center-specific configuration
     mode = models.CharField(
         choices=ScheduleModes.CHOICES,
-        help_text="How this associate works at THIS center (virtual/in-person/both)"
+        help_text="How this associate works at THIS center (virtual/in-person/both)",
+        default=ScheduleModes.BOTH
     )
 
     # Is this their primary center?

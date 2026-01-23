@@ -1,8 +1,11 @@
-from django.db.models import Q
+from django.db.models import Q, OuterRef, Exists
 
-from accounts.associates.models import Associate
-from accounts.associates.serializers import AssociateSerializer
+from accounts.associates.models import Associate, AssociateCenterAssignment
+from accounts.associates.serializers import AssociateSerializer, AssociateCenterLinkSerializer
+from accounts.centers.models import Center
+from accounts.centers.serializers import CenterSerializer, AssociateAvailableCenterSerializer
 from accounts.utils.permissions import IsAdminUser
+from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListCreateAPIView, BaseRetrieveUpdateDestroyAPIView, BaseCreateAPIView, BaseListAPIView
 )
@@ -17,7 +20,13 @@ class AssociateView(BaseListCreateAPIView):
         search_query = Q()
         search_params = self.request.query_params.get('search', '').strip()
         if search_params:
-            search_query |= Q()
+            search_query |= Q(
+                user__email__istartswith=search_params
+            ) | Q(
+                user__phone__istartswith=search_params
+            ) | Q(
+                user__first_name__istartswith=search_params
+            )
 
         return Associate.objects.select_related().filter(search_query)
 
@@ -28,19 +37,59 @@ class AssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
     serializer_class = AssociateSerializer
 
     def get_queryset(self):
-        pass
+        return Associate.objects.select_related()
 
 
 class AssociateAvailableCenterView(BaseListAPIView):
     """View to list centers available for any associate"""
-    pass
+    permission_classes = [IsAdminUser]
+    serializer_class = AssociateAvailableCenterSerializer
+
+    def get_associate(self):
+        associate_id = self.kwargs.get('pk')
+        qs = Associate.objects.select_related().filter()
+        return get_object_or_404(qs, pk=associate_id)
+
+    def get_queryset(self):
+        associate = self.get_associate()
+        associated_centers_subquery = AssociateCenterAssignment.objects.filter(
+            associate=associate,
+            center=OuterRef('pk')
+        )
+        return Center.objects.annotate(
+            exists=Exists(associated_centers_subquery)
+        )
 
 
 class AssociateCenterLinkView(BaseCreateAPIView):
     """View to link or delink associates to a center"""
-    pass
+    permission_classes = [IsAdminUser]
+    serializer_class = AssociateCenterLinkSerializer
+
+    def get_associate(self):
+        qs = Associate.objects.select_related()
+        return get_object_or_404(
+            qs, "Associate with the given ID does not exist", pk=self.kwargs.get('pk')
+        )
+
+    def perform_create(self, serializer):
+        associate = self.get_associate()
+        serializer.save(associate=associate)
 
 
 class AssociateAssignedCenters(BaseListAPIView):
     """View to list the centers assigned to an associate"""
-    pass
+    permission_classes = [IsAdminUser]
+    serializer_class = CenterSerializer
+
+    def get_associate(self):
+        qs = Associate.objects.select_related()
+        return get_object_or_404(
+            qs, "Associate with the given ID does not exist", pk=self.kwargs.get('pk')
+        )
+
+    def get_queryset(self):
+        associate = self.get_associate()
+        return Center.objects.select_related().filter(
+            associate_assignments__associate=associate
+        )

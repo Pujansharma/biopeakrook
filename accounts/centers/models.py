@@ -43,7 +43,7 @@ class Center(BaseUUIDModel):
     )
 
     class Meta:
-        ordering = ['code', '-created_at']
+        ordering = ['-code', '-created_at']
 
     def __str__(self):
         return f"{self.pk}"
