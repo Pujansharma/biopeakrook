@@ -155,5 +155,6 @@ class AssociateAvailableCenterSerializer(BaseModelSerializer):
             "code",
             "name",
             "image",
-            'exists'
+            'exists',
+            "is_active",
         ]
