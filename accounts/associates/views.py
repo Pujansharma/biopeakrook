@@ -1,4 +1,4 @@
-from django.db.models import Q, OuterRef, Exists
+from django.db.models import Q, OuterRef, Exists, RestrictedError, ProtectedError
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.associates.serializers import AssociateSerializer, AssociateCenterLinkSerializer
@@ -38,6 +38,18 @@ class AssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Associate.objects.select_related()
+
+    def perform_destroy(self, instance: Associate):
+        user = instance.user
+        try:
+            user.delete()
+        except (RestrictedError, ProtectedError) as e:
+            restricted_count = len(getattr(e, 'restricted_objects', set()))
+            protected_count = len(getattr(e, 'protected_objects', set()))
+            total = restricted_count + protected_count
+            return self.send_bad_request(
+                f'Cannot delete this associate. {total} related record(s) exist.'
+            )
 
 
 class AssociateAvailableCenterView(BaseListAPIView):
