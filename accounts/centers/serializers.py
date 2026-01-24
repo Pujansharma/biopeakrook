@@ -148,7 +148,7 @@ class CenterWorkingHourSerializer(BaseModelSerializer):
 class AssociateAvailableCenterSerializer(BaseModelSerializer):
     exists = serializers.BooleanField(default=False, read_only=True)
 
-    class Model:
+    class Meta:
         model = Center
         fields = [
             "id",
