@@ -19,8 +19,8 @@ bind = '[::]:8000'
 # The number of worker processes for handling requests.
 # A common recommendation is (2 * number_of_cpu_cores) + 1.
 # This setting is crucial for performance and should be tuned based on your server's resources.
-workers = 1
-# workers = multiprocessing.cpu_count() * 2 + 1
+# workers = 1
+workers = multiprocessing.cpu_count() * 2 + 1
 
 # The type of worker to use.
 # The 'sync' worker class is the default and is a good choice for many applications.
