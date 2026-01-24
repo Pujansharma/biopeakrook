@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.db.models import Q
 from rest_framework import serializers
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
@@ -13,24 +12,33 @@ from core.utils.serializers import BaseModelSerializer, BaseSerializer
 class BaseAssociateSerializer(BaseModelSerializer):
     """Base associate serializer for display"""
     id = serializers.UUIDField(source='user.id', read_only=True)
-    email = serializers.EmailField(source='user.email', required=True)
+    email = serializers.EmailField(source='user.email', required=False)
     phone = PhoneNumberSerializerField(source='user.phone', required=False)
     first_name = serializers.CharField(source='user.first_name', required=False)
     last_name = serializers.CharField(source='user.last_name', required=False)
-    gender = serializers.ChoiceField(source='user.gender', choices=Gender.CHOICES, required=False)
+    gender = serializers.ChoiceField(
+        source='user.gender', choices=Gender.CHOICES, required=False, allow_null=True
+    )
     date_of_birth = serializers.DateField(source='user.date_of_birth', required=False)
-    image = serializers.ImageField(source='user.image', required=False)
+    image = serializers.ImageField(source='user.image', required=False, allow_null=True)
     date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
     last_login = serializers.DateTimeField(source='user.last_login', read_only=True)
+    is_active = serializers.BooleanField(source='user.is_active', required=False, default=True)
 
     class Meta:
         model = Associate
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "specializations", "role", "is_admin", "is_external",
+            "specializations", "role", "is_admin", "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if 'gender' in self.get_fields():
+            rep['gender'] = instance.user.get_gender_display()
+        return rep
 
 
 class AssociateSerializer(BaseAssociateSerializer):
@@ -41,33 +49,36 @@ class AssociateSerializer(BaseAssociateSerializer):
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "specializations", "role", "is_admin", "is_external",
+            "specializations", "role", "is_admin", "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
 
     def create(self, validated_data):
         user_data = validated_data.pop('user', {})
-        email = user_data.get('email', None)
-        phone = user_data.get('phone', None)
+        email = user_data.get('email')
+        phone = user_data.get('phone')
+
+        errors = {}
+        if email and User.objects.filter(email__iexact=email).exists():
+            errors['email'] = "User with this email already exists."
+        if phone and User.objects.filter(phone__iexact=phone).exists():
+            errors['phone'] = "User with this phone already exists."
+
+        if errors:
+            raise serializers.ValidationError(errors)
 
         with transaction.atomic():
-            user_exists_filter = Q()
-            if email:
-                user_exists_filter |= Q(email__iexact=email)
-            if phone:
-                user_exists_filter |= Q(phone__iexact=phone)
-
-            exists = User.objects.filter(user_exists_filter).exists()
-            if exists:
-                raise serializers.ValidationError()
             user = User.objects.create_user(**user_data)
             validated_data['user'] = user
             return super().create(validated_data)
 
     def update(self, instance: Associate, validated_data):
         user_data = validated_data.pop('user', {})
-        for key, value in user_data.items:
+        is_active = user_data.get('is_active', False)
+        for key, value in user_data.items():
             setattr(instance.user, key, value)
+        instance.user.save()
+        validated_data['is_active'] = is_active
         return super().update(instance, validated_data)
 
 
@@ -79,7 +90,7 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "specializations", "role", "is_admin", "is_external",
+            "specializations", "role", "is_admin", "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
 
@@ -95,8 +106,9 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
         validated_data.pop("is_admin", None)
         validated_data.pop("is_external", None)
 
-        for key, value in user_data.items:
+        for key, value in user_data.items():
             setattr(instance.user, key, value)
+        instance.user.save()
         return super().update(instance, validated_data)
 
 
