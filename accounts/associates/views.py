@@ -63,6 +63,16 @@ class AssociateAvailableCenterView(BaseListAPIView):
         return get_object_or_404(qs, pk=associate_id)
 
     def get_queryset(self):
+        search_query = Q()
+        search_params = self.request.query_params.get('search', '').strip()
+        if search_params:
+            search_query |= Q(name__istartswith=search_params) | Q(
+                code__istartswith=search_params
+            ) | Q(
+                code__icontains=search_params
+            ) | Q(
+                name__icontains=search_params
+            )
         associate = self.get_associate()
         associated_centers_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate,
@@ -70,7 +80,7 @@ class AssociateAvailableCenterView(BaseListAPIView):
         )
         return Center.objects.annotate(
             exists=Exists(associated_centers_subquery)
-        )
+        ).filter(search_query)
 
 
 class AssociateCenterLinkView(BaseCreateAPIView):
