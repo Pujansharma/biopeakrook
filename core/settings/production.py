@@ -16,7 +16,7 @@ DATABASES = {
         'HOST': config('PRD_DB_HOST'),
         'PORT': config('PRD_DB_PORT'),
         'OPTIONS': {
-            'sslmode': 'required',
+            # 'sslmode': 'required',
         }
     }
 }
