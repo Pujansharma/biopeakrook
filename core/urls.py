@@ -4,9 +4,9 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path, include
 
-admin.site.site_header = "DRF-Base Admin Dashboard"
-admin.site.site_title = "DRF-Base Admin Dashboard"
-admin.site.index_title = "DRF-Base Dashboard"
+admin.site.site_header = "Biopeak Nexus Admin Dashboard"
+admin.site.site_title = "Biopeak Nexus Dashboard"
+admin.site.index_title = "Biopeak Nexus Dashboard"
 
 urlpatterns = [
     path('', include('core.api.urls')),

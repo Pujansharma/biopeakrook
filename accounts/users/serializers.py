@@ -1,12 +1,13 @@
 from rest_framework import serializers
 
 from accounts.users.models import User
+from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
 
 
 class UserProfileSerializer(BaseModelSerializer):
     email = serializers.CharField(read_only=True, required=False)
-    phone = serializers.CharField(read_only=True, required=False)
+    phone = PhoneNumberSerializerField(read_only=True, required=False)
 
     class Meta:
         model = User

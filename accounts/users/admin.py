@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from accounts.users.models import User
-from core.utils.fields import PhoneNumberField
+from core.utils.fields import PhoneNumberFormField
 
 
 @admin.register(User)
@@ -10,7 +10,7 @@ class UserAdmin(BaseUserAdmin):
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == 'phone':
-            kwargs['form_class'] = PhoneNumberField
+            kwargs['form_class'] = PhoneNumberFormField
             kwargs['region'] = 'IN'
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 

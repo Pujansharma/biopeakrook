@@ -15,6 +15,7 @@ SECRET_KEY = config('SECRET_KEY')
 # Application definition
 
 INSTALLED_APPS = [
+    'django.contrib.postgres',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -24,11 +25,23 @@ INSTALLED_APPS = [
 
     'debug_toolbar',
     "corsheaders",
+    'sequences',
 
     'accounts',
     'accounts.users',
 
-    'sequences',
+    'accounts.associates',
+    'accounts.centers',
+    'accounts.customers',
+
+    'appointments',
+
+    'services',
+    'services.packages',
+
+    'inventory',
+    'webhooks',
+
 ]
 
 AUTH_USER_MODEL = 'users.User'

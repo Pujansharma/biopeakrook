@@ -1,11 +1,11 @@
 from typing import Optional
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import smart_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 
 from accounts.models import UserAccount
+from accounts.utils import get_user_model
 from accounts.utils.constants import UserType
 
 User = get_user_model()
@@ -18,7 +18,9 @@ def get_user_account(user: User) -> UserAccount:
     return account
 
 
-def get_user_account_type(user: User):
+def get_user_account_type(user: User) -> str:
+    if user.is_anonymous:
+        return UserType.UNKNOWN
     if user.is_superuser:
         return UserType.SUPERUSER
     account = get_user_account(user)
