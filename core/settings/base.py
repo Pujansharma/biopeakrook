@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'sequences',
 
     'accounts',
+    'accounts.verifications',
     'accounts.users',
 
     'accounts.associates',

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from accounts import views
+from accounts.verifications.views import RequestOTPView, LoginOTPView
 
 app_name = 'accounts'
 
@@ -11,4 +12,8 @@ urlpatterns = [
     path('forgot-password/', views.RequestPasswordResetEmailView.as_view(), name="forgot_password"),
     path('check-password-token/', views.PasswordTokenCheckView.as_view(), name="check_password_token"),
     path('reset-password/', views.ResetPasswordView.as_view(), name="reset_password"),
+
+    # OTP Flow
+    path('request-otp/', RequestOTPView.as_view(), name='request_otp'),
+    path('login-otp/', LoginOTPView.as_view(), name='login_otp'),
 ]

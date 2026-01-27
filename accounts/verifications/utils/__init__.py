@@ -1,0 +1,59 @@
+import base64
+import random
+import uuid
+from datetime import timedelta
+from io import BytesIO
+
+import pyotp
+import qrcode
+from django.utils import timezone
+
+
+def generate_expiry():
+    return timezone.now() + timedelta(days=7)
+
+
+def generate_code():
+    return uuid.uuid4().hex
+
+
+def get_expiry():
+    return timezone.now() + timedelta(minutes=2)
+
+
+def get_counter():
+    return random.randint(1, 32767)
+
+
+def get_secret():
+    secret = pyotp.random_base32()
+    return secret
+
+
+def get_code(secret, counter):
+    h_otp = pyotp.HOTP(secret)
+    code = h_otp.at(counter)
+    return code
+
+
+def code_valid(secret, counter, code):
+    if not secret:
+        return None
+    h_otp = pyotp.HOTP(secret)
+    return h_otp.verify(code, counter)
+
+
+def get_two_factor_uri(secret, name):
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=name, issuer_name='MetSights')
+    return uri
+
+
+def get_qr_code_data_uri(data):
+    buffer = BytesIO()
+    qrcode.make(data).save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
+def verify_two_factor_code(secret, code):
+    totp = pyotp.TOTP(secret)
+    return totp.verify(code)

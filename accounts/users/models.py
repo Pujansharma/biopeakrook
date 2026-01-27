@@ -1,7 +1,11 @@
 import uuid
 
 from django.contrib.auth.hashers import make_password
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -19,7 +23,7 @@ class UserManager(BaseUserManager["User"]):
         By default, Django does a case-sensitive check on usernames. This is wrong.
         Overriding this method fixes it.
         """
-        return self.get(**{self.model.USERNAME_FIELD + '__iexact': username})
+        return self.get(**{self.model.USERNAME_FIELD + "__iexact": username})
 
     @classmethod
     def clean_email(cls, email: str) -> str | None:
@@ -36,11 +40,10 @@ class UserManager(BaseUserManager["User"]):
         Create and save a user with the given email, and password.
         """
         if not email:
-            raise ValueError('The given email must be set')
+            raise ValueError("The given email must be set")
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
-        if password is not None:
-            user.password = make_password(password)
+        user.password = make_password(password)
         user.save(using=self._db)
         return user
 
@@ -63,12 +66,16 @@ class UserManager(BaseUserManager["User"]):
 
 
 class AbstractUserProfile(models.Model):
-    first_name = models.CharField(_("first name"), max_length=100, null=True, blank=True)
+    first_name = models.CharField(
+        _("first name"), max_length=100, null=True, blank=True
+    )
     last_name = models.CharField(_("last name"), max_length=100, null=True, blank=True)
     date_of_birth = models.DateField(blank=True, null=True)
 
-    gender = models.CharField(max_length=1, choices=Gender.CHOICES, null=True, blank=True)
-    image = models.ImageField(upload_to='users/images/', null=True, blank=True)
+    gender = models.CharField(
+        max_length=1, choices=Gender.CHOICES, null=True, blank=True
+    )
+    image = models.ImageField(upload_to="users/images/", null=True, blank=True)
 
     class Meta:
         abstract = True
@@ -87,23 +94,37 @@ class AbstractUserProfile(models.Model):
 
 class User(AbstractBaseUser, AbstractUserProfile, PermissionsMixin):
     phone_number_validator = PhoneNumberValidator()
-    id = models.UUIDField(_('ID'), default=uuid.uuid7, editable=False, primary_key=True, db_index=True)
+    id = models.UUIDField(
+        _("ID"), default=uuid.uuid7, editable=False, primary_key=True, db_index=True
+    )
     email = models.EmailField(
-        _("email address"), blank=True, null=True, unique=True, db_index=False,
+        _("email address"),
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=False,
         error_messages={
             "unique": _("A user with that email already exists."),
         },
     )
     phone = PhoneNumberField(
-        _("phone number"), blank=True, null=True, unique=True, db_index=False,
+        _("phone number"),
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=False,
     )
     is_staff = models.BooleanField(
-        _("staff status"), default=False, help_text=_("Designates whether the user can log into this admin site."),
+        _("staff status"),
+        default=False,
+        help_text=_("Designates whether the user can log into this admin site."),
     )
     is_active = models.BooleanField(
-        _('active'), default=True, help_text=_(
-            'Designates whether this user should be treated as active. '
-            'Unselect this instead of deleting accounts.'
+        _("active"),
+        default=True,
+        help_text=_(
+            "Designates whether this user should be treated as active. "
+            "Unselect this instead of deleting accounts."
         ),
     )
 
@@ -111,28 +132,26 @@ class User(AbstractBaseUser, AbstractUserProfile, PermissionsMixin):
     updated_at = models.DateTimeField(auto_now=True)
 
     EMAIL_FIELD = "email"
-    USERNAME_FIELD = 'email'
+    USERNAME_FIELD = "email"
 
     objects = UserManager()
 
     class Meta:
         indexes = [
             models.Index(
-                fields=['email'], condition=models.Q(email__isnull=False),
-                name="%(app_label)s_%(class)s_email_index"
+                fields=["email"],
+                condition=models.Q(email__isnull=False),
+                name="%(app_label)s_%(class)s_email_index",
             ),
             models.Index(
-                fields=['phone'], condition=models.Q(phone__isnull=False),
-                name="%(app_label)s_%(class)s_phone_index"
-            )
+                fields=["phone"],
+                condition=models.Q(phone__isnull=False),
+                name="%(app_label)s_%(class)s_phone_index",
+            ),
         ]
 
     def __str__(self):
         return f"{self.pk}"
 
     def clean(self):
-        setattr(
-            self,
-            self.EMAIL_FIELD,
-            self.__class__.objects.clean_email(self.email)
-        )
+        setattr(self, self.EMAIL_FIELD, self.__class__.objects.clean_email(self.email))
