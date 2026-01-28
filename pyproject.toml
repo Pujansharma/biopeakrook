@@ -21,6 +21,6 @@ dependencies = [
     "whitenoise",
     "pandas",
     "pandas-stubs",
-    "pyotp>=2.9.0",
-    "qrcode>=8.2",
+    "pyotp",
+    "qrcode",
 ]
