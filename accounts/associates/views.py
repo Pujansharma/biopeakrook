@@ -3,14 +3,16 @@ from django.db.models import Q, OuterRef, Exists, RestrictedError, ProtectedErro
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.associates.serializers import (
     AdminAssociateSerializer, AdminAssociateCenterLinkSerializer,
-    AssociateCenterSerializer
+    AssociateCenterSerializer, AssociateProfileSerializer, AssociateCenterPermissionSerializer
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import AssociateAvailableCenterSerializer
-from accounts.utils.permissions import IsAdminUser
+from accounts.utils.permissions import IsAdminUser, AssociateAdminPermission, AssociateFeaturePermission, \
+    IsAssociateUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
-    BaseListCreateAPIView, BaseRetrieveUpdateDestroyAPIView, BaseCreateAPIView, BaseListAPIView
+    BaseListCreateAPIView, BaseRetrieveUpdateDestroyAPIView, BaseCreateAPIView, BaseListAPIView,
+    BaseRetrieveUpdateAPIView, BaseRetrieveAPIView
 )
 
 
@@ -141,3 +143,47 @@ class AssociateAssignedCenters(BaseListAPIView):
         ).annotate(
             is_admin=Subquery(is_admin_subquery)
         )
+
+
+class AssociateProfileView(BaseRetrieveUpdateAPIView):
+    """View for associates to retrieve & update their own profile"""
+    permission_classes = [IsAssociateUser]
+    serializer_class = AssociateProfileSerializer
+
+    def get_queryset(self):
+        return Associate.objects.select_related(
+            'user__account'
+        ).filter(
+            user=self.request.user
+        )
+
+    def get_object(self):
+        return self.get_queryset().get()
+
+
+class AssociatePermissionView(BaseRetrieveAPIView):
+    """View for associates to view their own permissions"""
+    permission_classes = [
+        AssociateAdminPermission |
+        AssociateFeaturePermission |
+        IsAssociateUser
+    ]
+    serializer_class = AssociateCenterPermissionSerializer
+
+    def get_queryset(self):
+        center_id = getattr(self.request, 'center_id', None)
+
+        if not center_id:
+            raise self.send_bad_request("Center ID is not present or invalid.")
+
+        associate = getattr(self.request.user, 'associate', None)
+
+        return AssociateCenterAssignment.objects.select_related(
+            'associate', 'center'
+        ).filter(
+            associate=associate,
+            center__id=center_id,
+        )
+
+    def get_object(self):
+        return self.get_queryset().first()

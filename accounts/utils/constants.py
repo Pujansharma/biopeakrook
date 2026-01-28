@@ -14,15 +14,3 @@ USER_TYPE_CHOICES = (
     (UserType.ASSOCIATE, "Associate"),
     (UserType.CUSTOMER, 'Customer'),
 )
-
-
-class UserRoleType:
-    OTHER = 'other'
-    CENTER_ADMIN = 'center_admin'
-    SPECIALIST = "specialist"
-
-    CHOICES = (
-        (OTHER, 'Other'),
-        (CENTER_ADMIN, "Center Admin"),
-        (SPECIALIST, "Specialist"),
-    )

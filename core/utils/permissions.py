@@ -17,3 +17,7 @@ class ReadOnly(BasePermission):
 class AnonWriteOnly(BasePermission):
     def has_permission(self, request, view):
         return request.method in WRITE_METHODS
+
+class ReadUpdateOnly(BasePermission):
+    def has_permission(self, request, view):
+        return request.method in READ_UPDATE_METHODS

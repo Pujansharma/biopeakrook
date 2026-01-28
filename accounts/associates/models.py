@@ -1,6 +1,9 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
+from accounts.associates.utils.constants import (
+    AssociateRoleFeature, AssociateRoleTag, AssociateRoleAbility
+)
 from accounts.utils import get_user_model
 from appointments.utils.constants import ScheduleModes
 from core.utils.models import BaseModel, BaseUUIDModel
@@ -8,30 +11,12 @@ from core.utils.models import BaseModel, BaseUUIDModel
 User = get_user_model()
 
 
-class AssociateRoleFeature:
-    ALL_ACCESS = "all"
-
-    CHOICES = (
-        (ALL_ACCESS, "All Access"),
-    )
-
-
-class AssociateRoleTag:
-    CLINICAL = "clinical"
-    NON_CLINICAL = "non_clinical"
-
-    CHOICES = (
-        (CLINICAL, "Clinical"),
-        (NON_CLINICAL, "Non Clinical"),
-    )
-
-
 class AssociateRole(BaseUUIDModel):
     name = models.CharField(max_length=50)
     features = ArrayField(
         base_field=models.CharField(
             choices=AssociateRoleFeature.CHOICES,
-            default=AssociateRoleFeature.ALL_ACCESS
+            default=AssociateRoleFeature.ALL
         ), default=list
     )
 
@@ -45,13 +30,14 @@ class AssociateRole(BaseUUIDModel):
     )
 
     is_external = models.BooleanField(default=False)
-
     is_system = models.BooleanField(default=False, editable=False)
 
     created_by = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='created_associate_roles'
     )
+
+    summary = models.JSONField(default=dict, editable=False)
 
     class Meta:
         ordering = ['-created_at']
@@ -66,6 +52,20 @@ class AssociateRole(BaseUUIDModel):
         return f"{self.name} ({self.pk})"
 
 
+class AssociateRolePermission(BaseUUIDModel):
+    role = models.ForeignKey(AssociateRole, related_name='permissions', on_delete=models.CASCADE)
+    feature = models.CharField(choices=AssociateRoleFeature.CHOICES)
+    ability = models.CharField(choices=AssociateRoleAbility.CHOICES)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['role', 'feature'], name='uniq_role_feature')
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class Associate(BaseModel):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, primary_key=True, db_index=True, related_name='associate'
@@ -73,9 +73,6 @@ class Associate(BaseModel):
 
     is_external = models.BooleanField(default=False)
 
-    role = models.ForeignKey(
-        AssociateRole, related_name='associates', on_delete=models.SET_NULL, null=True, blank=True
-    )
     created_by = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_associates'
     )
@@ -94,6 +91,11 @@ class AssociateCenterAssignment(BaseUUIDModel):
     )
     center = models.ForeignKey(
         'centers.Center', on_delete=models.CASCADE, related_name='associate_assignments'
+    )
+
+    role = models.ForeignKey(
+        AssociateRole, related_name='role_assignments',
+        on_delete=models.SET_NULL, null=True, blank=True
     )
 
     # Center-specific configuration

@@ -12,3 +12,43 @@ class SpecializationType:
         (ULTRASONOGRAPHY, "Ultrasonography"),
         (BLOOD_COLLECTION, "Blood Collection"),
     )
+
+
+class AssociateRoleFeature:
+    ALL = "all"
+    CUSTOMER_ONBOARDING = "customer_onboarding"
+    ASSOCIATE_ONBOARDING = "associate_onboarding"
+    APPOINTMENTS = "appointments"
+    APPOINTMENT_DATA_SCOPE = "appointment_data_scope"
+    PACKAGES = "packages"
+
+    CHOICES = (
+        (ALL, "All"),
+        (CUSTOMER_ONBOARDING, "Customer Onboarding"),
+        (ASSOCIATE_ONBOARDING, "Associate Onboarding"),
+        (APPOINTMENTS, "Appointments"),
+        (APPOINTMENT_DATA_SCOPE, "Appointment Data Scope"),
+        (PACKAGES, "Packages"),
+    )
+
+
+class AssociateRoleAbility:
+    MANAGE = "manage"
+    READ = "read"
+    NONE = "none"
+
+    CHOICES = (
+        (MANAGE, "Manage"),
+        (READ, "Read"),
+        (NONE, "None"),
+    )
+
+
+class AssociateRoleTag:
+    CLINICAL = "clinical"
+    NON_CLINICAL = "non_clinical"
+
+    CHOICES = (
+        (CLINICAL, "Clinical"),
+        (NON_CLINICAL, "Non Clinical"),
+    )

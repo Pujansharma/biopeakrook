@@ -1,7 +1,8 @@
 from django.db import transaction
 from rest_framework import serializers
 
-from accounts.associates.models import Associate, AssociateCenterAssignment
+from accounts.associates.models import Associate, AssociateCenterAssignment, AssociateRole
+from accounts.associates.utils.db import create_associate_user_account
 from accounts.centers.models import Center
 from accounts.centers.serializers import CenterSerializer
 from accounts.users.models import User
@@ -28,13 +29,12 @@ class BaseAssociateSerializer(BaseModelSerializer):
     last_login = serializers.DateTimeField(source='user.last_login', read_only=True)
     is_active = serializers.BooleanField(source='user.is_active', required=False, default=True)
 
-
     class Meta:
         model = Associate
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "role",  "is_external", "is_active",
+            "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
 
@@ -47,14 +47,13 @@ class BaseAssociateSerializer(BaseModelSerializer):
 
 class AdminAssociateSerializer(BaseAssociateSerializer):
     """Serializers for admins to update or create associates"""
-    role = serializers.UUIDField(write_only=True, required=False)
 
     class Meta:
         model = Associate
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "role", "is_external", "is_active",
+            "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
         extra_kwargs = {
@@ -81,7 +80,9 @@ class AdminAssociateSerializer(BaseAssociateSerializer):
         with transaction.atomic():
             user = User.objects.create_user(**user_data)
             validated_data['user'] = user
-            return super().create(validated_data)
+            associate = super().create(validated_data)
+            create_associate_user_account(associate)
+            return associate
 
     def update(self, instance: Associate, validated_data):
         """Only Admins will be able to update associates"""
@@ -246,4 +247,68 @@ class AssociateCenterSerializer(CenterSerializer):
             "updated_at",
             "is_active",
             "is_admin",
+        ]
+
+
+class AssociateRoleSerializer(BaseModelSerializer):
+    class Meta:
+        model = AssociateRole
+        fields = [
+            'id',
+            "name",
+            "features",
+            "role_tag",
+            "is_external",
+            "is_system",
+            # "created_by",
+            "is_active",
+            "created_at",
+            "updated_at"
+        ]
+
+
+class CenterAssociateListSerializer(BaseModelSerializer):
+    # Flatten user fields to root
+    id = serializers.UUIDField(source='associate.user.id', read_only=True)
+    email = serializers.EmailField(source='associate.user.email', read_only=True)
+    phone = serializers.CharField(source='associate.user.phone', read_only=True)
+    first_name = serializers.CharField(source='associate.user.first_name', read_only=True)
+    last_name = serializers.CharField(source='associate.user.last_name', read_only=True)
+    image = serializers.ImageField(source='associate.user.image', read_only=True)
+
+    # Flatten associate fields to root
+    is_external = serializers.BooleanField(source='associate.is_external', read_only=True)
+
+    # Keep role as nested object
+    role = AssociateRoleSerializer(read_only=True)
+
+    # Assignment fields already at root
+    # is_admin, mode, is_primary come from the model directly
+
+    is_active = serializers.BooleanField(source='associate.user.is_active', read_only=True)
+
+    class Meta:
+        model = AssociateCenterAssignment
+        fields = [
+            # User fields (flattened)
+            'id', 'email', 'phone', 'first_name', 'last_name', 'image',
+            # Associate fields (flattened)
+            'is_external',
+            # Role (nested)
+            'role',
+            # Assignment fields (native)
+            'is_admin', 'mode', 'is_primary',
+            'is_active', 'created_at', 'updated_at',
+        ]
+
+
+class AssociateCenterPermissionSerializer(BaseModelSerializer):
+    role = AssociateRoleSerializer(read_only=True)
+
+    class Meta:
+        model = AssociateCenterAssignment
+        fields = [
+            'role',
+            'is_admin', 'mode', 'is_primary',
+            'is_active', 'created_at', 'updated_at',
         ]
