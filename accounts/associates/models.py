@@ -1,7 +1,6 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
-from accounts.associates.utils.constants import SpecializationType, SpecializationRole
 from accounts.utils import get_user_model
 from appointments.utils.constants import ScheduleModes
 from core.utils.models import BaseModel, BaseUUIDModel
@@ -9,21 +8,78 @@ from core.utils.models import BaseModel, BaseUUIDModel
 User = get_user_model()
 
 
+class AssociateRoleFeature:
+    ALL_ACCESS = "all"
+
+    CHOICES = (
+        (ALL_ACCESS, "All Access"),
+    )
+
+
+class AssociateRoleTag:
+    CLINICAL = "clinical"
+    NON_CLINICAL = "non_clinical"
+
+    CHOICES = (
+        (CLINICAL, "Clinical"),
+        (NON_CLINICAL, "Non Clinical"),
+    )
+
+
+class AssociateRole(BaseUUIDModel):
+    name = models.CharField(max_length=50)
+    features = ArrayField(
+        base_field=models.CharField(
+            choices=AssociateRoleFeature.CHOICES,
+            default=AssociateRoleFeature.ALL_ACCESS
+        ), default=list
+    )
+
+    center = models.ForeignKey(
+        'centers.Center', on_delete=models.CASCADE, related_name='roles',
+        null=True, blank=True
+    )
+
+    role_tag = models.CharField(
+        choices=AssociateRoleTag.CHOICES, default=AssociateRoleTag.CLINICAL
+    )
+
+    is_external = models.BooleanField(default=False)
+
+    is_system = models.BooleanField(default=False, editable=False)
+
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_associate_roles'
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['features', 'is_system'], condition=models.Q(is_system=True),
+                name='uniq_system_role'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.pk})"
+
+
 class Associate(BaseModel):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, primary_key=True, db_index=True, related_name='associate'
     )
 
-    specializations = ArrayField(
-        base_field=models.CharField(choices=SpecializationType.CHOICES),
-        max_length=len(SpecializationType.CHOICES), null=True, blank=True
-    )
-    role = models.CharField(
-        choices=SpecializationRole.CHOICES, default=SpecializationRole.OTHER
-    )
-
     is_admin = models.BooleanField(default=False)
     is_external = models.BooleanField(default=False)
+
+    role = models.ForeignKey(
+        AssociateRole, related_name='associates', on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_associates'
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -50,10 +106,15 @@ class AssociateCenterAssignment(BaseUUIDModel):
 
     # Is this their primary center?
     is_primary = models.BooleanField(default=False)
+    is_admin = models.BooleanField(default=False)
 
     # Effective dates
     effective_from = models.DateField(null=True, blank=True)
     effective_until = models.DateField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_associations'
+    )
 
     class Meta:
         ordering = ['-created_at']
