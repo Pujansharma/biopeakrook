@@ -27,14 +27,14 @@ class BaseAssociateSerializer(BaseModelSerializer):
     date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
     last_login = serializers.DateTimeField(source='user.last_login', read_only=True)
     is_active = serializers.BooleanField(source='user.is_active', required=False, default=True)
-    is_admin = serializers.BooleanField(read_only=True, default=False)
+
 
     class Meta:
         model = Associate
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "role", "is_admin", "is_external", "is_active",
+            "role",  "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
 
@@ -54,7 +54,7 @@ class AdminAssociateSerializer(BaseAssociateSerializer):
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "role", "is_admin", "is_external", "is_active",
+            "role", "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
         extra_kwargs = {
@@ -106,7 +106,7 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
         fields = [
             'id', "email", "phone",
             'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "is_admin", "is_external", "is_active",
+            "is_external", "is_active",
             "date_joined", 'last_login', "updated_at",
         ]
 

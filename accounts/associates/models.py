@@ -71,7 +71,6 @@ class Associate(BaseModel):
         User, on_delete=models.CASCADE, primary_key=True, db_index=True, related_name='associate'
     )
 
-    is_admin = models.BooleanField(default=False)
     is_external = models.BooleanField(default=False)
 
     role = models.ForeignKey(
