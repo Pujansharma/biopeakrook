@@ -1,6 +1,6 @@
 [project]
 name = "biopeak-nexus-fe"
-version = "0.1.0"
+version = "0.2.0"
 description = "Biopeak Nexus Interface Backend"
 readme = "README.md"
 requires-python = ">=3.14"
