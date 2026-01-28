@@ -89,7 +89,9 @@ LOGGING = {
 
 # Django CORS Headers
 
-CORS_ALLOWED_ORIGINS = []
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://\w+\.biopeak\.com$",
+]
 
 # Other
 
