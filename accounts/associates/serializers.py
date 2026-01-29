@@ -275,8 +275,13 @@ class CenterAssociateSerializer(BaseModelSerializer):
     email = serializers.EmailField(source='associate.user.email', allow_null=True, required=True)
     phone = serializers.CharField(source='associate.user.phone', allow_null=True, required=False)
     first_name = serializers.CharField(source='associate.user.first_name', required=True)
-    last_name = serializers.CharField(source='associate.user.last_name', required=False, allow_null=True)
-    image = serializers.ImageField(source='associate.user.image', required=False)
+    last_name = serializers.CharField(
+        source='associate.user.last_name', required=False, allow_null=True
+    )
+    gender = serializers.ChoiceField(
+        source='associate.user.gender', choices=Gender.CHOICES, required=False, allow_null=True
+    )
+    image = serializers.ImageField(source='associate.user.image', required=False, allow_null=True)
 
     # Flatten associate fields to root
     is_external = serializers.BooleanField(source='associate.is_external', required=False, default=False)
@@ -381,6 +386,12 @@ class CenterAssociateSerializer(BaseModelSerializer):
             associate.save()
 
         return super().update(instance, validated_data)
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if 'gender' in self.get_fields():
+            rep['gender'] = instance.associate.user.get_gender_display()
+        return rep
 
 
 class AssociateCenterPermissionSerializer(BaseModelSerializer):
