@@ -1,6 +1,8 @@
+from collections import defaultdict
+
 from django.utils import timezone
 
-from appointments.models import Appointment, AppointmentHistory
+from appointments.models import Appointment, AppointmentHistory, Schedule
 from appointments.utils.constants import AppointmentStatus
 
 
@@ -70,7 +72,20 @@ def reschedule_appointment(
     return appointment
 
 
-def get_schedules_for_associate(associate):
-    """Fetches queryset from the DB and returns a list of schedules grouped by days"""
+def get_schedules_for_associate(associate, center=None):
+    """
+    Fetch schedules from the DB and return them grouped by day_of_week.
 
-    return
+    Returns:
+        dict[str, list[Schedule]]: e.g. {'0': [schedule1, schedule2], '1': [...]}
+        Keys are day_of_week strings ('0'=Monday .. '6'=Sunday).
+    """
+    qs = Schedule.objects.filter(associate=associate)
+    if center is not None:
+        qs = qs.filter(center=center)
+
+    grouped = defaultdict(list)
+    for schedule in qs:
+        grouped[schedule.day_of_week].append(schedule)
+
+    return dict(grouped)
