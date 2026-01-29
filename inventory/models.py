@@ -20,6 +20,10 @@ class Room(BaseUUIDModel):
     capacity = models.PositiveIntegerField(default=1)  # For group sessions
     floor = models.CharField(max_length=20, blank=True)
 
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_rooms'
+    )
+
     class Meta:
         ordering = ['-created_at']
 
@@ -27,13 +31,43 @@ class Room(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class Device(BaseUUIDModel):
+class RoomSchedule(BaseUUIDModel):
+    """Room availability windows"""
+    room = models.ForeignKey(
+        Room, on_delete=models.CASCADE, related_name='schedules'
+    )
+
+    day_of_week = models.CharField(choices=AppointmentDays.CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    schedule_type = models.CharField(choices=[
+        ('operational', 'Operational'),
+        ('maintenance', 'Maintenance'),
+        ('reserved', 'Reserved')
+    ])
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_room_schedules'
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class Equipment(BaseUUIDModel):
     """Actual device instances"""
     device_type = models.CharField(choices=DeviceType.CHOICES)
     code = models.CharField(max_length=20, unique=True)
 
+    center = models.ForeignKey(
+        'centers.Center', related_name='equipments', on_delete=models.PROTECT
+    )
+
     room = models.ForeignKey(
-        Room, related_name='devices', on_delete=models.PROTECT, null=True, blank=True
+        Room, related_name='equipments', on_delete=models.PROTECT, null=True, blank=True
     )
 
     serial_number = models.CharField(max_length=100)
@@ -44,14 +78,18 @@ class Device(BaseUUIDModel):
     cooldown_time = models.PositiveIntegerField(default=0)
     requires_technician = models.BooleanField(default=False)
 
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_equipments'
+    )
+
     class Meta:
         ordering = ['-created_at']
 
 
-class DeviceSchedule(BaseUUIDModel):
+class EquipmentSchedule(BaseUUIDModel):
     """Device availability and maintenance windows"""
-    device = models.ForeignKey(
-        Device, on_delete=models.CASCADE, related_name='schedules'
+    equipment = models.ForeignKey(
+        Equipment, on_delete=models.CASCADE, related_name='schedules'
     )
 
     # Similar to Associate Schedule
@@ -66,6 +104,10 @@ class DeviceSchedule(BaseUUIDModel):
         ('reserved', 'Reserved')
     ])
 
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_equipment_schedules'
+    )
+
     class Meta:
         ordering = ['-created_at']
 
@@ -73,9 +115,9 @@ class DeviceSchedule(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class DeviceBooking(BaseUUIDModel):
+class EquipmentBooking(BaseUUIDModel):
     """Track device usage"""
-    device = models.ForeignKey(Device, on_delete=models.PROTECT, related_name='bookings')
+    equipment = models.ForeignKey(Equipment, on_delete=models.PROTECT, related_name='bookings')
     appointment = models.ForeignKey(
         'appointments.Appointment', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='devices'
@@ -90,6 +132,10 @@ class DeviceBooking(BaseUUIDModel):
     )
     purpose = models.TextField(null=True, blank=True)
 
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_equipment_bookings'
+    )
+
     class Meta:
         ordering = ['-created_at']
 
@@ -97,10 +143,10 @@ class DeviceBooking(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class DeviceMaintenance(BaseUUIDModel):
+class EquipmentMaintenance(BaseUUIDModel):
     """One-off or scheduled maintenance records"""
-    device = models.ForeignKey(
-        Device, on_delete=models.CASCADE, related_name='maintenance_records'
+    equipment = models.ForeignKey(
+        Equipment, on_delete=models.CASCADE, related_name='maintenance_records'
     )
 
     maintenance_type = models.CharField(
@@ -137,9 +183,13 @@ class DeviceMaintenance(BaseUUIDModel):
     notes = models.TextField(blank=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_equipment_maintenances'
+    )
+
     class Meta:
         ordering = ['-scheduled_start']
-        verbose_name_plural = "Device Maintenance Records"
+        verbose_name_plural = "Equipment Maintenance Records"
 
     def __str__(self):
         return f"{self.pk}"

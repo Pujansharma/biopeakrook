@@ -1,22 +1,35 @@
 from django.db import models
 
+from accounts.utils import get_user_model
 from core.utils.models import BaseUUIDModel
+from services.models import Service
+
+User = get_user_model()
 
 
-# Create your models here.
-class Package(BaseUUIDModel):
-    """Wellness packages, diagnostic bundles"""
+class Composite(BaseUUIDModel):
+    """Wellness composites, diagnostic bundles"""
+    center = models.ForeignKey(
+        'centers.Center', on_delete=models.PROTECT, related_name='composites'
+    )
     name = models.CharField(max_length=200)
-    # Example: "Comprehensive Metabolic Health Package"
-
     description = models.TextField(null=True, blank=True)
-    validity_days = models.PositiveIntegerField(
-        null=True, blank=True
-    )  # Package valid for X days
 
-    # Pricing
-    total_price = models.DecimalField(max_digits=10, decimal_places=2)
-    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # Computed from composite services, filled via helper functions
+    calculated_pricing = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, editable=False,
+    )
+    calculated_duration = models.PositiveIntegerField(default=0, editable=False)
+
+    # Effective values — defaults to calculated, can be overridden manually
+    effective_pricing = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, editable=False,
+    )
+    effective_duration = models.PositiveIntegerField(default=0, editable=False)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_composites'
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -25,13 +38,13 @@ class Package(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class PackageService(BaseUUIDModel):
+class CompositeService(BaseUUIDModel):
     """Services included in a package"""
-    package = models.ForeignKey(
-        Package, on_delete=models.CASCADE, related_name='services'
+    composite = models.ForeignKey(
+        Composite, on_delete=models.CASCADE, related_name='composite_services'
     )
     service = models.ForeignKey(
-        'services.Service', on_delete=models.CASCADE, related_name='packages'
+        Service, on_delete=models.PROTECT, related_name='composite_services'
     )
 
     quantity = models.PositiveIntegerField(default=1)  # Number of sessions
@@ -39,50 +52,18 @@ class PackageService(BaseUUIDModel):
 
     is_mandatory = models.BooleanField(default=True)
 
-    class Meta:
-        ordering = ['-created_at']
-        constraints = [
-            models.UniqueConstraint(fields=['package', 'service'], name='uniq_service_package')
-        ]
-
-    def __str__(self):
-        return f"{self.pk}"
-
-
-class PackageAvailability(BaseUUIDModel):
-    """Which packages are offered at which centers"""
-    package = models.ForeignKey(
-        Package, on_delete=models.CASCADE, related_name='center_availability'
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_composite_services'
     )
-    center = models.ForeignKey(
-        'centers.Center', on_delete=models.CASCADE, related_name='package_availability'
-    )
-
-    # Center-specific pricing (can override package.total_price)
-    pricing = models.DecimalField(
-        max_digits=10, decimal_places=2,
-        null=True, blank=True,
-        help_text="Override package price for this center (if null, uses package price)"
-    )
-
-    # Center-specific discount (can override package.discount_percentage)
-    discount_percentage = models.DecimalField(
-        max_digits=5, decimal_places=2,
-        null=True, blank=True,
-        help_text="Override discount for this center"
-    )
-
-    is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['sequence', '-created_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['package', 'center'],
-                name='uniq_package_center'
+                fields=['composite', 'service'], name='uniq_composite_service'
             )
         ]
-        verbose_name_plural = "Package Availability"
 
     def __str__(self):
         return f"{self.pk}"
