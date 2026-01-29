@@ -58,9 +58,7 @@ class AssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
             restricted_count = len(getattr(e, 'restricted_objects', set()))
             protected_count = len(getattr(e, 'protected_objects', set()))
             total = restricted_count + protected_count
-            return self.send_bad_request(
-                f'Cannot delete this associate. {total} related record(s) exist.'
-            )
+            self.raise_bad_request(f'Cannot delete this associate. {total} related record(s) exist.')
 
 
 class AssociateAvailableCenterView(BaseListAPIView):
@@ -174,7 +172,7 @@ class AssociatePermissionView(BaseRetrieveAPIView):
         center_id = getattr(self.request, 'center_id', None)
 
         if not center_id:
-            raise self.send_bad_request("Center ID is not present or invalid.")
+            self.raise_bad_request("Center ID is not present or invalid.")
 
         associate = getattr(self.request.user, 'associate', None)
 
