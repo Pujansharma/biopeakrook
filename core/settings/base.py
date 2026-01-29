@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'accounts.associates',
     'accounts.centers',
     'accounts.customers',
+    'accounts.audits',
 
     'appointments',
 
@@ -56,6 +57,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.utils.middleware.CenterContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
