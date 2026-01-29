@@ -1,7 +1,7 @@
 from django.http import JsonResponse, Http404
 from django.utils.text import gettext_lazy as _
 from rest_framework import status
-from rest_framework.exceptions import APIException, NotFound, ParseError
+from rest_framework.exceptions import APIException, NotFound, ParseError, PermissionDenied
 from rest_framework.generics import get_object_or_404 as base_get_object_or_404
 from rest_framework.views import exception_handler
 
@@ -81,4 +81,8 @@ def get_not_found(get_object_method, detail=None):
 
 
 def bad_request(detail=None):
-    return ParseError(detail)
+    raise ParseError(detail)
+
+
+def permission_denied(detail=None):
+    raise PermissionDenied(detail)
