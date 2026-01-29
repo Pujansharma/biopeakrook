@@ -251,6 +251,8 @@ class AssociateCenterSerializer(CenterSerializer):
 
 
 class AssociateRoleSerializer(BaseModelSerializer):
+    is_active = serializers.BooleanField(default=True, required=False)
+
     class Meta:
         model = AssociateRole
         fields = [
@@ -267,20 +269,21 @@ class AssociateRoleSerializer(BaseModelSerializer):
         ]
 
 
-class CenterAssociateListSerializer(BaseModelSerializer):
+class CenterAssociateSerializer(BaseModelSerializer):
     # Flatten user fields to root
     id = serializers.UUIDField(source='associate.user.id', read_only=True)
-    email = serializers.EmailField(source='associate.user.email', read_only=True)
-    phone = serializers.CharField(source='associate.user.phone', read_only=True)
-    first_name = serializers.CharField(source='associate.user.first_name', read_only=True)
-    last_name = serializers.CharField(source='associate.user.last_name', read_only=True)
-    image = serializers.ImageField(source='associate.user.image', read_only=True)
+    email = serializers.EmailField(source='associate.user.email', allow_null=True, required=True)
+    phone = serializers.CharField(source='associate.user.phone', allow_null=True, required=False)
+    first_name = serializers.CharField(source='associate.user.first_name', required=True)
+    last_name = serializers.CharField(source='associate.user.last_name', required=False, allow_null=True)
+    image = serializers.ImageField(source='associate.user.image', required=False)
 
     # Flatten associate fields to root
-    is_external = serializers.BooleanField(source='associate.is_external', read_only=True)
+    is_external = serializers.BooleanField(source='associate.is_external', required=False, default=False)
 
     # Keep role as nested object
     role = AssociateRoleSerializer(read_only=True)
+    role_id = serializers.UUIDField(required=True, write_only=True)
 
     # Assignment fields already at root
     # is_admin, mode, is_primary come from the model directly
@@ -295,11 +298,89 @@ class CenterAssociateListSerializer(BaseModelSerializer):
             # Associate fields (flattened)
             'is_external',
             # Role (nested)
-            'role',
+            'role', 'role_id',
             # Assignment fields (native)
             'is_admin', 'mode', 'is_primary',
             'is_active', 'created_at', 'updated_at',
         ]
+
+    def create(self, validated_data):
+        """Allows center admins or Associates with FULL feature to add associates"""
+        center_id = validated_data.pop('center_id', None)
+        if not center_id:
+            raise serializers.ValidationError("Invalid Center ID provided.")
+
+        associate_data = validated_data.pop('associate', {})
+        user_data = associate_data.pop('user', {})
+        role_id = validated_data.pop('role_id', None)
+
+        email = user_data.get('email')
+        phone = user_data.get('phone')
+
+        errors = {}
+        if email and User.objects.filter(email__iexact=email).exists():
+            errors['email'] = "User with this email already exists."
+        if phone and User.objects.filter(phone__iexact=phone).exists():
+            errors['phone'] = "User with this phone already exists."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        if role_id and not AssociateRole.objects.filter(pk=role_id, center_id=center_id).exists():
+            raise serializers.ValidationError({'role_id': "Invalid role for this center."})
+
+        with transaction.atomic():
+            user = User.objects.create_user(**user_data)
+            associate = Associate.objects.create(user=user, **associate_data)
+            create_associate_user_account(associate)
+
+            assignment = AssociateCenterAssignment.objects.create(
+                associate=associate,
+                center_id=center_id,
+                role_id=role_id,
+                is_admin=False,
+            )
+
+        return assignment
+
+    def update(self, instance: AssociateCenterAssignment, validated_data):
+        """Update user fields, associate fields, and role on the assignment."""
+        associate_data = validated_data.pop('associate', {})
+        user_data = associate_data.pop('user', {})
+        role_id = validated_data.pop('role_id', None)
+
+        user = instance.associate.user
+
+        email = user_data.get('email')
+        phone = user_data.get('phone')
+
+        errors = {}
+        if email and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+            errors['email'] = "User with this email already exists."
+        if phone and User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists():
+            errors['phone'] = "User with this phone already exists."
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        if role_id:
+            if instance.is_admin:
+                raise serializers.ValidationError({'role_id': "Roles cannot be assigned to admin associates."})
+            if not AssociateRole.objects.filter(pk=role_id, center=instance.center).exists():
+                raise serializers.ValidationError({'role_id': "Invalid role for this center."})
+
+        # Update user fields
+        if user_data:
+            for key, value in user_data.items():
+                setattr(user, key, value)
+            user.save()
+
+        # Update associate fields
+        if associate_data:
+            associate = instance.associate
+            for key, value in associate_data.items():
+                setattr(associate, key, value)
+            associate.save()
+
+        return super().update(instance, validated_data)
 
 
 class AssociateCenterPermissionSerializer(BaseModelSerializer):
