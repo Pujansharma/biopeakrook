@@ -1,3 +1,5 @@
+from corsheaders.defaults import default_headers
+
 from core.settings.base import *
 
 DEBUG = True
@@ -47,7 +49,9 @@ DEFAULT_FROM_EMAIL = config('DEV_DEFAULT_FROM_EMAIL', 'Local <mail@localhost>')
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True
-
-# Other
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "x-center-id"
+]
 
 PASSWORD_RESET_URL = config('DEV_PASSWORD_RESET_URL', "")

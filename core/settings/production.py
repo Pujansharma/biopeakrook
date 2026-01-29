@@ -1,3 +1,5 @@
+from corsheaders.defaults import default_headers
+
 from core.settings.base import *
 
 DEBUG = False
@@ -91,6 +93,10 @@ LOGGING = {
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://\w+\.biopeak\.com$",
+]
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "x-center-id"
 ]
 
 # Other
