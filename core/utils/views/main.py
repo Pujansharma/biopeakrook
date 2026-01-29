@@ -7,7 +7,7 @@ from rest_framework.generics import (
 )
 from rest_framework.response import Response
 
-from core.utils.exceptions import bad_request
+from core.utils.exceptions import bad_request, permission_denied
 from core.utils.helper import response_format
 from core.utils.messages import APIMessageMixin
 from core.utils.views.mixin import (
@@ -25,8 +25,12 @@ class BaseGenericAPIView(GenericAPIView):
         return Response(context, status)
 
     @classmethod
-    def send_bad_request(cls, detail):
-        return bad_request(detail)
+    def raise_bad_request(cls, detail):
+        raise bad_request(detail)
+
+    @classmethod
+    def raise_permission_denied(cls, detail):
+        raise permission_denied(detail)
 
 
 class BaseCreateAPIView(
