@@ -1,7 +1,9 @@
 from django.db.models import Q, ProtectedError, RestrictedError
+from rest_framework.permissions import SAFE_METHODS
 
 from accounts.associates.models import AssociateCenterAssignment, AssociateRole
-from accounts.associates.serializers import CenterAssociateListSerializer, AssociateRoleSerializer
+from accounts.associates.serializers import CenterAssociateSerializer, AssociateRoleSerializer
+from accounts.associates.utils.constants import AssociateRoleFeature
 from accounts.centers.models import Center, CenterOperatingHour
 from accounts.centers.serializers import (
     CenterSerializer, CenterDetailSerializer, CenterWorkingHourSerializer
@@ -76,7 +78,7 @@ class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
             super().perform_destroy(instance)
         except (ProtectedError, RestrictedError):
             logger.exception(msg="Error in Center DELETE", exc_info=True)
-            return self.send_bad_request(
+            self.raise_bad_request(
                 'This center cannot be deleted since some objects are dependant on it'
             )
 
@@ -101,15 +103,17 @@ class CenterOperatingHoursView(BaseListCreateAPIView, CenterViewMeta):
 class CenterHeaderMetaView(BaseGenericAPIView):
     def get_center(self):
         center_id = self.request.headers.get('X-Center-ID')
-        qs = Center.objects.select_related()
+        if not center_id:
+            self.raise_bad_request("X-Center-ID header is required")
         return get_object_or_404(
-            qs, "Invalid Center ID provided", pk=center_id
+            Center.objects.only('id', 'name'), "Invalid Center ID provided", pk=center_id
         )
 
 
 class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
-    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
-    serializer_class = CenterAssociateListSerializer
+    """Admin-only: center ID from URL path parameter."""
+    permission_classes = [IsAdminUser]
+    serializer_class = CenterAssociateSerializer
 
     def get_queryset(self):
         center = self.get_center()
@@ -123,7 +127,8 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
 
 
 class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
-    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    """Admin-only: center ID from URL path parameter."""
+    permission_classes = [IsAdminUser]
     serializer_class = AssociateRoleSerializer
 
     def get_queryset(self):
@@ -131,3 +136,131 @@ class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
         return AssociateRole.objects.filter(
             center=center
         ).select_related()
+
+    def perform_create(self, serializer):
+        serializer.save(
+            center=self.get_center(),
+            created_by=self.request.user
+        )
+
+
+class AssociateCenterAssociateListView(BaseListCreateAPIView):
+    """Associate-scoped: center ID from X-Center-ID header (already validated by RBAC permissions)."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = CenterAssociateSerializer
+
+    def get_queryset(self):
+        return AssociateCenterAssignment.objects.filter(
+            center_id=self.request.center_id,
+            is_active=True
+        ).select_related(
+            'associate__user',
+            'role'
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            center_id=self.request.center_id,
+            created_by=self.request.user
+        )
+
+
+class AssociateCenterAssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
+    """
+    Associate-scoped detail view for updating/deleting a center associate assignment.
+    - AssociateAdmins: full access.
+    - Associates with ALL feature:
+        - Cannot modify assignments where the current role has ALL feature.
+        - Cannot assign a role that has ALL feature.
+    """
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = CenterAssociateSerializer
+
+    def get_queryset(self):
+        return AssociateCenterAssignment.objects.filter(
+            center_id=self.request.center_id,
+        ).select_related(
+            'associate__user',
+            'role'
+        )
+
+    def _is_non_admin_associate(self):
+        return not self.request.center_assignment.is_admin
+
+    def get_object(self):
+        obj = super().get_object()
+
+        if self.request.method in SAFE_METHODS:
+            return obj
+
+        if not self._is_non_admin_associate():
+            return obj
+
+        # Cannot modify assignments where the current role has ALL feature
+        if obj.role and AssociateRoleFeature.ALL in (obj.role.features or []):
+            self.raise_permission_denied("You do not have permission to modify this assignment")
+
+        return obj
+
+    def perform_update(self, serializer):
+        if self._is_non_admin_associate():
+            role_id = serializer.validated_data.get('role_id')
+            if role_id:
+                role = AssociateRole.objects.filter(pk=role_id).first()
+                if role and AssociateRoleFeature.ALL in (role.features or []):
+                    self.raise_permission_denied("You do not have permission to assign this role")
+
+        serializer.save()
+
+
+class AssociateCenterRolesListView(BaseListCreateAPIView):
+    """Associate-scoped: center ID from X-Center-ID header (already validated by RBAC permissions)."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = AssociateRoleSerializer
+
+    def get_queryset(self):
+        search_query = Q()
+
+        return AssociateRole.objects.filter(
+            center_id=self.request.center_id
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            center_id=self.request.center_id,
+            created_by=self.request.user
+        )
+
+
+class AssociateCenterRoleDetailView(BaseRetrieveUpdateDestroyAPIView):
+    """
+    Associate-scoped detail view for editing/deleting roles.
+    - Admins: full access.
+    - AssociateAdmins: can edit any role including ALL-feature roles.
+    - Associates with ALL feature: can edit roles that do NOT have ALL feature.
+    """
+    permission_classes = [IsAdminUser | AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = AssociateRoleSerializer
+
+    def get_queryset(self):
+        return AssociateRole.objects.filter(
+            center_id=self.request.center_id
+        )
+
+    def get_object(self):
+        obj = super().get_object()
+        assignment = getattr(self.request, 'center_assignment', None)
+
+        # Admins have no center_assignment — allow everything
+        if not assignment:
+            return obj
+
+        # AssociateAdmins can edit any role
+        if assignment.is_admin:
+            return obj
+
+        # Non-admin associates cannot edit roles with ALL feature
+        if AssociateRoleFeature.ALL in (obj.features or []):
+            self.raise_permission_denied("You do not have permission to modify this role")
+
+        return obj
