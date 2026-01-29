@@ -56,12 +56,12 @@ class CenterViewMeta(BaseGenericAPIView):
     def get_center_queryset(cls):
         return Center.objects.prefetch_related(
             'created_by'
-        ).all()
+        )
 
     def get_center(self):
         qs = self.get_center_queryset()
         pk = self.kwargs.get('pk')
-        return get_object_or_404(qs, pk=pk)
+        return get_object_or_404(qs, "The selected center could not be found", pk=pk)
 
 
 class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
@@ -94,8 +94,10 @@ class AssociateCenterDetailView(BaseRetrieveUpdateAPIView):
     serializer_class = CenterDetailSerializer
 
     def get_object(self):
+        qs = Center.objects.prefetch_related('created_by')
         return get_object_or_404(
-            Center.objects.prefetch_related('created_by'),
+            qs,
+            "The selected center could not be found",
             pk=self.request.center_id
         )
 
