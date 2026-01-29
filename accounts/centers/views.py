@@ -16,7 +16,13 @@ from core.utils.exceptions import get_object_or_404
 from core.utils.log import logger
 from core.utils.permissions import ReadOnly, ReadUpdateOnly
 from core.utils.views.main import (
-    BaseListCreateAPIView, BaseRetrieveUpdateDestroyAPIView, BaseGenericAPIView
+    BaseListCreateAPIView, BaseRetrieveUpdateAPIView,
+    BaseRetrieveUpdateDestroyAPIView, BaseGenericAPIView
+)
+from inventory.models import Room, RoomSchedule, Equipment, EquipmentSchedule
+from inventory.serializers import (
+    RoomSerializer, RoomScheduleSerializer,
+    EquipmentSerializer, EquipmentScheduleSerializer
 )
 
 
@@ -59,19 +65,12 @@ class CenterViewMeta(BaseGenericAPIView):
 
 
 class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
-    permission_classes = [
-        IsAdminUser |
-        (AssociateAdminPermission & ReadUpdateOnly) |
-        (AssociateFeaturePermission & ReadUpdateOnly) |
-        (IsAssociateUser & ReadOnly)
-    ]
+    """Admin-only: center ID from URL path parameter."""
+    permission_classes = [IsAdminUser]
     serializer_class = CenterDetailSerializer
 
     def get_queryset(self):
-        filter_kwargs = {}
-        if associate := getattr(self.request, 'associate', None):
-            filter_kwargs['associate_assignments__associate'] = associate
-        return self.get_center_queryset().filter(**filter_kwargs)
+        return self.get_center_queryset()
 
     def perform_destroy(self, instance):
         try:
@@ -81,6 +80,24 @@ class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
             self.raise_bad_request(
                 'This center cannot be deleted since some objects are dependant on it'
             )
+
+
+class AssociateCenterDetailView(BaseRetrieveUpdateAPIView):
+    """
+    Associate-scoped: center ID from X-Center-ID header.
+    - AssociateAdmins and associates with ALL feature: can retrieve and update.
+    """
+    permission_classes = [
+        (AssociateAdminPermission & ReadUpdateOnly) |
+        (AssociateFeaturePermission & ReadUpdateOnly)
+    ]
+    serializer_class = CenterDetailSerializer
+
+    def get_object(self):
+        return get_object_or_404(
+            Center.objects.prefetch_related('created_by'),
+            pk=self.request.center_id
+        )
 
 
 class CenterOperatingHoursView(BaseListCreateAPIView, CenterViewMeta):
@@ -145,7 +162,7 @@ class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
 
 
 class AssociateCenterAssociateListView(BaseListCreateAPIView):
-    """Associate-scoped: center ID from X-Center-ID header (already validated by RBAC permissions)."""
+    """Associate-scoped: center ID from X-Center-ID header"""
     permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
     serializer_class = CenterAssociateSerializer
 
@@ -188,7 +205,13 @@ class AssociateCenterAssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
         return not self.request.center_assignment.is_admin
 
     def get_object(self):
-        obj = super().get_object()
+        associate_id = self.kwargs.get('pk')
+
+        obj = get_object_or_404(
+            queryset=self.get_queryset(),
+            detail="Invalid Associate ID",
+            associate_id=associate_id,
+        )
 
         if self.request.method in SAFE_METHODS:
             return obj
@@ -212,17 +235,30 @@ class AssociateCenterAssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
 
         serializer.save()
 
+    def perform_destroy(self, instance):
+        pass
+
 
 class AssociateCenterRolesListView(BaseListCreateAPIView):
-    """Associate-scoped: center ID from X-Center-ID header (already validated by RBAC permissions)."""
+    """
+    Associate-scoped:
+     center ID from X-Center-ID header (already validated by RBAC permissions).
+    """
     permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
     serializer_class = AssociateRoleSerializer
 
     def get_queryset(self):
         search_query = Q()
+        search_params = self.request.query_params.get('search', '').strip()
+        if search_params:
+            search_query |= Q(
+                name__istartswith=search_params
+            ) | Q(
+                name__icontains=search_params
+            )
 
         return AssociateRole.objects.filter(
-            center_id=self.request.center_id
+            search_query, center_id=self.request.center_id
         )
 
     def perform_create(self, serializer):
@@ -264,3 +300,107 @@ class AssociateCenterRoleDetailView(BaseRetrieveUpdateDestroyAPIView):
             self.raise_permission_denied("You do not have permission to modify this role")
 
         return obj
+
+
+class AssociateCenterRoomListView(BaseListCreateAPIView):
+    """Associate-scoped: list/create rooms for a center."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = RoomSerializer
+
+    def get_queryset(self):
+        return Room.objects.filter(
+            center_id=self.request.center_id
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            center_id=self.request.center_id,
+            created_by=self.request.user
+        )
+
+
+class AssociateCenterRoomDetailView(BaseRetrieveUpdateDestroyAPIView):
+    """Associate-scoped: retrieve/update/delete a room."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = RoomSerializer
+
+    def get_queryset(self):
+        return Room.objects.filter(
+            center_id=self.request.center_id
+        )
+
+
+class AssociateCenterRoomScheduleListView(BaseListCreateAPIView):
+    """Associate-scoped: list/create schedules for a room."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = RoomScheduleSerializer
+
+    def get_room(self):
+        qs = Room.objects.filter(center_id=self.request.center_id)
+        return get_object_or_404(
+            qs, "Room not found for this center",
+            pk=self.kwargs.get('pk')
+        )
+
+    def get_queryset(self):
+        return RoomSchedule.objects.filter(
+            room=self.get_room()
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            room=self.get_room(),
+            created_by=self.request.user
+        )
+
+
+class AssociateCenterEquipmentListView(BaseListCreateAPIView):
+    """Associate-scoped: list/create equipments for a center."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = EquipmentSerializer
+
+    def get_queryset(self):
+        return Equipment.objects.filter(
+            center_id=self.request.center_id
+        ).select_related('room')
+
+    def perform_create(self, serializer):
+        serializer.save(
+            center_id=self.request.center_id,
+            created_by=self.request.user
+        )
+
+
+class AssociateCenterEquipmentDetailView(BaseRetrieveUpdateDestroyAPIView):
+    """Associate-scoped: retrieve/update/delete an equipment."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = EquipmentSerializer
+
+    def get_queryset(self):
+        return Equipment.objects.filter(
+            center_id=self.request.center_id
+        ).select_related('room')
+
+
+class AssociateCenterEquipmentScheduleListView(BaseListCreateAPIView):
+    """Associate-scoped: list/create schedules for equipment."""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = EquipmentScheduleSerializer
+
+    def get_equipment(self):
+        qs = Equipment.objects.filter(center_id=self.request.center_id)
+        return get_object_or_404(
+            qs, "Equipment not found for this center",
+            pk=self.kwargs.get('pk')
+        )
+
+    def get_queryset(self):
+        return EquipmentSchedule.objects.filter(
+            equipment=self.get_equipment()
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            equipment=self.get_equipment(),
+            created_by=self.request.user
+        )
