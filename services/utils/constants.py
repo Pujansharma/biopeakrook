@@ -1,16 +1,10 @@
-class ServiceCategory:
-    CONSULTATION = 'consultation'
-    THERAPY = 'therapy'
-    DIAGNOSTIC = 'diagnostic'
-    WELLNESS = 'wellness'
-    SCREENING = 'screening'
-    PROCEDURE = 'procedure'
+from django.db import models
 
-    CHOICES = (
-        (CONSULTATION, 'Consultation'),
-        (THERAPY, 'Therapy'),
-        (DIAGNOSTIC, 'Diagnostic Test'),
-        (WELLNESS, 'Wellness Program'),
-        (SCREENING, 'Health Screening'),
-        (PROCEDURE, 'Medical Procedure'),
-    )
+
+class ServiceCategory(models.TextChoices):
+    CONSULTATION = 'consultation', 'Consultation'
+    THERAPY = 'therapy', 'Therapy'
+    DIAGNOSTIC = 'diagnostic', 'Diagnostic Test'
+    WELLNESS = 'wellness', 'Wellness Program'
+    SCREENING = 'screening', 'Health Screening'
+    PROCEDURE = 'procedure', 'Medical Procedure'
