@@ -12,9 +12,10 @@ User = get_user_model()
 
 
 def get_user_account(user: User) -> UserAccount:
-    account = getattr(user, 'account', None)
-    if not account:
-        account, _ = UserAccount.objects.get_or_create(user=user)
+    existing: UserAccount | None = getattr(user, 'account', None)
+    if existing is not None:
+        return existing
+    account, _ = UserAccount.objects.get_or_create(user=user)
     return account
 
 
@@ -40,3 +41,13 @@ def validate_password_reset_token(uid: str, token: str) -> tuple[Optional[User],
         return None, False
     is_valid = PasswordResetTokenGenerator().check_token(user=user, token=token)
     return user, is_valid
+
+
+def check_user_exists(email: str = None, phone: str = None) -> dict[str, str]:
+    """Check if the user exists and raises exception if it doesn't"""
+    errors = {}
+    if email and User.objects.filter(email__iexact=email).exists():
+        errors['email'] = "User with this email already exists."
+    if phone and User.objects.filter(phone__iexact=phone).exists():
+        errors['phone'] = "User with this phone already exists."
+    return errors
