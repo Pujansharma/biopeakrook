@@ -54,7 +54,7 @@ max_requests_jitter = 50
 # The timeout for workers.
 # If a worker does not respond within this many seconds, it is killed and a new one is started.
 # This helps deal with long-running or stuck requests.
-timeout = 300
+timeout = 0
 
 # Keep-Alive timeout.
 # The number of seconds to wait for requests on a Keep-Alive connection.
@@ -79,7 +79,7 @@ forwarded_allow_ips = '*'
 # Preload the application before forking worker processes.
 # This can save some memory and speed up server startup.
 # However, if you change your application code, you'll need to restart Gunicorn.
-preload_app = True
+preload_app = False
 
 # The directory to which temporary files should be written.
 # This may be useful if you have specific filesystem permissions.
