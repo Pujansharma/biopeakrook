@@ -58,7 +58,7 @@ The project uses `pyproject.toml` for dependency management instead of `requirem
 5. **Environment Configuration**
    ### Environment Variables for Production
    
-   For detailed production configuration, see [ENVIRONMENT.md](ENVIRONMENT.md).
+   For detailed production configuration, see [ENVIRONMENT.md](docs/ENVIRONMENT.md).
    
    Quick production setup:
    
