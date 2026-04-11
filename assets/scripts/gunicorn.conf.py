@@ -54,7 +54,7 @@ max_requests_jitter = 50
 # The timeout for workers.
 # If a worker does not respond within this many seconds, it is killed and a new one is started.
 # This helps deal with long-running or stuck requests.
-timeout = 0
+timeout = 120
 
 # Keep-Alive timeout.
 # The number of seconds to wait for requests on a Keep-Alive connection.
