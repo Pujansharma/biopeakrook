@@ -7,8 +7,14 @@ db.sqlite3
 media
 storage
 
+# Build files
+modules/utils/pdf_engine/build
+*.so.*
+*.dll
+
 # Backup files #
 *.bak
+*.json
 
 # If you are using PyCharm #
 # User-specific stuff
@@ -100,6 +106,8 @@ celerybeat-schedule.*
 
 # Environments
 .env
+.env.*
+*.env.*
 .venv
 env/
 venv/
@@ -137,3 +145,13 @@ GitHub.sublime-settings
 !.vscode/launch.json
 !.vscode/extensions.json
 .history
+/.firebase/
+
+
+# AI Tools
+.claude
+.cursor
+.copilot
+.aider
+.windsurf
+.continue
