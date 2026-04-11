@@ -39,8 +39,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
 
 # Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+RUN apt-get update  \
+    && apt-get install -y --no-install-recommends libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -60,4 +60,4 @@ RUN sed -i 's/\r$//' /server/assets/scripts/*.sh && \
 EXPOSE 8000
 
 # Set default command
-CMD ["./assets/scripts/entrypoint.sh"]
+CMD ["./assets/scripts/server.sh"]
