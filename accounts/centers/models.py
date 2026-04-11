@@ -30,7 +30,7 @@ class Center(BaseUUIDModel):
 
     # Operating Configuration
     modes = models.CharField(
-        choices=ScheduleModes.CHOICES, default=ScheduleModes.IN_PERSON
+        choices=ScheduleModes, default=ScheduleModes.IN_PERSON
     )
     status = models.CharField(
         choices=CenterStatus.CHOICES,
@@ -55,7 +55,7 @@ class CenterOperatingHour(BaseUUIDModel):
         Center, on_delete=models.CASCADE, related_name='operating_hours'
     )
 
-    day_of_week = models.CharField(choices=AppointmentDays.CHOICES)
+    day_of_week = models.CharField(choices=AppointmentDays)
 
     is_open = models.BooleanField(default=True)  # False for days center is closed
 

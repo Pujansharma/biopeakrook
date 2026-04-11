@@ -100,7 +100,7 @@ class AssociateCenterAssignment(BaseUUIDModel):
 
     # Center-specific configuration
     mode = models.CharField(
-        choices=ScheduleModes.CHOICES,
+        choices=ScheduleModes,
         help_text="How this associate works at THIS center (virtual/in-person/both)",
         default=ScheduleModes.BOTH
     )

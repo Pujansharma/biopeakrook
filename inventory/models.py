@@ -15,7 +15,7 @@ class Room(BaseUUIDModel):
     )
     room_type = models.CharField(choices=RoomType.CHOICES)
     name = models.CharField(max_length=100)  # "Consultation Room 1"
-    code = models.CharField(max_length=50, unique=True)  # "BLR-S-CR-01"
+    code = models.CharField(max_length=50, unique=True, editable=False)  # "BLR-S-CR-01"
 
     capacity = models.PositiveIntegerField(default=1)  # For group sessions
     floor = models.CharField(max_length=20, blank=True)
@@ -37,7 +37,7 @@ class RoomSchedule(BaseUUIDModel):
         Room, on_delete=models.CASCADE, related_name='schedules'
     )
 
-    day_of_week = models.CharField(choices=AppointmentDays.CHOICES)
+    day_of_week = models.CharField(choices=AppointmentDays)
     start_time = models.TimeField()
     end_time = models.TimeField()
 
@@ -60,7 +60,7 @@ class RoomSchedule(BaseUUIDModel):
 class Equipment(BaseUUIDModel):
     """Actual device instances"""
     device_type = models.CharField(choices=DeviceType.CHOICES)
-    code = models.CharField(max_length=20, unique=True)
+    code = models.CharField(max_length=20, unique=True, editable=False)
 
     center = models.ForeignKey(
         'centers.Center', related_name='equipments', on_delete=models.PROTECT
@@ -93,7 +93,7 @@ class EquipmentSchedule(BaseUUIDModel):
     )
 
     # Similar to Associate Schedule
-    day_of_week = models.CharField(choices=AppointmentDays.CHOICES)
+    day_of_week = models.CharField(choices=AppointmentDays)
     start_time = models.TimeField()
     end_time = models.TimeField()
 

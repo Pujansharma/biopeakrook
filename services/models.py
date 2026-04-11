@@ -12,13 +12,13 @@ class Service(BaseUUIDModel):
     center = models.ForeignKey(
         'centers.Center', related_name='services', on_delete=models.PROTECT
     )
-    category = models.CharField(choices=ServiceCategory.CHOICES)
+    category = models.CharField(choices=ServiceCategory)
     name = models.CharField(max_length=200)
-    pricing = models.DecimalField(max_digits=10, decimal_places=2)
-    duration = models.PositiveIntegerField()  # minutes
+    pricing = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    duration = models.PositiveIntegerField(default=0)  # minutes
     requires_device = models.BooleanField(default=False)
     requires_room = models.BooleanField(default=True)
-    mode_supported = models.CharField(choices=ScheduleModes.CHOICES)
+    mode_supported = models.CharField(choices=ScheduleModes)
 
     device_types = ArrayField(
         base_field=models.CharField(choices=DeviceType.CHOICES), max_length=len(DeviceType.CHOICES)
@@ -26,9 +26,3 @@ class Service(BaseUUIDModel):
     room_types = ArrayField(
         base_field=models.CharField(choices=RoomType.CHOICES), max_length=len(RoomType.CHOICES)
     )
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.pk}"

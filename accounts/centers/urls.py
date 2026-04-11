@@ -24,6 +24,10 @@ urlpatterns = [
     # path('services/'),
     # path('services/<uuid:pk>/'),
 
+    path('customer-profiles/', views.CenterCustomerProfilesView.as_view()),
+    path('customer-profiles/<uuid:pk>/', views.CenterCustomerProfileDetailView.as_view()),
+
+
     # Admin-scoped (center from URL path)
     path('<uuid:pk>/', views.CenterDetailView.as_view()),
     path('<uuid:pk>/operating-hours/', views.CenterOperatingHoursView.as_view()),

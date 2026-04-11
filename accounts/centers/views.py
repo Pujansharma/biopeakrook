@@ -3,6 +3,8 @@ from rest_framework.permissions import SAFE_METHODS
 
 from accounts.associates.models import AssociateCenterAssignment, AssociateRole
 from accounts.associates.serializers import CenterAssociateSerializer, AssociateRoleSerializer
+from accounts.customers.models import CustomerCenterAssignment
+from accounts.customers.serializers import CenterCustomerProfileSerializer
 from accounts.associates.utils.constants import AssociateRoleFeature
 from accounts.centers.models import Center, CenterOperatingHour
 from accounts.centers.serializers import (
@@ -14,7 +16,7 @@ from accounts.utils.permissions import (
 )
 from core.utils.exceptions import get_object_or_404
 from core.utils.log import logger
-from core.utils.permissions import ReadOnly, ReadUpdateOnly
+from core.utils.permissions import ReadOnly, ReadUpdateOnly, MODIFY_METHODS
 from core.utils.views.main import (
     BaseListCreateAPIView, BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView, BaseGenericAPIView
@@ -124,8 +126,9 @@ class CenterHeaderMetaView(BaseGenericAPIView):
         center_id = self.request.headers.get('X-Center-ID')
         if not center_id:
             self.raise_bad_request("X-Center-ID header is required")
+        qs = Center.objects.only('id', 'name')
         return get_object_or_404(
-            Center.objects.only('id', 'name'), "Invalid Center ID provided", pk=center_id
+            qs, "Invalid Center ID provided", pk=center_id
         )
 
 
@@ -169,7 +172,21 @@ class AssociateCenterAssociateListView(BaseListCreateAPIView):
     serializer_class = CenterAssociateSerializer
 
     def get_queryset(self):
+        search_query = Q()
+        search_params = self.request.query_params.get('search', '').strip()
+
+        if search_params:
+            search_query |= Q(
+                associate__user__first_name__istartswith=search_params
+            ) | Q(
+                associate__user__first_name__icontains=search_params
+            ) | Q(
+                associate__user__phone__istartswith=search_params
+            ) | Q(
+                associate__user__phone__icontains=search_params
+            )
         return AssociateCenterAssignment.objects.filter(
+            search_query,
             center_id=self.request.center_id,
             is_active=True
         ).select_related(
@@ -191,6 +208,7 @@ class AssociateCenterAssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
     - Associates with ALL feature:
         - Cannot modify assignments where the current role has ALL feature.
         - Cannot assign a role that has ALL feature.
+    - Associates cannot update themselves via this API
     """
     permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
     serializer_class = CenterAssociateSerializer
@@ -205,6 +223,9 @@ class AssociateCenterAssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
 
     def _is_non_admin_associate(self):
         return not self.request.center_assignment.is_admin
+
+    def _is_self_associate(self, associate_id):
+        return self.request.user.pk == associate_id
 
     def get_object(self):
         associate_id = self.kwargs.get('pk')
@@ -224,6 +245,10 @@ class AssociateCenterAssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
         # Cannot modify assignments where the current role has ALL feature
         if obj.role and AssociateRoleFeature.ALL in (obj.role.features or []):
             self.raise_permission_denied("You do not have permission to modify this assignment")
+
+        # Cannot modify self details via this
+        if self._is_self_associate(obj.associate_id) and self.request.method in MODIFY_METHODS:
+            self.raise_permission_denied("You cannot modify your own details")
 
         return obj
 
@@ -310,8 +335,22 @@ class AssociateCenterRoomListView(BaseListCreateAPIView):
     serializer_class = RoomSerializer
 
     def get_queryset(self):
+        search_query = Q()
+        search_params = self.request.query_params.get('search', '').strip()
+
+        if search_params:
+            search_query |= Q(
+                name__istartswith=search_params
+            ) | Q(
+                name__icontains=search_params
+            ) | Q(
+                code__istartswith=search_params
+            ) | Q(
+                code__icontains=search_params
+            )
+
         return Room.objects.filter(
-            center_id=self.request.center_id
+            search_query, center_id=self.request.center_id
         )
 
     def perform_create(self, serializer):
@@ -405,4 +444,49 @@ class AssociateCenterEquipmentScheduleListView(BaseListCreateAPIView):
         serializer.save(
             equipment=self.get_equipment(),
             created_by=self.request.user
+        )
+
+
+class CenterCustomerProfilesView(BaseListCreateAPIView):
+    """Associate Scoped: list/create customers center basis"""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = CenterCustomerProfileSerializer
+
+    def get_queryset(self):
+        search_query = Q()
+        search_params = self.request.query_params.get('search', '').strip()
+
+        if search_params:
+            search_query |= Q(
+                customer_profile__first_name__istartswith=search_params
+            ) | Q(
+                customer_profile__first_name__icontains=search_params
+            ) | Q(
+                customer_profile__customer__user__phone__istartswith=search_params
+            ) | Q(
+                customer_profile__customer__user__phone__icontains=search_params
+            )
+
+        return CustomerCenterAssignment.objects.filter(
+            search_query,
+            center_id=self.request.center_id,
+            is_active=True,
+        ).select_related(
+            'customer_profile__customer__user',
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(center_id=self.request.center_id)
+
+
+class CenterCustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
+    """Associate Scoped: get/update/delete customers center basis"""
+    permission_classes = [AssociateAdminPermission | AssociateFeaturePermission]
+    serializer_class = CenterCustomerProfileSerializer
+
+    def get_queryset(self):
+        return CustomerCenterAssignment.objects.filter(
+            center_id=self.request.center_id,
+        ).select_related(
+            'customer_profile__customer__user',
         )

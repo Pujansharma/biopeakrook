@@ -13,6 +13,7 @@ class PhoneVerification(BaseUUIDModel):
     retry_count = models.PositiveSmallIntegerField(default=0, editable=False)
     secret = models.TextField(null=True, blank=True, editable=False)
     expires_at = models.DateTimeField(default=get_expiry)
+    verified_at = models.DateTimeField(null=True, blank=True, editable=False)
     PURPOSE_LOGIN = "0"
     PURPOSE_REGISTER = "1"
     PURPOSE_VERIFY = "2"

@@ -7,6 +7,7 @@ from accounts.centers.models import Center
 from accounts.centers.serializers import CenterSerializer
 from accounts.users.models import User
 from accounts.users.utils.constants import Gender
+from accounts.utils.db import check_user_exists
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
@@ -68,12 +69,7 @@ class AdminAssociateSerializer(BaseAssociateSerializer):
         email = user_data.get('email')
         phone = user_data.get('phone')
 
-        errors = {}
-        if email and User.objects.filter(email__iexact=email).exists():
-            errors['email'] = "User with this email already exists."
-        if phone and User.objects.filter(phone__iexact=phone).exists():
-            errors['phone'] = "User with this phone already exists."
-
+        errors = check_user_exists(email, phone)
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -273,7 +269,7 @@ class CenterAssociateSerializer(BaseModelSerializer):
     # Flatten user fields to root
     id = serializers.UUIDField(source='associate.user.id', read_only=True)
     email = serializers.EmailField(source='associate.user.email', allow_null=True, required=True)
-    phone = serializers.CharField(source='associate.user.phone', allow_null=True, required=False)
+    phone = PhoneNumberSerializerField(source='associate.user.phone', allow_null=True, required=False)
     first_name = serializers.CharField(source='associate.user.first_name', required=True)
     last_name = serializers.CharField(
         source='associate.user.last_name', required=False, allow_null=True
@@ -299,7 +295,7 @@ class CenterAssociateSerializer(BaseModelSerializer):
         model = AssociateCenterAssignment
         fields = [
             # User fields (flattened)
-            'id', 'email', 'phone', 'first_name', 'last_name', 'image',
+            'id', 'email', 'phone', 'first_name', 'last_name', "gender", 'image',
             # Associate fields (flattened)
             'is_external',
             # Role (nested)
@@ -368,9 +364,15 @@ class CenterAssociateSerializer(BaseModelSerializer):
 
         if role_id:
             if instance.is_admin:
-                raise serializers.ValidationError({'role_id': "Roles cannot be assigned to admin associates."})
-            if not AssociateRole.objects.filter(pk=role_id, center=instance.center).exists():
-                raise serializers.ValidationError({'role_id': "Invalid role for this center."})
+                raise serializers.ValidationError({
+                    'role_id': "Roles cannot be assigned to admin associates."
+                })
+            if not AssociateRole.objects.filter(
+                    pk=role_id, center=instance.center
+            ).exists():
+                raise serializers.ValidationError({
+                    'role_id': "Invalid role for this center."
+                })
 
         # Update user fields
         if user_data:

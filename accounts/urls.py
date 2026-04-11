@@ -16,4 +16,5 @@ urlpatterns = [
     # OTP Flow
     path('request-otp/', RequestOTPView.as_view(), name='request_otp'),
     path('login-otp/', LoginOTPView.as_view(), name='login_otp'),
+    # path('verify-otp/',),
 ]

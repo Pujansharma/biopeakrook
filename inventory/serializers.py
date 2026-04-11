@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from accounts.centers.utils.db import generate_room_code, generate_equipment_code
 from core.utils.serializers import BaseModelSerializer
 from inventory.models import Room, RoomSchedule, Equipment, EquipmentSchedule
 
@@ -9,9 +10,14 @@ class RoomSerializer(BaseModelSerializer):
         model = Room
         fields = [
             'id', 'room_type', 'name', 'code',
-            'capacity', 'floor',
             'is_active', 'created_at', 'updated_at',
         ]
+
+    def create(self, validated_data):
+        center = validated_data.get('center_id')
+        code = generate_room_code(center)
+        validated_data['code'] = code
+        return super().create(validated_data)
 
 
 class RoomScheduleSerializer(BaseModelSerializer):
@@ -53,6 +59,7 @@ class EquipmentSerializer(BaseModelSerializer):
         room_id = validated_data.pop('room_id', None)
         center_id = validated_data.get('center_id', None)
         validated_data['room'] = self.validate_room(center_id, room_id)
+        validated_data['code'] = generate_equipment_code(center_id)
         return super().create(validated_data)
 
     def to_representation(self, instance):

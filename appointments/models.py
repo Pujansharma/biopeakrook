@@ -18,7 +18,7 @@ class Schedule(BaseUUIDModel):
         'associates.Associate', on_delete=models.CASCADE, related_name='schedules'
     )
 
-    day_of_week = models.CharField(choices=AppointmentDays.CHOICES)
+    day_of_week = models.CharField(choices=AppointmentDays)
 
     start_time = models.TimeField(
         validators=[
@@ -43,7 +43,7 @@ class Schedule(BaseUUIDModel):
         'centers.Center', on_delete=models.RESTRICT, related_name='schedules'
     )
 
-    mode = models.CharField(choices=ScheduleModes.CHOICES)
+    mode = models.CharField(choices=ScheduleModes)
 
     buffer_time = models.PositiveSmallIntegerField(
         default=0,
@@ -111,7 +111,7 @@ class Appointment(BaseUUIDModel):
 
     status = models.CharField(
         max_length=20,
-        choices=AppointmentStatus.CHOICES,
+        choices=AppointmentStatus,
         default=AppointmentStatus.PENDING
     )
 
