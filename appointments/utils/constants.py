@@ -30,11 +30,3 @@ class AppointmentStatus(models.TextChoices):
     CANCELLED = 'cancelled', 'Cancelled'
     COMPLETED = 'completed', 'Completed'
     NO_SHOW = 'no_show', 'No Show'
-
-    CHOICES = (
-        (PENDING, 'Pending'),
-        (CONFIRMED, 'Confirmed'),
-        (CANCELLED, 'Cancelled'),
-        (COMPLETED, 'Completed'),
-        (NO_SHOW, 'No Show'),
-    )
