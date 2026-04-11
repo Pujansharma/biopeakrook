@@ -1,34 +1,20 @@
-class AppointmentDays:
-    MONDAY = '0'
-    TUESDAY = '1'
-    WEDNESDAY = '2'
-    THURSDAY = '3'
-    FRIDAY = '4'
-    SATURDAY = '5'
-    SUNDAY = '6'
-
-    CHOICES = (
-        (MONDAY, "Monday"),
-        (TUESDAY, "Tuesday"),
-        (WEDNESDAY, 'Wednesday'),
-        (THURSDAY, 'Thursday'),
-        (FRIDAY, 'Friday'),
-        (SATURDAY, 'Saturday'),
-        (SUNDAY, 'Sunday'),
-
-    )
+from django.db import models
 
 
-class ScheduleModes:
-    VIRTUAL = 'virtual'
-    IN_PERSON = "in_person"
-    BOTH = 'both'
+class AppointmentDays(models.TextChoices):
+    MONDAY = '0', "Monday"
+    TUESDAY = '1', "Tuesday"
+    WEDNESDAY = '2', 'Wednesday'
+    THURSDAY = '3', 'Thursday'
+    FRIDAY = '4', 'Friday'
+    SATURDAY = '5', 'Saturday'
+    SUNDAY = '6', 'Sunday'
 
-    CHOICES = (
-        (VIRTUAL, 'Virtual Mode'),
-        (IN_PERSON, 'In person mode'),
-        (BOTH, 'Both')
-    )
+
+class ScheduleModes(models.TextChoices):
+    VIRTUAL = 'virtual', 'Virtual Mode'
+    IN_PERSON = "in_person", 'In person mode'
+    BOTH = 'both', 'Both'
 
 
 class AppointmentModes:
@@ -38,12 +24,12 @@ class AppointmentModes:
     )
 
 
-class AppointmentStatus:
-    PENDING = 'pending'
-    CONFIRMED = 'confirmed'
-    CANCELLED = 'cancelled'
-    COMPLETED = 'completed'
-    NO_SHOW = 'no_show'
+class AppointmentStatus(models.TextChoices):
+    PENDING = 'pending', 'Pending'
+    CONFIRMED = 'confirmed', 'Confirmed'
+    CANCELLED = 'cancelled', 'Cancelled'
+    COMPLETED = 'completed', 'Completed'
+    NO_SHOW = 'no_show', 'No Show'
 
     CHOICES = (
         (PENDING, 'Pending'),
