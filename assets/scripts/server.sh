@@ -2,5 +2,4 @@
 
 python manage.py collectstatic --noinput --clear
 python manage.py migrate
-
-exec ./assets/scripts/entrypoint.sh
+gunicorn  core.wsgi:application  -c ./assets/scripts/gunicorn.conf.py
