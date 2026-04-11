@@ -10,6 +10,18 @@ def generate_center_code():
     return f"{name}-{sequence}"
 
 
+def generate_room_code(center_id):
+    name = "RM"
+    sequence = get_next_sequence(name=f'rooms_{center_id}', fill_length=4)
+    return f"{name}-{sequence}"
+
+
+def generate_equipment_code(center_id):
+    name = "EQ"
+    sequence = get_next_sequence(name=f'equipments_{center_id}', fill_length=4)
+    return f"{name}-{sequence}"
+
+
 def check_overlap(
         center, day_of_week, start_time, end_time, exclude_id=None
 ):
