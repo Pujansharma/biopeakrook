@@ -37,7 +37,6 @@ class AssociateView(BaseListCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(
-            is_admin=True,
             created_by=self.request.user
         )
 
