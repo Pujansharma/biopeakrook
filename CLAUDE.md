@@ -313,6 +313,7 @@ uv run manage.py <command>
 | `docs/MEMORY.md` | Project memory for Claude — read before every session |
 | `docs/ENVIRONMENT.md` | Environment setup and variable reference |
 | `docs/features.md` | Platform feature overview |
+| `docs/accounts-architecture.md` | Accounts segmentation — User, Associate, Customer models and rationale |
 | `docs/associate-roles-rbac.md` | RBAC design details |
 | `docs/scheduling.md` | Scheduling algorithm deep-dive |
 

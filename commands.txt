@@ -1,40 +1,42 @@
-python -m pip install -U pip setuptools wheel
+uv sync
 
-python -m pip install -r requirements.txt
+uv sync --upgrade
 
-python manage.py collectstatic --noinput --clear
+uv lock
 
-python manage.py runserver
+uv run manage.py collectstatic --noinput --clear
 
-python manage.py runserver --settings=core.settings.staging
+uv run manage.py runserver
 
-python manage.py runserver --settings=core.settings.production
+uv run manage.py runserver --settings=core.settings.staging
 
-python manage.py runserver 0.0.0.0:8000
+uv run manage.py runserver --settings=core.settings.production
 
-python manage.py runserver 0.0.0.0:8000 --settings=core.settings.staging
+uv run manage.py runserver 0.0.0.0:8000
 
-python manage.py runserver 0.0.0.0:8000 --settings=core.settings.production
+uv run manage.py runserver 0.0.0.0:8000 --settings=core.settings.staging
 
-python manage.py makemigrations
+uv run manage.py runserver 0.0.0.0:8000 --settings=core.settings.production
 
-python manage.py migrate
+uv run manage.py makemigrations
 
-python manage.py migrate --settings=core.settings.staging
+uv run manage.py migrate
 
-python manage.py migrate --settings=core.settings.production
+uv run manage.py migrate --settings=core.settings.staging
 
-python manage.py createsuperuser
+uv run manage.py migrate --settings=core.settings.production
 
-python manage.py shell
+uv run manage.py createsuperuser
 
-python manage.py shell --settings=core.settings.staging
+uv run manage.py shell
 
-python manage.py shell --settings=core.settings.production
+uv run manage.py shell --settings=core.settings.staging
 
-python -Xutf8 manage.py dumpdata -e contenttypes > data.json
+uv run manage.py shell --settings=core.settings.production
 
-python manage.py loaddata data.json
+uv run -Xutf8 manage.py dumpdata -e contenttypes > data.json
+
+uv run manage.py loaddata data.json
 
 uv run uvicorn core.asgi:application --host 0.0.0.0 --port 8000
 
