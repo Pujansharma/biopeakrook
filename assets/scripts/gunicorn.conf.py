@@ -44,12 +44,14 @@ workers = multiprocessing.cpu_count() * 2 + 1
 # The maximum number of requests a worker will process before restarting.
 # This is a simple way to help prevent memory leaks.
 # A value of 0 means the worker will never restart.
-max_requests = 100
+# NOTE: Set high to avoid ELB health checks (which are very frequent) triggering
+# constant worker recycling. Health checks count toward this limit just like
+# real requests.
+max_requests = 2000
 
 # Adds a random jitter to the max_requests setting.
 # This helps prevent all workers from restarting at the same time.
-# The value is a number of seconds, e.g., max_requests_jitter = 30
-max_requests_jitter = 50
+max_requests_jitter = 200
 
 # The timeout for workers.
 # If a worker does not respond within this many seconds, it is killed and a new one is started.
