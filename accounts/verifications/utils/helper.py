@@ -1,21 +1,32 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db.models import F
 from django.utils import timezone
 
-from core.utils.log import logger
-from ..models import PhoneVerification, RegistrationCode
-from ..utils import (
+from accounts.verifications.models import (
+    PhoneVerification,
+    RegistrationCode,
+    TOTPSession,
+    TOTPCredential,
+)
+from accounts.verifications.utils import (
     get_secret,
     get_counter,
     get_code,
     get_expiry,
     code_valid,
-    generate_code,
+    generate_secret_code,
     generate_expiry,
+    get_totp_expiry,
 )
-from ..utils.emails import send_create_password_email, send_verification_phone_email
-from ..utils.sms import send_login_otp_sms
-from ..utils.whatsapp import send_verification_code_whatsapp
+from accounts.verifications.utils.emails import (
+    send_create_password_email,
+    send_verification_phone_email,
+)
+from accounts.verifications.utils.sms import send_login_otp_sms
+from accounts.verifications.utils.whatsapp import send_verification_code_whatsapp
+from core.utils.log import logger
 
 PASSWORD_URL = getattr(settings, "PASSWORD_BASE_URL", "") + "/create-password?code={}"
 
@@ -78,7 +89,7 @@ def generate_registration_code_for_user(user):
     instance, _ = RegistrationCode.objects.update_or_create(
         user=user,
         defaults={
-            "code": generate_code(),
+            "code": generate_secret_code(),
             "expires_at": generate_expiry(),
             "is_active": True,
         },
@@ -101,3 +112,50 @@ def send_registration_code(user):
     registration_code = generate_registration_code_for_user(user)
     create_password_link = PASSWORD_URL.format(registration_code.code)
     send_create_password_email(user.email, create_password_link)
+
+
+def generate_totp_session(user) -> TOTPSession:
+    session, _ = TOTPSession.objects.update_or_create(
+        user=user,
+        defaults={
+            "token": generate_secret_code(),
+            "expires_at": get_totp_expiry(),
+            "is_active": True,
+        },
+    )
+    return session
+
+
+LOCKOUT_SCHEDULE = {
+    10: timedelta(hours=1),
+    11: timedelta(hours=2),
+    12: timedelta(hours=3),
+    13: timedelta(hours=6),
+    14: timedelta(hours=8),
+    15: timedelta(hours=12),
+    16: timedelta(hours=24),
+}
+
+
+def apply_totp_lockout(totp_instance: TOTPCredential):
+    is_permanently_locked = False
+    lock_expires_at = None
+    new_attempts = totp_instance.failed_attempts + 1
+    if new_attempts >= 17:
+        is_permanently_locked = True
+
+    lockout_map = LOCKOUT_SCHEDULE.get(new_attempts, None)
+    if lockout_map:
+        lock_expires_at = timezone.now() + lockout_map
+
+    fields = {
+        "failed_attempts": F("failed_attempts") + 1,
+        "lock_expires_at": lock_expires_at,
+        "is_permanently_locked": is_permanently_locked,
+    }
+
+    for key, value in fields.items():
+        setattr(totp_instance, key, value)
+
+    totp_instance.save(update_fields=["updated_at", *fields.keys()])
+    return totp_instance

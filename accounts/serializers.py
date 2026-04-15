@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
@@ -8,7 +9,10 @@ from rest_framework.exceptions import AuthenticationFailed
 from accounts.utils.auth import authenticate, get_user_model
 from accounts.utils.db import get_password_reset_token_for_user, validate_password_reset_token
 from accounts.utils.emails import send_reset_password_email
-from core.utils.authentication import perform_login_for_user
+from accounts.verifications.models import TOTPCredential, TOTPSession
+from accounts.verifications.utils import verify_two_factor_code
+from accounts.verifications.utils.helper import apply_totp_lockout
+from core.utils.authentication import perform_login_for_user, get_mfa_token_for_user
 from core.utils.serializers import BaseSerializer
 
 User = get_user_model()
@@ -27,6 +31,11 @@ class BasePasswordCheckSerializer(BaseSerializer):
         password2 = attrs.get('password2')
         if password1 is not None and password1 != password2:
             raise serializers.ValidationError(_("Passwords do not match."))
+        if not password1:
+            raise serializers.ValidationError({
+                'password1': 'This field is required'
+            })
+
         try:
             validate_password(password1)
         except ValidationError as e:
@@ -34,7 +43,38 @@ class BasePasswordCheckSerializer(BaseSerializer):
         return attrs
 
 
-class LoginSerializer(BaseSerializer):
+class TOTPAuthenticationMixin:
+    mfa_error_messages = {
+        'mfa_permanently_locked': _("Account is locked due to multiple failed attempts, contact admin."),
+        'mfa_locked': _("Account is temporarily locked, try again later."),
+    }
+
+    def check_totp_lockout(self, totp_instance: TOTPCredential) -> None:
+        if totp_instance.is_permanently_locked:
+            raise AuthenticationFailed(self.mfa_error_messages['mfa_permanently_locked'])
+        if totp_instance.lock_expires_at and totp_instance.lock_expires_at > timezone.now():
+            raise AuthenticationFailed(self.mfa_error_messages['mfa_locked'])
+
+    @staticmethod
+    def build_login_response(
+            *, totp_enabled=False,
+            totp_token=None,
+            tokens=None,
+    ):
+        if not tokens:
+            tokens = dict()
+        access = tokens.get('access')
+        refresh = tokens.get('refresh')
+        output = {
+            'totp_enabled': totp_enabled,
+            'totp_token': totp_token,
+            'access': access,
+            'refresh': refresh,
+        }
+        return output
+
+
+class LoginSerializer(TOTPAuthenticationMixin, BaseSerializer):
     email = serializers.EmailField(min_length=3, required=True)
     password = serializers.CharField(max_length=50, min_length=6, write_only=True)
 
@@ -45,10 +85,27 @@ class LoginSerializer(BaseSerializer):
     def validate(self, attrs):
         email = attrs.get('email', None)
         password = attrs.get('password', None)
+
         user = authenticate(email=email, password=password)
         if not user:
             raise AuthenticationFailed(self.error_messages["no_active_account"])
-        return perform_login_for_user(user)
+        totp_instance = TOTPCredential.objects.filter(
+            user=user, is_enrolled=True
+        ).first()
+
+        is_mfa_required = totp_instance is not None
+
+        if not is_mfa_required:
+            return self.build_login_response(
+                tokens=perform_login_for_user(user)
+            )
+
+        self.check_totp_lockout(totp_instance)
+
+        return self.build_login_response(
+            totp_enabled=True,
+            totp_token=get_mfa_token_for_user(user),
+        )
 
 
 class PasswordChangeSerializer(BasePasswordCheckSerializer):
@@ -147,3 +204,47 @@ class ResetPasswordSerializer(BasePasswordCheckSerializer):
 
         # send_password_reset_complete_email(email=email)
         return email
+
+
+class TOTPVerifySerializer(TOTPAuthenticationMixin, BaseSerializer):
+    totp_token = serializers.CharField(required=True, write_only=True)
+    totp_code = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, attrs):
+        totp_token = attrs.get('totp_token')
+        totp_code = attrs.get('totp_code')
+
+        totp_session = TOTPSession.objects.select_related(
+            'user__two_factor_code'
+        ).filter_active(
+            token=totp_token, expires_at__gte=timezone.now()
+        ).first()
+        if not totp_session:
+            raise serializers.ValidationError("Invalid TOTP session")
+
+        totp_credential = totp_session.user.totp_credential
+
+        self.check_totp_lockout(totp_credential)
+
+        secret = totp_credential.secret
+        is_code_valid = verify_two_factor_code(secret, totp_code)
+
+        if not is_code_valid:
+            apply_totp_lockout(totp_credential)
+            raise serializers.ValidationError({
+                'totp_code': 'Invalid TOTP code'
+            })
+
+        TOTPCredential.objects.filter(pk=totp_credential.pk).update(
+            failed_attempts=0,
+            lock_expires_at=None,
+            is_permanently_locked=False,
+        )
+        TOTPSession.objects.filter(pk=totp_session.pk).update(
+            is_active=False
+        )
+
+        return self.build_login_response(
+            totp_enabled=False,
+            tokens=perform_login_for_user(user=totp_session.user)
+        )

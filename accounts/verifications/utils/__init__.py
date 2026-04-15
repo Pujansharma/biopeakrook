@@ -1,6 +1,6 @@
 import base64
 import random
-import uuid
+import secrets
 from datetime import timedelta
 from io import BytesIO
 
@@ -13,12 +13,16 @@ def generate_expiry():
     return timezone.now() + timedelta(days=7)
 
 
-def generate_code():
-    return uuid.uuid4().hex
+def generate_secret_code():
+    return secrets.token_hex(32)
 
 
-def get_expiry():
-    return timezone.now() + timedelta(minutes=2)
+def get_expiry(minutes=2):
+    return timezone.now() + timedelta(minutes=minutes)
+
+
+def get_totp_expiry():
+    return get_expiry(5)
 
 
 def get_counter():
@@ -44,7 +48,7 @@ def code_valid(secret, counter, code):
 
 
 def get_two_factor_uri(secret, name):
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=name, issuer_name='MetSights')
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=name, issuer_name='Biopeak')
     return uri
 
 
@@ -56,4 +60,4 @@ def get_qr_code_data_uri(data):
 
 def verify_two_factor_code(secret, code):
     totp = pyotp.TOTP(secret)
-    return totp.verify(code)
+    return totp.verify(code, valid_window=1)
