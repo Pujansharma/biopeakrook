@@ -1,6 +1,7 @@
 import pandas as pd
+from django.db.models import F, Value, Case, When
 
-from accounts.centers.models import CenterOperatingHour
+from accounts.centers.models import Center, CenterOperatingHour
 from sequences.utils import get_next_sequence
 
 
@@ -51,3 +52,55 @@ def check_overlap(
 
     overlaps_list = overlapping[['open_time', 'close_time']].to_dict('records')
     return True, overlaps_list
+
+
+def increment_staff_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(staff_count=F('staff_count') + 1)
+
+
+def decrement_staff_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(
+        staff_count=Case(
+            When(staff_count__gt=0, then=F('staff_count') - 1),
+            default=Value(0),
+        )
+    )
+
+
+def increment_inactive_staff_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(inactive_staff_count=F('inactive_staff_count') + 1)
+
+
+def decrement_inactive_staff_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(
+        inactive_staff_count=Case(
+            When(inactive_staff_count__gt=0, then=F('inactive_staff_count') - 1),
+            default=Value(0),
+        )
+    )
+
+
+def increment_customer_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(customer_count=F('customer_count') + 1)
+
+
+def decrement_customer_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(
+        customer_count=Case(
+            When(customer_count__gt=0, then=F('customer_count') - 1),
+            default=Value(0),
+        )
+    )
+
+
+def increment_inactive_customer_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(inactive_customer_count=F('inactive_customer_count') + 1)
+
+
+def decrement_inactive_customer_count(center_id) -> None:
+    Center.objects.filter(pk=center_id).update(
+        inactive_customer_count=Case(
+            When(inactive_customer_count__gt=0, then=F('inactive_customer_count') - 1),
+            default=Value(0),
+        )
+    )
