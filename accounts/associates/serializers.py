@@ -5,6 +5,7 @@ from accounts.associates.models import Associate, AssociateCenterAssignment, Ass
 from accounts.associates.utils.db import create_associate_user_account
 from accounts.centers.models import Center
 from accounts.centers.serializers import CenterSerializer
+from accounts.centers.utils.db import increment_staff_count, increment_inactive_staff_count, decrement_inactive_staff_count
 from accounts.users.models import User
 from accounts.users.utils.constants import Gender
 from accounts.utils.db import check_user_exists
@@ -86,7 +87,7 @@ class AdminAssociateSerializer(BaseAssociateSerializer):
         is_active = user_data.get('is_active', False)
         for key, value in user_data.items():
             setattr(instance.user, key, value)
-        instance.user.save()
+        instance.user.save(update_fields=[*user_data.keys(), 'updated_at'])
         validated_data['is_active'] = is_active
         return super().update(instance, validated_data)
 
@@ -121,7 +122,7 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
 
         for key, value in user_data.items():
             setattr(instance.user, key, value)
-        instance.user.save()
+        instance.user.save(update_fields=[*user_data.keys(), 'updated_at'])
         return super().update(instance, validated_data)
 
 
@@ -329,6 +330,8 @@ class CenterAssociateSerializer(BaseModelSerializer):
         if role_id and not AssociateRole.objects.filter(pk=role_id, center_id=center_id).exists():
             raise serializers.ValidationError({'role_id': "Invalid role for this center."})
 
+        is_primary = validated_data.get('is_primary', True)
+
         with transaction.atomic():
             user = User.objects.create_user(**user_data)
             associate = Associate.objects.create(user=user, **associate_data)
@@ -339,7 +342,11 @@ class CenterAssociateSerializer(BaseModelSerializer):
                 center_id=center_id,
                 role_id=role_id,
                 is_admin=False,
+                **validated_data,
             )
+
+            if is_primary:
+                increment_staff_count(assignment.center)
 
         return assignment
 
@@ -374,18 +381,25 @@ class CenterAssociateSerializer(BaseModelSerializer):
                     'role_id': "Invalid role for this center."
                 })
 
-        # Update user fields
+        was_active = user.is_active
+
         if user_data:
             for key, value in user_data.items():
                 setattr(user, key, value)
-            user.save()
+            user.save(update_fields=[*user_data.keys(), 'updated_at'])
 
-        # Update associate fields
         if associate_data:
             associate = instance.associate
             for key, value in associate_data.items():
                 setattr(associate, key, value)
-            associate.save()
+            associate.save(update_fields=[*associate_data.keys(), 'updated_at'])
+
+        if instance.is_primary and 'is_active' in user_data:
+            is_now_active = user_data['is_active']
+            if not is_now_active and was_active:
+                increment_inactive_staff_count(instance.center)
+            if is_now_active and not was_active:
+                decrement_inactive_staff_count(instance.center)
 
         return super().update(instance, validated_data)
 

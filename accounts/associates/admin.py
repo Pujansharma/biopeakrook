@@ -9,5 +9,5 @@ class AssociateAdmin(admin.ModelAdmin):
     list_display = ['user_id', 'created_at', 'updated_at']
     list_per_page = 25
     list_select_related = True
-    raw_id_fields = ['user']
+    raw_id_fields = ['user', 'created_by']
     search_fields = ['user__id']
