@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'accounts.centers',
     'accounts.customers',
     'accounts.audits',
+    'accounts.admins',
 
     'appointments',
 
