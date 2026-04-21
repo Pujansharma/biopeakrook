@@ -33,6 +33,10 @@ class BaseCenterSerializer(BaseModelSerializer):
             "modes",
             "status",
             "status_code",
+            "staff_count",
+            "inactive_staff_count",
+            "customer_count",
+            "inactive_customer_count",
             "created_at",
             "updated_at"
         ]
@@ -62,6 +66,10 @@ class CenterSerializer(BaseCenterSerializer):
             "modes",
             "status",
             "status_code",
+            "staff_count",
+            "inactive_staff_count",
+            "customer_count",
+            "inactive_customer_count",
             "created_at",
             "updated_at"
         ]
@@ -100,6 +108,10 @@ class CenterDetailSerializer(BaseCenterSerializer):
             "modes",
             "status",
             "status_code",
+            "staff_count",
+            "inactive_staff_count",
+            "customer_count",
+            "inactive_customer_count",
             "created_at",
             "updated_at",
             'created_by',
