@@ -37,6 +37,12 @@ class Center(BaseUUIDModel):
         default=CenterStatus.SETUP  # New centers start as 'setup'
     )
 
+    # Statistics
+    staff_count = models.PositiveBigIntegerField(default=0, editable=False)
+    inactive_staff_count = models.PositiveBigIntegerField(default=0, editable=False)
+    customer_count = models.PositiveBigIntegerField(default=0, editable=False)
+    inactive_customer_count = models.PositiveBigIntegerField(default=0, editable=False)
+
     # Audit
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_centers'
