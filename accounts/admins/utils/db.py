@@ -16,5 +16,7 @@ def create_admin_user(email, password=None, **extra_fields):
     )
     account.account_type = UserType.ADMIN
     account.save(update_fields=['account_type'])
-    admin, _ = Admin.objects.get_or_create(user=user)
+    admin, _ = Admin.objects.update_or_create(user=user, defaults={
+        'created_by': extra_fields.get('created_by')
+    })
     return admin
