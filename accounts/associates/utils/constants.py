@@ -1,3 +1,6 @@
+from django.db import models
+
+
 class SpecializationType:
     ENDOCRINOLOGY = 'endocrinology'
     METABOLIC_HEALTH_OPERATIONS = "metabolic_health_operations"
@@ -44,11 +47,6 @@ class AssociateRoleAbility:
     )
 
 
-class AssociateRoleTag:
-    CLINICAL = "clinical"
-    NON_CLINICAL = "non_clinical"
-
-    CHOICES = (
-        (CLINICAL, "Clinical"),
-        (NON_CLINICAL, "Non Clinical"),
-    )
+class AssociateRoleTag(models.TextChoices):
+    CLINICAL = "clinical", "Clinical"
+    NON_CLINICAL = "non_clinical", "Non Clinical"
