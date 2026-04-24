@@ -329,6 +329,49 @@ class AssociateRoleSerializer(BaseModelSerializer):
         ]
 
 
+class BaseCenterAssociateSerializer(BaseModelSerializer):
+    """Serializer to list Associates liked to a center"""
+
+    id = serializers.UUIDField(source="associate.user.id", read_only=True)
+    email = serializers.EmailField(source="associate.user.email", read_only=True)
+    phone = PhoneNumberSerializerField(source="associate.user.phone", read_only=True)
+    first_name = serializers.CharField(
+        source="associate.user.first_name", read_only=True
+    )
+    last_name = serializers.CharField(source="associate.user.last_name", read_only=True)
+    gender = serializers.ChoiceField(
+        source="associate.user.gender", choices=Gender.CHOICES, read_only=True
+    )
+    image = serializers.ImageField(source="associate.user.image", read_only=True)
+
+    is_active = serializers.BooleanField(
+        source="associate.user.is_active", read_only=True
+    )
+    is_admin = serializers.BooleanField(read_only=True)
+    exists = serializers.BooleanField(read_only=True)
+
+    # Nested objects
+    role = BaseAssociateRoleSerializer(read_only=True)
+    created_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = AssociateCenterAssignment
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "image",
+            "is_active",
+            "is_admin",
+            "exists",
+            "role",
+            "created_by",
+        ]
+
+
 class CenterAssociateSerializer(
     BasePasswordCheckOptionalSerializer, BaseModelSerializer
 ):
@@ -508,7 +551,6 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
             "gender",
             "image",
             # Associate fields (flattened)
-
             # Role (nested)
             "role",
             "role_id",
@@ -537,13 +579,13 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
 
         errors = {}
         if (
-                email
-                and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
+            email
+            and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
         ):
             errors["email"] = "User with this email already exists."
         if (
-                phone
-                and User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists()
+            phone
+            and User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists()
         ):
             errors["phone"] = "User with this phone already exists."
         if errors:
@@ -555,7 +597,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
+                pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
