@@ -43,6 +43,31 @@ class BasePasswordCheckSerializer(BaseSerializer):
         return attrs
 
 
+class BasePasswordCheckOptionalSerializer(BaseSerializer):
+    password1 = serializers.CharField(
+        max_length=50, min_length=6, label="Password", required=False, write_only=True
+    )
+    password2 = serializers.CharField(
+        max_length=50, min_length=6, label="Confirm password", required=False, write_only=True
+    )
+
+    @classmethod
+    def get_validated_password(cls, attrs):
+        password1 = attrs.pop('password1', None)
+        password2 = attrs.pop('password2', None)
+        if password1 is not None and password1 != password2:
+            raise serializers.ValidationError(_("Passwords do not match."))
+        if not password1:
+            raise serializers.ValidationError({
+                'password1': 'This field is required'
+            })
+        try:
+            validate_password(password1)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return password1
+
+
 class TOTPAuthenticationMixin:
     mfa_error_messages = {
         'mfa_permanently_locked': _("Account is locked due to multiple failed attempts, contact admin."),
