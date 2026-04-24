@@ -112,8 +112,26 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
 
     def get_queryset(self):
         center = self.get_center()
+        search = Q()
+        filter_kwargs = {}
+        search_params = self.request.query_params.get("search", "").strip()
+        is_admin = self.request.query_params.get("admin", None)
+
+        if search_params:
+            search |= Q(associate__user__email__istartswith=search_params)
+            search |= Q(associate__user__email__icontains=search_params)
+            search |= Q(associate__user__first_name__istartswith=search_params)
+            search |= Q(associate__user__first_name__icontains=search_params)
+
+        if is_admin:
+            filter_kwargs["is_admin"] = bool(int(is_admin))
+
         return (
-            AssociateCenterAssignment.objects.filter(center_id=center, is_active=True)
+            AssociateCenterAssignment.objects.filter(
+                search,
+                center_id=center,
+                **filter_kwargs,
+            )
             .prefetch_related("created_by")
             .select_related(
                 "associate__user",
@@ -172,9 +190,9 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
         if primary:
             filter_kwargs["is_primary"] = bool(int(primary))
         if active:
-            filter_kwargs[
-                "customer_profile__customer__user__is_active"
-            ] = bool(int(active))
+            filter_kwargs["customer_profile__customer__user__is_active"] = bool(
+                int(active)
+            )
 
         account_type = get_user_account_type(user)
         if account_type == UserType.ASSOCIATE:
@@ -184,20 +202,20 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
 
         if search_params:
             search_query |= (
-                    Q(customer_profile__first_name__istartswith=search_params)
-                    | Q(customer_profile__first_name__icontains=search_params)
-                    | Q(customer_profile__customer__user__phone__istartswith=search_params)
-                    | Q(customer_profile__customer__user__phone__icontains=search_params)
+                Q(customer_profile__first_name__istartswith=search_params)
+                | Q(customer_profile__first_name__icontains=search_params)
+                | Q(customer_profile__customer__user__phone__istartswith=search_params)
+                | Q(customer_profile__customer__user__phone__icontains=search_params)
             )
 
-        return CustomerCenterAssignment.objects.filter(
-            search_query,
-            center_id=self.kwargs["pk"],
-            **filter_kwargs
-        ).select_related(
-            "customer_profile__customer__user",
-        ).prefetch_related(
-            'created_by'
+        return (
+            CustomerCenterAssignment.objects.filter(
+                search_query, center_id=self.kwargs["pk"], **filter_kwargs
+            )
+            .select_related(
+                "customer_profile__customer__user",
+            )
+            .prefetch_related("created_by")
         )
 
     def perform_create(self, serializer):
