@@ -172,7 +172,9 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
         if primary:
             filter_kwargs["is_primary"] = bool(int(primary))
         if active:
-            filter_kwargs["is_active"] = bool(int(active))
+            filter_kwargs[
+                "customer_profile__customer__user__is_active"
+            ] = bool(int(active))
 
         account_type = get_user_account_type(user)
         if account_type == UserType.ASSOCIATE:
@@ -182,18 +184,20 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
 
         if search_params:
             search_query |= (
-                Q(customer_profile__first_name__istartswith=search_params)
-                | Q(customer_profile__first_name__icontains=search_params)
-                | Q(customer_profile__customer__user__phone__istartswith=search_params)
-                | Q(customer_profile__customer__user__phone__icontains=search_params)
+                    Q(customer_profile__first_name__istartswith=search_params)
+                    | Q(customer_profile__first_name__icontains=search_params)
+                    | Q(customer_profile__customer__user__phone__istartswith=search_params)
+                    | Q(customer_profile__customer__user__phone__icontains=search_params)
             )
 
         return CustomerCenterAssignment.objects.filter(
             search_query,
             center_id=self.kwargs["pk"],
-            is_active=True,
+            **filter_kwargs
         ).select_related(
             "customer_profile__customer__user",
+        ).prefetch_related(
+            'created_by'
         )
 
     def perform_create(self, serializer):
