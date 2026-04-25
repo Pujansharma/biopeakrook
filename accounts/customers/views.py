@@ -1,47 +1,193 @@
-from accounts.customers.models import Customer, CustomerProfile
+from django.db.models import Exists, OuterRef, Q, FilteredRelation, F
+
+from accounts.associates.models import AssociateCenterAssignment
+from accounts.associates.serializers import BaseCenterAssociateSerializer
+from accounts.customers.models import (
+    Customer,
+    CustomerAssociateAssignment,
+    CustomerCenterAssignment,
+    CustomerProfile,
+)
 from accounts.customers.serializers import (
     CustomerAccountSerializer,
-    CustomerProfileSerializer
+    CustomerAssociateAssignmentSerializer,
+    CustomerProfileSerializer,
+    CenterCustomerProfileDetailSerializer,
+    CustomerAssociateSerializer,
 )
-from accounts.utils.permissions import IsCustomerUser
+from accounts.utils.constants import UserType
+from accounts.utils.db import get_user_account_type
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
-    BaseListAPIView, BaseRetrieveUpdateAPIView
+    BaseListAPIView,
+    BaseRetrieveUpdateAPIView,
+    BaseRetrieveUpdateDestroyAPIView,
+    BaseCreateAPIView,
 )
 
 
 class CustomerAccountProfileView(BaseRetrieveUpdateAPIView):
     """Views for customers to update their profiles"""
+
     permission_classes = [IsCustomerUser]
     serializer_class = CustomerAccountSerializer
 
     def get_object(self):
-        qs = Customer.objects.select_related(
-            'user'
-        )
+        qs = Customer.objects.select_related("user")
         return get_object_or_404(
-            qs, detail="Invalid Customer profile",
-            pk=self.kwargs.get('pk')
+            qs, detail="Invalid Customer profile", pk=self.kwargs.get("pk")
         )
 
 
 class CustomerProfilesListView(BaseListAPIView):
     """View for customers to List all profiles"""
+
     permission_classes = [IsCustomerUser]
     serializer_class = CustomerProfileSerializer
 
     def get_customer(self):
-        qs = Customer.objects.select_related(
-            'user'
-        )
+        qs = Customer.objects.select_related("user")
         return get_object_or_404(
-            qs, detail="Invalid Customer profile",
-            pk=self.kwargs.get('pk')
+            qs, detail="Invalid Customer profile", pk=self.kwargs.get("pk")
         )
 
     def get_queryset(self):
-        return CustomerProfile.objects.select_related(
-            'customer__user'
-        ).filter(
-            customer=self.get_customer()
+        filter_kwargs = {}
+        is_active_query = self.request.query_params.get("is_active", None)
+
+        if is_active_query is not None:
+            filter_kwargs["is_active"] = bool(int(is_active_query))
+
+        return CustomerProfile.objects.select_related("customer__user").filter(
+            customer=self.get_customer(), **filter_kwargs
         )
+
+
+class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
+    """Retrieve/update/delete a customer profile. Accessible by admins and associates."""
+
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = CenterCustomerProfileDetailSerializer
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
+            associate = getattr(self.request.user, "associate", None)
+            filter_kwargs["center__associate_assignments__associate"] = associate
+
+        return CustomerCenterAssignment.objects.select_related(
+            "customer_profile__customer__user",
+        ).filter(**filter_kwargs)
+
+    def get_object(self):
+        qs = self.get_queryset()
+        return get_object_or_404(qs, customer_profile__id=self.kwargs["pk"])
+
+
+class CustomerAvailableAssociateView(BaseListAPIView):
+    """List associates at the center for this customer profile."""
+
+    serializer_class = BaseCenterAssociateSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        search = Q()
+        filter_kwargs = {}
+        subquery_filter_kwargs = {}
+        user = self.request.user
+        center_id = self.request.query_params.get("center_id", None)
+        role_id = self.request.query_params.get("role_id", None)
+        search_params = self.request.query_params.get("search", "").strip()
+
+        if search_params:
+            search |= Q(associate__user__first_name__istartswith=search_params)
+            search |= Q(associate__user__first_name__icontains=search_params)
+            search |= Q(associate__user__email__istartswith=search_params)
+            search |= Q(associate__user__email__icontains=search_params)
+
+        if center_id:
+            filter_kwargs["center_id"] = center_id
+            subquery_filter_kwargs["center_id"] = center_id
+        if role_id:
+            filter_kwargs["role_id"] = role_id
+        account = get_user_account_type(user)
+
+        if account == UserType.ASSOCIATE:
+            associate = getattr(user, "associate", None)
+            filter_kwargs["center_assignments__associate"] = associate
+
+        exists_subquery = CustomerAssociateAssignment.objects.filter(
+            associate=OuterRef("pk"),
+            **subquery_filter_kwargs,
+        )
+
+        return (
+            AssociateCenterAssignment.objects.select_related("associate__user")
+            .prefetch_related("created_by", "center")
+            .annotate(
+                exists=Exists(exists_subquery),
+            )
+            .filter(search, **filter_kwargs)
+            .order_by("-created_at")
+        )
+
+
+class CustomerLinkAssociateView(BaseCreateAPIView):
+    """Link an associate to a customer profile at a center."""
+
+    permission_classes = [IsAdminUser]
+    serializer_class = CustomerAssociateAssignmentSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            customer_profile_id=self.kwargs["pk"],
+            created_by=self.request.user,
+        )
+
+
+class CustomerAssociateListView(BaseListAPIView):
+    """List associates linked to a customer profile at a center."""
+
+    serializer_class = CustomerAssociateSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        search = Q()
+        user = self.request.user
+        center_ids = self.request.query_params.getlist("center_id", [])
+
+        search_param = self.request.query_params.get("search", "").strip()
+        if search_param:
+            search |= Q(associate__user__first_name__istartswith=search_param)
+            search |= Q(associate__user__first_name__icontains=search_param)
+            search |= Q(associate__user__user__email__istartswith=search_param)
+            search |= Q(associate__user__user__email__icontains=search_param)
+
+        account_type = get_user_account_type(user)
+        if account_type == UserType.ASSOCIATE:
+            associate = getattr(user, "associate", None)
+            filter_kwargs["center__associate_assignments__associate"] = associate
+
+        if center_ids:
+            filter_kwargs["center__in"] = center_ids
+
+        qs = (
+            CustomerAssociateAssignment.objects.filter(
+                search, customer_profile_id=self.kwargs["pk"], **filter_kwargs
+            ).annotate(
+                role=FilteredRelation(
+                    'associate__center_assignments__role',
+                    condition=Q(
+                        associate__center_assignments__center_id=F('center_id')
+                    )
+                )
+            ).select_related(
+                "associate__user",  'role',
+            )
+            .prefetch_related('center', 'created_by')
+            .order_by('-created_at')
+        )
+
+        return qs
