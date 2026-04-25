@@ -28,3 +28,21 @@ def get_associate_roles(associate, center_id, request=None):
         setattr(request, cache_key, assignment)
 
     return assignment
+
+
+def get_center_assignment_for_user(user, center_id, request=None):
+    cache_key = '_center_assignment'
+
+    if request and hasattr(request, cache_key):
+        return getattr(request, cache_key)
+
+    assignment = AssociateCenterAssignment.objects.filter(
+        associate__user=user,
+        center_id=center_id,
+        is_active=True
+    ).select_related('role').first()
+
+    if request:
+        setattr(request, cache_key, assignment)
+
+    return assignment
