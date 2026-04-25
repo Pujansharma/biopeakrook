@@ -25,10 +25,7 @@ class IsCustomerUser(IsAuthenticated):
 
 
 class BaseAssociateRBACPermission(IsAssociateUser):
-    """
-    Base: validates associate + center assignment.
-    Does NOT check admin or features.
-    """
+    """Base: validates associate + center assignment."""
 
     @staticmethod
     def get_center_id(request):
