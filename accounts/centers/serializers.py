@@ -37,6 +37,7 @@ class BaseCenterSerializer(BaseModelSerializer):
             "inactive_staff_count",
             "customer_count",
             "inactive_customer_count",
+            "is_active",
             "created_at",
             "updated_at"
         ]
@@ -44,6 +45,7 @@ class BaseCenterSerializer(BaseModelSerializer):
 
 class CenterSerializer(BaseCenterSerializer):
     """Serializer for Admins to create and update centers"""
+    created_by = BaseUserSerializer(read_only=True)
 
     class Meta:
         model = Center
@@ -70,8 +72,10 @@ class CenterSerializer(BaseCenterSerializer):
             "inactive_staff_count",
             "customer_count",
             "inactive_customer_count",
+            "is_active",
             "created_at",
-            "updated_at"
+            "updated_at",
+            'created_by'
         ]
 
     @transaction.atomic
@@ -112,6 +116,7 @@ class CenterDetailSerializer(BaseCenterSerializer):
             "inactive_staff_count",
             "customer_count",
             "inactive_customer_count",
+            "is_active",
             "created_at",
             "updated_at",
             'created_by',
@@ -159,6 +164,7 @@ class CenterWorkingHourSerializer(BaseModelSerializer):
 
 class AssociateAvailableCenterSerializer(BaseModelSerializer):
     exists = serializers.BooleanField(default=False, read_only=True)
+    is_admin = serializers.BooleanField(default=False, read_only=True)
 
     class Meta:
         model = Center
@@ -169,4 +175,5 @@ class AssociateAvailableCenterSerializer(BaseModelSerializer):
             "image",
             'exists',
             "is_active",
+            "is_admin",
         ]
