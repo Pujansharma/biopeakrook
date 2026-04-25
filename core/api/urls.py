@@ -13,4 +13,7 @@ urlpatterns = [
     # Associates
     path('associates/', include('accounts.associates.urls')),
     path('admins/', include('accounts.admins.urls')),
+
+    # Customer-profiles
+    path('profiles/', include('accounts.customers.urls')),
 ]
