@@ -26,3 +26,9 @@ class Service(BaseUUIDModel):
     room_types = ArrayField(
         base_field=models.CharField(choices=RoomType.CHOICES), max_length=len(RoomType.CHOICES)
     )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.pk}"
