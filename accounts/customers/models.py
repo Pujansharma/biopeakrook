@@ -13,6 +13,10 @@ class Customer(BaseModel):
         User, on_delete=models.CASCADE, primary_key=True, related_name='customer',
         db_index=True
     )
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_customers'
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -27,6 +31,10 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
     )
     is_primary = models.BooleanField(default=False, editable=False)
     is_onboarding_complete = models.BooleanField(default=False, editable=False)
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_customer_profiles'
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -48,25 +56,6 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
         return f"{self.pk}"
 
 
-class CustomerOnboarding(BaseModel):
-    customer_profile = models.OneToOneField(
-        CustomerProfile, on_delete=models.CASCADE, related_name='onboarding'
-    )
-    height = models.FloatField(default=0)
-    height_unit = models.CharField()
-
-    weight = models.FloatField(default=0)
-    weight_unit = models.CharField()
-
-
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.pk}"
-
-
 class CustomerCenterAssignment(BaseUUIDModel):
     customer_profile = models.ForeignKey(
         CustomerProfile, on_delete=models.CASCADE, related_name='center_assignments'
@@ -76,6 +65,10 @@ class CustomerCenterAssignment(BaseUUIDModel):
     )
 
     is_primary = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_customer_center_links'
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -85,6 +78,36 @@ class CustomerCenterAssignment(BaseUUIDModel):
             )
         ]
         verbose_name = "Customer-Center Assignment"
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CustomerAssociateAssignment(BaseUUIDModel):
+    customer_profile = models.ForeignKey(
+        CustomerProfile, on_delete=models.CASCADE, related_name='associate_assignments'
+    )
+    associate = models.ForeignKey(
+        'associates.Associate', on_delete=models.CASCADE, related_name='customer_assignments'
+    )
+    center = models.ForeignKey(
+        'centers.Center', on_delete=models.CASCADE, related_name='customer_associate_assignments'
+    )
+
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_customer_associate_links'
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['customer_profile', 'associate', 'center'],
+                name='uniq_customer_associate_center'
+            )
+        ]
+        verbose_name = "Customer-Associate Assignment"
 
     def __str__(self):
         return f"{self.pk}"
