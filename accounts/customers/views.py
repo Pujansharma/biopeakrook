@@ -115,7 +115,8 @@ class CustomerAvailableAssociateView(BaseListAPIView):
 
         if account == UserType.ASSOCIATE:
             associate = getattr(user, "associate", None)
-            filter_kwargs["center_assignments__associate"] = associate
+            # filter_kwargs["associate__center_assignments__center_id"] = center_id
+            # TODO: Implement the associate filtering here or remove this
 
         exists_subquery = CustomerAssociateAssignment.objects.filter(
             associate=OuterRef("pk"),
@@ -128,7 +129,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
             .annotate(
                 exists=Exists(exists_subquery),
             )
-            .filter(search, **filter_kwargs)
+            .filter(search, **filter_kwargs, is_admin=False)
             .order_by("-created_at")
         )
 
@@ -184,7 +185,7 @@ class CustomerAssociateListView(BaseListAPIView):
                     )
                 )
             ).select_related(
-                "associate__user",  'role',
+                "associate__user", 'role',
             )
             .prefetch_related('center', 'created_by')
             .order_by('-created_at')

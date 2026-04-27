@@ -164,7 +164,9 @@ class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
             search |= Q(name__icontains=search_query)
 
         return (
-            AssociateRole.objects.filter(search, center=center, **filter_kwargs)
+            AssociateRole.objects.filter(
+                search, center=center, **filter_kwargs
+            )
             .prefetch_related()
             .select_related("center", "created_by")
         )
