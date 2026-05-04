@@ -6,8 +6,6 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
-# INTERNAL_IPS = ['127.0.0.1', '192.168.1.182','192.168.1.56']
-
 # Debug toolbar
 DEBUG_TOOLBAR_CONFIG = {
     'SHOW_TOOLBAR_CALLBACK': lambda request: True,
