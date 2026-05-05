@@ -8,7 +8,7 @@ from .main import (
     BaseListCreateAPIView,
     BaseRetrieveUpdateAPIView,
     BaseRetrieveDestroyAPIView,
-    BaseRetrieveUpdateDestroyAPIView
+    BaseRetrieveUpdateDestroyAPIView,
 )
 
 __all__ = [
