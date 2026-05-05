@@ -14,7 +14,7 @@ class EmailThread(threading.Thread):
 
 def send_email(data):
     email_message = EmailMessage(
-        subject=data['email_subject'], body=data['email_body'], to=[data['to_email']]
+        subject=data["email_subject"], body=data["email_body"], to=[data["to_email"]]
     )
     EmailThread(email_message).start()
 
