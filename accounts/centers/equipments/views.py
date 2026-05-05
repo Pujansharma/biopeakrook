@@ -1,4 +1,7 @@
-from accounts.utils.permissions import AssociateAdminPermission, AssociateFeaturePermission
+from accounts.utils.permissions import (
+    AssociateAdminPermission,
+    AssociateFeaturePermission,
+)
 from core.utils.exceptions import get_object_or_404
 from core.utils.views import BaseListCreateAPIView, BaseRetrieveUpdateDestroyAPIView
 from inventory.models import Equipment, EquipmentSchedule
