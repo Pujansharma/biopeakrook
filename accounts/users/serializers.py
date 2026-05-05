@@ -12,19 +12,23 @@ class UserProfileSerializer(BaseModelSerializer):
     class Meta:
         model = User
         fields = (
-            "id", "email", "phone",
-            'first_name', 'last_name', 'gender', 'date_of_birth', 'image',
-            "date_joined", 'last_login', "updated_at",
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "date_joined",
+            "last_login",
+            "updated_at",
         )
-        read_only_fields = [
-            'date_joined', 'last_login'
-        ]
+        read_only_fields = ["date_joined", "last_login"]
 
 
 class BaseUserSerializer(BaseModelSerializer):
     class Meta:
         model = User
-        fields = [
-            'id', 'email', 'first_name', 'last_name', 'image', 'last_login'
-        ]
+        fields = ["id", "email", "first_name", "last_name", "image", "last_login"]
         read_only_fields = fields
