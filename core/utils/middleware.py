@@ -8,7 +8,7 @@ class CenterContextMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        request.center_id = request.headers.get('X-Center-ID')
+        request.center_id = request.headers.get("X-Center-ID")
         return self.get_response(request)
 
 
@@ -22,5 +22,5 @@ class CustomerProfileContextMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        request.customer_profile_id = request.headers.get('X-Customer-Profile-ID')
+        request.customer_profile_id = request.headers.get("X-Customer-Profile-ID")
         return self.get_response(request)
