@@ -65,7 +65,9 @@ class PhoneNumberFormat:
             return formatted
 
         if raise_exception:
-            raise ValidationError("The number supplied does not seem to be a valid phone number.")
+            raise ValidationError(
+                "The number supplied does not seem to be a valid phone number."
+            )
 
         return None
 
