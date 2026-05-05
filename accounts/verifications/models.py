@@ -4,7 +4,13 @@ from django.utils.text import gettext_lazy as _
 from accounts.users.models import User
 from core.utils.fields import PhoneNumberField
 from core.utils.models import BaseModel, BaseUUIDModel
-from .utils import get_expiry, generate_secret_code, generate_expiry, get_code, get_totp_expiry
+from .utils import (
+    get_expiry,
+    generate_secret_code,
+    generate_expiry,
+    get_code,
+    get_totp_expiry,
+)
 
 
 class PhoneVerification(BaseUUIDModel):
@@ -79,7 +85,7 @@ class TOTPCredential(BaseModel):
 
 class TOTPSession(BaseModel):
     user = models.OneToOneField(
-        User, primary_key=True, on_delete=models.CASCADE, related_name='totp_session'
+        User, primary_key=True, on_delete=models.CASCADE, related_name="totp_session"
     )
     token = models.CharField(max_length=64, unique=True, db_index=True)
     expires_at = models.DateTimeField(default=get_totp_expiry, editable=False)
@@ -93,7 +99,7 @@ class TOTPSession(BaseModel):
 
 class TOTPRecoveryCode(BaseModel):
     user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name='recovery_codes'
+        User, on_delete=models.CASCADE, related_name="recovery_codes"
     )
     code_hash = models.CharField(max_length=64, db_index=True)
     used_at = models.DateTimeField(null=True, blank=True)
