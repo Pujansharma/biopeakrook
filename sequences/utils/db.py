@@ -7,11 +7,11 @@ from sequences.models import Sequence
 @transaction.atomic
 def generate_sequence(sequence_name):
     sequence, _ = Sequence.objects.update_or_create(
-        name=sequence_name.lower(), defaults={
-            'last_value': F('last_value') + 1,
-        }, create_defaults={
-            'last_value': 1
-        }
+        name=sequence_name.lower(),
+        defaults={
+            "last_value": F("last_value") + 1,
+        },
+        create_defaults={"last_value": 1},
     )
     sequence.refresh_from_db()
     return sequence.last_value
@@ -35,8 +35,8 @@ def generate_sequences_bulk(sequence_name, count=1):
 
     sequence, _ = Sequence.objects.update_or_create(
         name=sequence_name.lower(),
-        defaults={'last_value': F('last_value') + count},
-        create_defaults={'last_value': count}
+        defaults={"last_value": F("last_value") + count},
+        create_defaults={"last_value": count},
     )
     sequence.refresh_from_db()
 
