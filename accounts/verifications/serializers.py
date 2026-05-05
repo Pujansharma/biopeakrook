@@ -18,18 +18,18 @@ class RequestOTPSerializer(BaseSerializer):
     purpose = serializers.ChoiceField(
         choices=PhoneVerification.PURPOSE_CHOICES,
         default=PhoneVerification.PURPOSE_LOGIN,
-        required=False
+        required=False,
     )
 
     def validate(self, attrs):
-        phone = attrs.get('phone')
-        purpose = attrs.get('purpose')
+        phone = attrs.get("phone")
+        purpose = attrs.get("purpose")
         if purpose == PhoneVerification.PURPOSE_LOGIN:
             user = User.objects.filter(phone__iexact=phone).first()
             if not user:
-                raise serializers.ValidationError({
-                    "phone": ["Phone number is not registered."]
-                })
+                raise serializers.ValidationError(
+                    {"phone": ["Phone number is not registered."]}
+                )
             if not user.is_active:
                 raise serializers.ValidationError("User account inactive.")
 
@@ -46,24 +46,21 @@ class LoginOTPSerializer(BaseSerializer):
     otp = serializers.CharField(required=True, min_length=6, max_length=6)
 
     def validate(self, attrs):
-        phone = attrs.get('phone')
-        otp = attrs.get('otp')
+        phone = attrs.get("phone")
+        otp = attrs.get("otp")
         instance = PhoneVerification.objects.filter(
-            phone__iexact=phone, expires_at__gte=timezone.localtime(),
-            purpose=PhoneVerification.PURPOSE_LOGIN
+            phone__iexact=phone,
+            expires_at__gte=timezone.localtime(),
+            purpose=PhoneVerification.PURPOSE_LOGIN,
         ).first()
         if not instance:
-            raise serializers.ValidationError({
-                "otp": ['OTP is expired or invalid.']
-            })
+            raise serializers.ValidationError({"otp": ["OTP is expired or invalid."]})
         is_valid = verify_otp(instance, otp)
         user = User.objects.filter(phone=instance.phone, is_active=True).first()
         if not user:
             raise serializers.ValidationError("User not allowed to login.")
         if not is_valid:
-            raise serializers.ValidationError({
-                "otp": ['OTP is incorrect.']
-            })
+            raise serializers.ValidationError({"otp": ["OTP is incorrect."]})
         return perform_login_for_user(user)
 
 
@@ -73,13 +70,13 @@ class VerifyOTPSerializer(BaseSerializer):
     purpose = serializers.ChoiceField(
         choices=PhoneVerification.PURPOSE_CHOICES,
         default=PhoneVerification.PURPOSE_VERIFY,
-        required=False
+        required=False,
     )
 
     def validate(self, attrs):
-        phone = attrs.get('phone')
-        otp = attrs.get('otp')
-        purpose = attrs.get('purpose')
+        phone = attrs.get("phone")
+        otp = attrs.get("otp")
+        purpose = attrs.get("purpose")
 
         instance = PhoneVerification.objects.filter(
             phone__iexact=phone,
@@ -89,27 +86,25 @@ class VerifyOTPSerializer(BaseSerializer):
         ).first()
 
         if not instance:
-            raise serializers.ValidationError({
-                "otp": ["OTP is expired or invalid."]
-            })
+            raise serializers.ValidationError({"otp": ["OTP is expired or invalid."]})
 
         is_valid = code_valid(
             secret=instance.secret, counter=instance.counter, code=otp
         )
         if not is_valid:
-            raise serializers.ValidationError({
-                "otp": ["OTP is incorrect."]
-            })
+            raise serializers.ValidationError({"otp": ["OTP is incorrect."]})
 
         if purpose == PhoneVerification.PURPOSE_REGISTER:
             # Mark as verified but keep alive for CustomerRegistrationSerializer
             PhoneVerification.objects.filter(pk=instance.pk).update(
                 verified_at=timezone.now(),
-                secret=None, counter=0, retry_count=0,
+                secret=None,
+                counter=0,
+                retry_count=0,
             )
         else:
             # For non-registration purposes, deactivate fully
             verify_otp(instance, otp)
 
-        attrs['instance'] = instance
+        attrs["instance"] = instance
         return attrs
