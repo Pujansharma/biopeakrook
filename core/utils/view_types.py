@@ -1,4 +1,5 @@
 """Type stubs for DRF view methods with proper request typing"""
+
 from typing import Protocol, Any
 
 from rest_framework.response import Response
