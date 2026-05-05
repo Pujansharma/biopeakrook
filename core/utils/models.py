@@ -30,15 +30,19 @@ class BaseModelManager(models.Manager.from_queryset(BaseQuerySet)):
 
 class BaseModel(models.Model):
     is_active = models.BooleanField(
-        _("active status"), default=True,
-        help_text=_("Designates whether this is marked as active")
+        _("active status"),
+        default=True,
+        help_text=_("Designates whether this is marked as active"),
     )
     created_at = models.DateTimeField(
-        _('created at'), auto_now_add=True,
-        help_text=_("Designates when this object was created."))
+        _("created at"),
+        auto_now_add=True,
+        help_text=_("Designates when this object was created."),
+    )
     updated_at = models.DateTimeField(
-        _('updated at'), auto_now=True,
-        help_text=_('Designates when this object was last updated.')
+        _("updated at"),
+        auto_now=True,
+        help_text=_("Designates when this object was last updated."),
     )
 
     objects = BaseModelManager()
