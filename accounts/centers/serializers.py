@@ -10,8 +10,10 @@ from core.utils.serializers import BaseModelSerializer
 
 class BaseCenterSerializer(BaseModelSerializer):
     code = serializers.CharField(read_only=True)
-    phone = PhoneNumberSerializerField(required=False, allow_null=True, allow_blank=True)
-    status_code = serializers.CharField(source='status', read_only=True)
+    phone = PhoneNumberSerializerField(
+        required=False, allow_null=True, allow_blank=True
+    )
+    status_code = serializers.CharField(source="status", read_only=True)
 
     class Meta:
         model = Center
@@ -39,12 +41,47 @@ class BaseCenterSerializer(BaseModelSerializer):
             "inactive_customer_count",
             "is_active",
             "created_at",
-            "updated_at"
+            "updated_at",
+        ]
+
+
+class ServiceAvailableCenterSerializer(BaseCenterSerializer):
+    exists = serializers.BooleanField(default=False)
+
+    class Meta:
+        model = Center
+        fields = [
+            "id",
+            "code",
+            "name",
+            "image",
+            "address",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "country",
+            "pincode",
+            "phone",
+            "email",
+            "contact_person",
+            "modes",
+            "status",
+            "status_code",
+            "staff_count",
+            "inactive_staff_count",
+            "customer_count",
+            "inactive_customer_count",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "exists",
         ]
 
 
 class CenterSerializer(BaseCenterSerializer):
     """Serializer for Admins to create and update centers"""
+
     created_by = BaseUserSerializer(read_only=True)
 
     class Meta:
@@ -75,21 +112,20 @@ class CenterSerializer(BaseCenterSerializer):
             "is_active",
             "created_at",
             "updated_at",
-            'created_by'
+            "created_by",
         ]
 
     @transaction.atomic
     def create(self, validated_data):
         """Method to create a center along with custom code"""
         code = generate_center_code()
-        validated_data.update({
-            'code': code
-        })
+        validated_data.update({"code": code})
         return super().create(validated_data)
 
 
 class CenterDetailSerializer(BaseCenterSerializer):
     """Serializer for center details"""
+
     created_by = BaseUserSerializer(read_only=True)
 
     class Meta:
@@ -119,13 +155,13 @@ class CenterDetailSerializer(BaseCenterSerializer):
             "is_active",
             "created_at",
             "updated_at",
-            'created_by',
+            "created_by",
         ]
 
     def update(self, instance, validated_data):
         """Method to update a center"""
-        validated_data.pop('code', None)
-        validated_data.pop('created_by', None)
+        validated_data.pop("code", None)
+        validated_data.pop("created_by", None)
         return super().update(instance, validated_data)
 
 
@@ -146,9 +182,9 @@ class CenterWorkingHourSerializer(BaseModelSerializer):
 
     def create(self, validated_data):
         """Creates an operating hour and validates time overlapping"""
-        center = validated_data.get('center')
-        day_of_week = validated_data.get('day_of_week')
-        is_open = validated_data.get('is_open')
+        center = validated_data.get("center")
+        day_of_week = validated_data.get("day_of_week")
+        is_open = validated_data.get("is_open")
 
         if not is_open:
             exists = CenterOperatingHour.objects.filter(
@@ -173,7 +209,7 @@ class AssociateAvailableCenterSerializer(BaseModelSerializer):
             "code",
             "name",
             "image",
-            'exists',
+            "exists",
             "is_active",
             "is_admin",
         ]
