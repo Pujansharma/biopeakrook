@@ -41,17 +41,14 @@ def cancel_appointment(appointment, reason, cancelled_by=None):
 def complete_appointment(appointment):
     """Helper to mark appointment as completed."""
     Appointment.objects.filter(pk=appointment.pk).update(
-        status=AppointmentStatus.COMPLETED,
-        completed_at=timezone.localtime()
+        status=AppointmentStatus.COMPLETED, completed_at=timezone.localtime()
     )
     appointment.refresh_from_db()
     return appointment
 
 
 # When rescheduling:
-def reschedule_appointment(
-        appointment, start_datetime, end_datetime, reason, user
-):
+def reschedule_appointment(appointment, start_datetime, end_datetime, reason, user):
     """Helper to reschedule appointment."""
     # 1. Save old values to history
     AppointmentHistory.objects.create(
@@ -59,15 +56,13 @@ def reschedule_appointment(
         start_datetime=appointment.start_datetime,  # OLD
         end_datetime=appointment.end_datetime,  # OLD
         reason=reason,
-        rescheduled_by=user
+        rescheduled_by=user,
     )
 
     # 2. Update appointment with new times
     appointment.start_datetime = start_datetime
     appointment.end_datetime = end_datetime
-    appointment.save(update_fields=[
-        'start_datetime', 'end_datetime'
-    ])
+    appointment.save(update_fields=["start_datetime", "end_datetime"])
 
     return appointment
 
