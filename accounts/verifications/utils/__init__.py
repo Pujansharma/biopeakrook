@@ -48,7 +48,7 @@ def code_valid(secret, counter, code):
 
 
 def get_two_factor_uri(secret, name):
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=name, issuer_name='Biopeak')
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=name, issuer_name="Biopeak")
     return uri
 
 
