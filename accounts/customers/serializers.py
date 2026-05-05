@@ -3,7 +3,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
-from accounts.associates.serializers import BaseAssociateSerializer, BaseAssociateRoleSerializer
+from accounts.associates.serializers import (
+    BaseAssociateSerializer,
+    BaseAssociateRoleSerializer,
+)
 from accounts.centers.utils.db import (
     increment_customer_count,
     increment_inactive_customer_count,
@@ -73,6 +76,23 @@ class CustomerAccountSerializer(BaseModelSerializer):
                 setattr(user, key, value)
             user.save()
         return instance
+
+
+class BaseCustomerProfileSerializer(BaseModelSerializer):
+    class Meta:
+        model = CustomerProfile
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "is_primary",
+            "is_onboarding_complete",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class CustomerProfileSerializer(BaseModelSerializer):
@@ -226,6 +246,18 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         return rep
 
 
+class BaseCustomerAssignedCenterSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="center.id", read_only=True)
+    name = serializers.CharField(source="center.name", read_only=True)
+
+    # is_primary = serializers.BooleanField(source="customer_profile.is_primary", read_only=True)
+    # is_active = serializers.BooleanField(source="customer_profile.customer.user.is_active")
+
+    class Meta:
+        model = CustomerCenterAssignment
+        fields = ["id", "name", "is_primary", "created_at"]
+
+
 class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="customer_profile.id", read_only=True)
     email = serializers.EmailField(
@@ -250,8 +282,12 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     image = serializers.ImageField(
         source="customer_profile.image", required=False, allow_null=True
     )
-    is_primary = serializers.BooleanField(source="customer_profile.is_primary", read_only=True)
-    is_active = serializers.BooleanField(source="customer_profile.customer.user.is_active")
+    is_primary = serializers.BooleanField(
+        source="customer_profile.is_primary", read_only=True
+    )
+    is_active = serializers.BooleanField(
+        source="customer_profile.customer.user.is_active"
+    )
 
     class Meta:
         model = CustomerCenterAssignment
@@ -279,7 +315,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
 
         is_active = user_wrapper.get("is_active", None)
         if is_active is not None:
-            profile_wrapper['is_active'] = is_active
+            profile_wrapper["is_active"] = is_active
 
         user = instance.customer_profile.customer.user
         if phone:
@@ -411,10 +447,8 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
     @classmethod
     def get_invalid_associates(cls, center_id, associate_ids):
         qs = AssociateCenterAssignment.objects.filter(
-            center_id=center_id,
-            associate_id__in=associate_ids,
-            is_admin=False
-        ).values_list('associate_id', flat=True)
+            center_id=center_id, associate_id__in=associate_ids, is_admin=False
+        ).values_list("associate_id", flat=True)
 
         not_valid = set(associate_ids) - set(qs)
         return not_valid
@@ -423,8 +457,8 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
         add_associate_ids = []
         remove_associate_ids = []
         center_id = validated_data.pop("center_id", None)
-        customer_profile_id = validated_data.pop('customer_profile_id', None)
-        created_by = validated_data.pop('created_by', None)
+        customer_profile_id = validated_data.pop("customer_profile_id", None)
+        created_by = validated_data.pop("created_by", None)
 
         add_ids = validated_data.get("add", [])
         remove_ids = validated_data.get("remove", [])
@@ -434,7 +468,7 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
                 {"center_id": "A valid center must be provided"}
             )
         if not customer_profile_id:
-            raise serializers.ValidationError('Invalid customer ID provided')
+            raise serializers.ValidationError("Invalid customer ID provided")
 
         if not add_ids and not remove_ids:
             raise serializers.ValidationError(
@@ -442,43 +476,47 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
             )
 
         if add_ids:
-            add_associate_ids = [i['id'] for i in add_ids]
+            add_associate_ids = [i["id"] for i in add_ids]
 
         if remove_ids:
-            remove_associate_ids = [i['id'] for i in remove_ids]
+            remove_associate_ids = [i["id"] for i in remove_ids]
 
         if add_associate_ids:
-            invalid_ids = self.get_invalid_associates(
-                center_id, add_associate_ids
-            )
+            invalid_ids = self.get_invalid_associates(center_id, add_associate_ids)
             if invalid_ids:
-                raise serializers.ValidationError({
-                    'add': f'Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}'
-                })
+                raise serializers.ValidationError(
+                    {
+                        "add": f"Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}"
+                    }
+                )
             _assignments = [
                 CustomerAssociateAssignment(
                     customer_profile_id=customer_profile_id,
                     associate_id=i,
                     center_id=center_id,
-                    created_by=created_by
-                ) for i in add_associate_ids
+                    created_by=created_by,
+                )
+                for i in add_associate_ids
             ]
             CustomerAssociateAssignment.objects.bulk_create(
-                _assignments, update_conflicts=True,
-                unique_fields=['customer_profile', 'associate', 'center'],
-                update_fields=['created_by']
+                _assignments,
+                update_conflicts=True,
+                unique_fields=["customer_profile", "associate", "center"],
+                update_fields=["created_by"],
             )
 
         if remove_associate_ids:
             invalid_ids = self.get_invalid_associates(center_id, remove_associate_ids)
             if invalid_ids:
-                raise serializers.ValidationError({
-                    'remove': f'Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}'
-                })
+                raise serializers.ValidationError(
+                    {
+                        "remove": f"Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}"
+                    }
+                )
             CustomerAssociateAssignment.objects.filter(
                 customer_profile_id=customer_profile_id,
                 center_id=center_id,
-                associate_id__in=remove_associate_ids
+                associate_id__in=remove_associate_ids,
             ).delete()
 
         return 1
@@ -490,7 +528,13 @@ class CustomerAvailableAssociateSerializer(BaseAssociateSerializer):
     class Meta:
         model = Associate
         fields = [
-            'id', 'first_name', 'last_name', 'email', 'image', 'exists', 'is_active'
+            "id",
+            "first_name",
+            "last_name",
+            "email",
+            "image",
+            "exists",
+            "is_active",
         ]
 
 
@@ -507,12 +551,17 @@ class CustomerAssociateSerializer(BaseModelSerializer):
         source="associate.user.last_name", required=False, allow_null=True
     )
     gender = serializers.ChoiceField(
-        source="associate.user.gender", choices=Gender.CHOICES, required=False, allow_null=True
+        source="associate.user.gender",
+        choices=Gender.CHOICES,
+        required=False,
+        allow_null=True,
     )
     date_of_birth = serializers.DateField(
         source="associate.user.date_of_birth", required=False, allow_null=True
     )
-    image = serializers.ImageField(source="associate.user.image", required=False, allow_null=True)
+    image = serializers.ImageField(
+        source="associate.user.image", required=False, allow_null=True
+    )
     is_active = serializers.BooleanField(
         source="user.is_active", required=False, default=True
     )
@@ -532,15 +581,14 @@ class CustomerAssociateSerializer(BaseModelSerializer):
             "image",
             "is_active",
             "created_at",
-
-            'role',
+            "role",
             "created_by",
         ]
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        if 'gender' in self.get_fields():
-            rep['gender'] = instance.associate.user.get_gender_display()
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.associate.user.get_gender_display()
         return rep
 
 
