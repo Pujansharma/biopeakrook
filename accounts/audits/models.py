@@ -11,9 +11,11 @@ User = get_user_model()
 
 class AuditLog(BaseUUIDModel):
     user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, related_name='audit_logs'
+        User, on_delete=models.SET_NULL, null=True, related_name="audit_logs"
     )
-    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default=UserType.UNKNOWN)
+    user_type = models.CharField(
+        max_length=20, choices=USER_TYPE_CHOICES, default=UserType.UNKNOWN
+    )
     action = models.CharField(max_length=10, choices=AuditAction.CHOICES)
 
     entity_type = models.CharField(max_length=50)
@@ -24,17 +26,17 @@ class AuditLog(BaseUUIDModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='audit_logs'
+        related_name="audit_logs",
     )
 
     description = models.TextField(blank=True, default="")
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['entity_type', 'entity_id']),
-            models.Index(fields=['user', 'action']),
+            models.Index(fields=["entity_type", "entity_id"]),
+            models.Index(fields=["user", "action"]),
         ]
 
     def __str__(self):
