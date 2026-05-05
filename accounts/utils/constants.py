@@ -8,8 +8,8 @@ class UserType:
 
 USER_TYPE_CHOICES = (
     (UserType.UNKNOWN, "Unknown"),
-    (UserType.SUPERUSER, 'Superuser'),
+    (UserType.SUPERUSER, "Superuser"),
     (UserType.ADMIN, "Admin"),
     (UserType.ASSOCIATE, "Associate"),
-    (UserType.CUSTOMER, 'Customer'),
+    (UserType.CUSTOMER, "Customer"),
 )
