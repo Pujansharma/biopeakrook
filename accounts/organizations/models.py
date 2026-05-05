@@ -9,7 +9,7 @@ class Organization(BaseUUIDModel):
     slug = models.CharField(max_length=255, unique=True, blank=True)
     code = models.CharField(max_length=20, unique=True, editable=False, db_index=True)
     description = models.TextField(null=True, blank=True)
-    image = models.ImageField(null=True, blank=True, upload_to='organizations/')
+    image = models.ImageField(null=True, blank=True, upload_to="organizations/")
 
     # Count statistics
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
@@ -20,7 +20,7 @@ class Organization(BaseUUIDModel):
     inactive_customer_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"
