@@ -6,7 +6,7 @@ class ScheduleSerializer(BaseModelSerializer):
     class Meta:
         model = Schedule
         fields = [
-            'id',
+            "id",
             "day_of_week",
             "start_time",
             "end_time",
@@ -15,6 +15,6 @@ class ScheduleSerializer(BaseModelSerializer):
             "buffer_time",
             "valid_from",
             "valid_until",
-            'created_at',
-            'updated_at'
+            "created_at",
+            "updated_at",
         ]
