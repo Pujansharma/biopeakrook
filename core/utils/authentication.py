@@ -12,12 +12,12 @@ User = get_user_model()
 
 def get_tokens_for_user(user: User):
     token = RefreshToken.for_user(user)
-    token['email'] = user.email
-    token['phone'] = user.phone
-    token['user_type'] = get_user_account_type(user)
+    token["email"] = user.email
+    token["phone"] = user.phone
+    token["user_type"] = get_user_account_type(user)
     return {
-        'access': str(token.access_token),
-        'refresh': str(token),
+        "access": str(token.access_token),
+        "refresh": str(token),
     }
 
 
