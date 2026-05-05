@@ -2,8 +2,9 @@ from accounts.audits.models import AuditLog
 from accounts.utils.db import get_user_account_type
 
 
-
-def add_audit_log(user, center_id, action, entity_type, entity_id=None, description="", metadata=None):
+def add_audit_log(
+    user, center_id, action, entity_type, entity_id=None, description="", metadata=None
+):
     """
     Base function to create an audit log entry.
     Reads user, user_type, and center_id from the request.
@@ -35,7 +36,9 @@ def add_audit_log_for_center(user, center_id, action, description="", metadata=N
     )
 
 
-def add_audit_log_for_associate(user, center_id, action, associate_id, description="", metadata=None):
+def add_audit_log_for_associate(
+    user, center_id, action, associate_id, description="", metadata=None
+):
     return add_audit_log(
         user,
         center_id,
@@ -47,7 +50,9 @@ def add_audit_log_for_associate(user, center_id, action, associate_id, descripti
     )
 
 
-def add_audit_log_for_associate_role(user, center_id, action, role_id, description="", metadata=None):
+def add_audit_log_for_associate_role(
+    user, center_id, action, role_id, description="", metadata=None
+):
     return add_audit_log(
         user,
         center_id,
@@ -59,9 +64,12 @@ def add_audit_log_for_associate_role(user, center_id, action, role_id, descripti
     )
 
 
-def add_audit_log_for_customer(user, center_id, action, customer_id, description="", metadata=None):
+def add_audit_log_for_customer(
+    user, center_id, action, customer_id, description="", metadata=None
+):
     return add_audit_log(
-        user, center_id,
+        user,
+        center_id,
         action=action,
         entity_type=EntityType.CUSTOMER,
         entity_id=customer_id,
@@ -70,9 +78,12 @@ def add_audit_log_for_customer(user, center_id, action, customer_id, description
     )
 
 
-def add_audit_log_for_appointment(user, center_id, action, appointment_id, description="", metadata=None):
+def add_audit_log_for_appointment(
+    user, center_id, action, appointment_id, description="", metadata=None
+):
     return add_audit_log(
-        user, center_id,
+        user,
+        center_id,
         action=action,
         entity_type=EntityType.APPOINTMENT,
         entity_id=appointment_id,
@@ -81,9 +92,12 @@ def add_audit_log_for_appointment(user, center_id, action, appointment_id, descr
     )
 
 
-def add_audit_log_for_package(user, center_id, action, package_id, description="", metadata=None):
+def add_audit_log_for_package(
+    user, center_id, action, package_id, description="", metadata=None
+):
     return add_audit_log(
-        user, center_id,
+        user,
+        center_id,
         action=action,
         entity_type=EntityType.PACKAGE,
         entity_id=package_id,
