@@ -14,7 +14,7 @@ import multiprocessing
 # are on the same machine.
 # When running in Docker, you should bind to '0.0.0.0' to accept connections
 # from the Docker network.
-bind = '[::]:8000'
+bind = "[::]:8000"
 
 # The number of worker processes for handling requests.
 # A common recommendation is (2 * number_of_cpu_cores) + 1.
@@ -66,17 +66,17 @@ keepalive = 2
 
 # The log level.
 # Options: 'debug', 'info', 'warning', 'error', 'critical'
-loglevel = 'info'
+loglevel = "info"
 
 # The path to the access log file.
 # A value of '-' logs to stdout.
-accesslog = '-'
+accesslog = "-"
 
 # The path to the error log file.
 # A value of '-' logs to stderr.
-errorlog = '-'
+errorlog = "-"
 
-forwarded_allow_ips = '*'
+forwarded_allow_ips = "*"
 
 # Preload the application before forking worker processes.
 # This can save some memory and speed up server startup.
