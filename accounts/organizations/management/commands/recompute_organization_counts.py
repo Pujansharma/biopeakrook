@@ -7,61 +7,99 @@ from accounts.organizations.models import Organization
 
 
 class Command(BaseCommand):
-    help = 'Recompute all denormalized counts on Organization from source-of-truth data.'
+    help = (
+        "Recompute all denormalized counts on Organization from source-of-truth data."
+    )
 
     def handle(self, *args, **options):
         # Requires Center.organization FK to be present
-        centers_subquery = Coalesce(Subquery(
-            Center.objects.filter(
-                organization=OuterRef('pk'),
-            ).values('organization').annotate(c=Count('pk')).values('c')
-        ), Value(0))
-
-        inactive_centers_subquery = Coalesce(Subquery(
-            Center.objects.filter(
-                organization=OuterRef('pk'),
-                is_active=False,
-            ).values('organization').annotate(c=Count('pk')).values('c')
-        ), Value(0))
-
-        staff_subquery = Coalesce(Subquery(
-            Center.objects.filter(
-                organization=OuterRef('pk'),
-            ).values('organization').annotate(
-                c=Count('associate_assignments__associate', distinct=True)
-            ).values('c')
-        ), Value(0))
-
-        inactive_staff_subquery = Coalesce(Subquery(
-            Center.objects.filter(
-                organization=OuterRef('pk'),
-            ).values('organization').annotate(
-                c=Count(
-                    'associate_assignments__associate',
-                    filter=Count('associate_assignments__associate__user__is_active'),
-                    distinct=True,
+        centers_subquery = Coalesce(
+            Subquery(
+                Center.objects.filter(
+                    organization=OuterRef("pk"),
                 )
-            ).values('c')
-        ), Value(0))
+                .values("organization")
+                .annotate(c=Count("pk"))
+                .values("c")
+            ),
+            Value(0),
+        )
 
-        customer_subquery = Coalesce(Subquery(
-            Center.objects.filter(
-                organization=OuterRef('pk'),
-            ).values('organization').annotate(
-                c=Count('customer_assignments__customer_profile', distinct=True)
-            ).values('c')
-        ), Value(0))
-
-        inactive_customer_subquery = Coalesce(Subquery(
-            Center.objects.filter(
-                organization=OuterRef('pk'),
-            ).values('organization').annotate(
-                c=Count(
-                    'customer_assignments__customer_profile',
-                    distinct=True,
+        inactive_centers_subquery = Coalesce(
+            Subquery(
+                Center.objects.filter(
+                    organization=OuterRef("pk"),
+                    is_active=False,
                 )
-            ).values('c')
-        ), Value(0))
+                .values("organization")
+                .annotate(c=Count("pk"))
+                .values("c")
+            ),
+            Value(0),
+        )
+
+        staff_subquery = Coalesce(
+            Subquery(
+                Center.objects.filter(
+                    organization=OuterRef("pk"),
+                )
+                .values("organization")
+                .annotate(c=Count("associate_assignments__associate", distinct=True))
+                .values("c")
+            ),
+            Value(0),
+        )
+
+        inactive_staff_subquery = Coalesce(
+            Subquery(
+                Center.objects.filter(
+                    organization=OuterRef("pk"),
+                )
+                .values("organization")
+                .annotate(
+                    c=Count(
+                        "associate_assignments__associate",
+                        filter=Count(
+                            "associate_assignments__associate__user__is_active"
+                        ),
+                        distinct=True,
+                    )
+                )
+                .values("c")
+            ),
+            Value(0),
+        )
+
+        customer_subquery = Coalesce(
+            Subquery(
+                Center.objects.filter(
+                    organization=OuterRef("pk"),
+                )
+                .values("organization")
+                .annotate(
+                    c=Count("customer_assignments__customer_profile", distinct=True)
+                )
+                .values("c")
+            ),
+            Value(0),
+        )
+
+        inactive_customer_subquery = Coalesce(
+            Subquery(
+                Center.objects.filter(
+                    organization=OuterRef("pk"),
+                )
+                .values("organization")
+                .annotate(
+                    c=Count(
+                        "customer_assignments__customer_profile",
+                        distinct=True,
+                    )
+                )
+                .values("c")
+            ),
+            Value(0),
+        )
 
         updated = Organization.objects.update(
             centers_count=centers_subquery,
@@ -72,4 +110,6 @@ class Command(BaseCommand):
             inactive_customer_count=inactive_customer_subquery,
         )
 
-        self.stdout.write(self.style.SUCCESS(f'Recomputed counts for {updated} organization(s).'))
+        self.stdout.write(
+            self.style.SUCCESS(f"Recomputed counts for {updated} organization(s).")
+        )

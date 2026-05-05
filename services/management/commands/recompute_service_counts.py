@@ -1,0 +1,26 @@
+from django.core.management.base import BaseCommand
+from django.db.models import Count, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
+
+from services.models import Service
+
+
+class Command(BaseCommand):
+    help = "Recompute all denormalized counts on Service from source-of-truth data."
+
+    def handle(self, *args, **options):
+        centers_count_subquery = Coalesce(
+            Subquery(
+                Service.centers.through.objects.filter(service_id=OuterRef("pk"))
+                .values("service_id")
+                .annotate(cnt=Count("center_id"))
+                .values("cnt")
+            ),
+            Value(0),
+        )
+
+        updated = Service.objects.update(centers_count=centers_count_subquery)
+
+        self.stdout.write(
+            self.style.SUCCESS(f"Recomputed counts for {updated} service(s).")
+        )
