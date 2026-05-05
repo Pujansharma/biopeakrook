@@ -14,6 +14,7 @@ from accounts.customers.serializers import (
     CustomerProfileSerializer,
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
+    BaseCustomerAssignedCenterSerializer,
 )
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
@@ -177,18 +178,43 @@ class CustomerAssociateListView(BaseListAPIView):
         qs = (
             CustomerAssociateAssignment.objects.filter(
                 search, customer_profile_id=self.kwargs["pk"], **filter_kwargs
-            ).annotate(
-                role=FilteredRelation(
-                    'associate__center_assignments__role',
-                    condition=Q(
-                        associate__center_assignments__center_id=F('center_id')
-                    )
-                )
-            ).select_related(
-                "associate__user", 'role',
             )
-            .prefetch_related('center', 'created_by')
-            .order_by('-created_at')
+            .annotate(
+                role=FilteredRelation(
+                    "associate__center_assignments__role",
+                    condition=Q(
+                        associate__center_assignments__center_id=F("center_id")
+                    ),
+                )
+            )
+            .select_related(
+                "associate__user",
+                "role",
+            )
+            .prefetch_related("center", "created_by")
+            .order_by("-created_at")
         )
 
+        return qs
+
+
+class CustomerCenterListView(BaseListAPIView):
+    serializer_class = BaseCustomerAssignedCenterSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        search = Q()
+        user = self.request.user
+
+        search_params = self.request.query_params.get("search", "").strip()
+        if search_params:
+            search |= Q(center__name__istartswith=search_params)
+            search |= Q(center__name__icontains=search_params)
+
+        qs = (
+            CustomerCenterAssignment.objects.select_related("center")
+            .prefetch_related()
+            .filter(search, customer_profile_id=self.kwargs["pk"])
+        )
         return qs
