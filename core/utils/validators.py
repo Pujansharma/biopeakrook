@@ -18,7 +18,7 @@ class UsernameValidator(UnicodeUsernameValidator):
 @deconstructible
 class PhoneNumberValidator:
     message = _("Enter a valid phone number.")
-    code = 'invalid'
+    code = "invalid"
 
     def __init__(self, region="IN", message=None, code=None):
         self.region = region
