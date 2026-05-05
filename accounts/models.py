@@ -9,12 +9,18 @@ User = get_user_model()
 
 class UserAccount(BaseModel):
     user = models.OneToOneField(
-        User, related_name='account', on_delete=models.CASCADE, primary_key=True, db_index=True
+        User,
+        related_name="account",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_index=True,
     )
-    account_type = models.CharField(max_length=20, default=UserType.UNKNOWN, choices=USER_TYPE_CHOICES)
+    account_type = models.CharField(
+        max_length=20, default=UserType.UNKNOWN, choices=USER_TYPE_CHOICES
+    )
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"
