@@ -157,17 +157,17 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
 
         errors = {}
         if (
-                email
-                and User.objects.filter(email__iexact=email)
-                .exclude(pk=instance.user.pk)
-                .exists()
+            email
+            and User.objects.filter(email__iexact=email)
+            .exclude(pk=instance.user.pk)
+            .exists()
         ):
             errors["email"] = "User with this email already exists."
         if (
-                phone
-                and User.objects.filter(phone__iexact=phone)
-                .exclude(pk=instance.user.pk)
-                .exists()
+            phone
+            and User.objects.filter(phone__iexact=phone)
+            .exclude(pk=instance.user.pk)
+            .exists()
         ):
             errors["phone"] = "User with this phone already exists."
         if errors:
