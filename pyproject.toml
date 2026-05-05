@@ -25,3 +25,6 @@ dependencies = [
     "qrcode",
     "black",
 ]
+
+[tool.black]
+extend-exclude = "migrations/"
