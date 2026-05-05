@@ -2,14 +2,14 @@ from django.db import models
 
 
 class SpecializationType:
-    ENDOCRINOLOGY = 'endocrinology'
+    ENDOCRINOLOGY = "endocrinology"
     METABOLIC_HEALTH_OPERATIONS = "metabolic_health_operations"
     DEXA = "dexa"
     ULTRASONOGRAPHY = "usg"
     BLOOD_COLLECTION = "blood_collection"
 
     CHOICES = (
-        (ENDOCRINOLOGY, 'Endocrinology'),
+        (ENDOCRINOLOGY, "Endocrinology"),
         (METABOLIC_HEALTH_OPERATIONS, "Metabolic Health Operations"),
         (DEXA, "DEXA"),
         (ULTRASONOGRAPHY, "Ultrasonography"),
