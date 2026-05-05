@@ -29,13 +29,13 @@ class BaseAssociateRBACPermission(IsAssociateUser):
 
     @staticmethod
     def get_center_id(request):
-        return request.headers.get('X-Center-ID')
+        return request.headers.get("X-Center-ID")
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
 
-        associate = getattr(request.user, 'associate', None)
+        associate = getattr(request.user, "associate", None)
         if not associate:
             return False
 
@@ -58,7 +58,7 @@ class AssociateAdminPermission(BaseAssociateRBACPermission):
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
-        assignment = getattr(request, 'center_assignment', None)
+        assignment = getattr(request, "center_assignment", None)
         if not assignment:
             return False
         return assignment.is_admin
@@ -69,13 +69,14 @@ class AssociateFeaturePermission(BaseAssociateRBACPermission):
     Requires role to have ANY of required_any_features.
     Having ALL feature allows
     """
+
     required_any_features = []
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
 
-        assignment = getattr(request, 'center_assignment', None)
+        assignment = getattr(request, "center_assignment", None)
         if not assignment:
             return False
 
