@@ -17,13 +17,13 @@ class AssociateCenterRoleDetailView(BaseRetrieveUpdateDestroyAPIView):
 
         account_type = get_user_account_type(user)
         if account_type == UserType.ASSOCIATE:
-            associate = getattr(user, 'associate', None)
+            associate = getattr(user, "associate", None)
             filter_kwargs["center__associate_assignments__associate"] = associate
 
-        return AssociateRole.objects.select_related('created_by').filter(**filter_kwargs)
+        return AssociateRole.objects.select_related("created_by").filter(
+            **filter_kwargs
+        )
 
     def get_object(self):
         qs = self.get_queryset()
-        return get_object_or_404(
-            qs, "Associate role not found", pk=self.kwargs['pk']
-        )
+        return get_object_or_404(qs, "Associate role not found", pk=self.kwargs["pk"])
