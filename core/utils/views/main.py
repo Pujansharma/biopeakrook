@@ -2,8 +2,12 @@
 # by composing the mixin classes with the base view.
 
 from rest_framework.generics import (
-    GenericAPIView, CreateAPIView, ListAPIView,
-    RetrieveAPIView, DestroyAPIView, UpdateAPIView
+    GenericAPIView,
+    CreateAPIView,
+    ListAPIView,
+    RetrieveAPIView,
+    DestroyAPIView,
+    UpdateAPIView,
 )
 from rest_framework.response import Response
 
@@ -11,8 +15,11 @@ from core.utils.exceptions import bad_request, permission_denied
 from core.utils.helper import response_format
 from core.utils.messages import APIMessageMixin
 from core.utils.views.mixin import (
-    PostMethodMixin, GetMethodMixin, PutMethodMixin,
-    PatchMethodMixin, DeleteMethodMixin
+    PostMethodMixin,
+    GetMethodMixin,
+    PutMethodMixin,
+    PatchMethodMixin,
+    DeleteMethodMixin,
 )
 
 
@@ -34,7 +41,10 @@ class BaseGenericAPIView(GenericAPIView):
 
 
 class BaseCreateAPIView(
-    CreateAPIView, APIMessageMixin, BaseGenericAPIView, PostMethodMixin,
+    CreateAPIView,
+    APIMessageMixin,
+    BaseGenericAPIView,
+    PostMethodMixin,
 ):
     """
     Concrete view for creating a model instance.
