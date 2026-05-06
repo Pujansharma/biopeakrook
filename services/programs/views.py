@@ -1,3 +1,79 @@
-from django.shortcuts import render
+from django.db.models import Prefetch
 
-# Create your views here.
+from accounts.customers.models import CustomerCenterAssignment
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from core.utils.exceptions import get_object_or_404
+from core.utils.views.main import (
+    BaseListAPIView,
+    BaseRetrieveUpdateAPIView,
+    BaseCreateAPIView,
+)
+from services.programs.models import ProgramService, WellnessProgram
+from services.programs.serializers import (
+    BaseProgramServiceSerializer,
+    WellnessProgramDetailSerializer,
+    WellnessProgramCancelSerializer,
+)
+
+
+class WellnessProgramDetailView(BaseRetrieveUpdateAPIView):
+    serializer_class = WellnessProgramDetailSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        qs = (
+            WellnessProgram.objects.filter()
+            .select_related(
+                "program",
+                "program__center",
+                "program__created_by",
+                "program__customer_profile__customer__user",
+            )
+            .prefetch_related(
+                "program__program_services",
+                "program__program_services__service",
+                "program__program_services__created_by",
+                "program__redeemable_centers",
+                Prefetch(
+                    "program__customer_profile__center_assignments",
+                    queryset=CustomerCenterAssignment.objects.filter(
+                        is_primary=True
+                    ).select_related("center"),
+                    to_attr="primary_center_assignments",
+                ),
+            )
+        )
+        return qs
+
+
+class WellnessProgramServicesListView(BaseListAPIView):
+    serializer_class = BaseProgramServiceSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        qs = (
+            ProgramService.objects.filter(
+                program__wellness_program__id=self.kwargs["pk"]
+            )
+            .select_related()
+            .prefetch_related()
+        )
+
+        return qs
+
+
+class WellnessProgramCancelView(BaseCreateAPIView):
+    serializer_class = WellnessProgramCancelSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_wellness_program(self):
+        qs = WellnessProgram.objects.select_related().prefetch_related().filter()
+        return get_object_or_404(
+            qs, "Wellness program not found with this ID", pk=self.kwargs["pk"]
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            wellness_program=self.get_wellness_program(),
+            cancelled_by=self.request.user,
+        )
