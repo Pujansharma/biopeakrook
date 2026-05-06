@@ -13,6 +13,7 @@ from services.programs.serializers import (
     BaseProgramServiceSerializer,
     WellnessProgramDetailSerializer,
     WellnessProgramCancelSerializer,
+    WellnessProgramRedeemSerializer,
 )
 
 
@@ -55,8 +56,12 @@ class WellnessProgramServicesListView(BaseListAPIView):
             ProgramService.objects.filter(
                 program__wellness_program__id=self.kwargs["pk"]
             )
-            .select_related()
-            .prefetch_related()
+            .select_related(
+                'cancelled_by',
+            )
+            .prefetch_related(
+                'service', 'created_by'
+            )
         )
 
         return qs
@@ -76,4 +81,23 @@ class WellnessProgramCancelView(BaseCreateAPIView):
         serializer.save(
             wellness_program=self.get_wellness_program(),
             cancelled_by=self.request.user,
+        )
+
+
+class WellnessProgramRedeemView(BaseCreateAPIView):
+    serializer_class = WellnessProgramRedeemSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_wellness_program(self):
+        qs = WellnessProgram.objects.select_related("program").prefetch_related(
+            "program__redeemable_centers"
+        ).filter()
+        return get_object_or_404(
+            qs, "Wellness program not found with this ID", pk=self.kwargs["pk"]
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            wellness_program=self.get_wellness_program(),
+            redeemed_by=self.request.user,
         )
