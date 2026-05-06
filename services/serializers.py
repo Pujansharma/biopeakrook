@@ -140,9 +140,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             )
 
         if (
-            not Program.objects.filter(pk=program_service.program.pk)
-            .exclude(expires_at__lt=timezone.localdate())
-            .exists()
+                not Program.objects.filter(pk=program_service.program.pk)
+                        .exclude(expires_at__lt=timezone.localdate())
+                        .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."
@@ -153,7 +153,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
         if not ProgramService.objects.filter(
-            pk=program_service.pk, program__redeemable_centers=center_id
+                pk=program_service.pk, program__redeemable_centers=center_id
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "Center is not in the program's redeemable centers."}
