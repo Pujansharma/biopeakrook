@@ -7,6 +7,7 @@ from accounts.associates.serializers import (
     BaseAssociateSerializer,
     BaseAssociateRoleSerializer,
 )
+from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.centers.utils.db import (
     increment_customer_count,
     increment_inactive_customer_count,
@@ -79,10 +80,15 @@ class CustomerAccountSerializer(BaseModelSerializer):
 
 
 class BaseCustomerProfileSerializer(BaseModelSerializer):
+    email = serializers.EmailField(source="customer.user.email", read_only=True)
+    phone = PhoneNumberSerializerField(source="customer.user.phone", read_only=True)
+
     class Meta:
         model = CustomerProfile
         fields = [
             "id",
+            "email",
+            "phone",
             "first_name",
             "last_name",
             "gender",
@@ -93,6 +99,32 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class CustomerProfileWithCenterSerializer(BaseCustomerProfileSerializer):
+    home_center = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = CustomerProfile
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "home_center",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_home_center(self, instance):
+        assignments = getattr(instance, "primary_center_assignments", None)
+        if not assignments:
+            return None
+        return MinimumCenterSerializer(assignments[0].center, context=self.context).data
 
 
 class CustomerProfileSerializer(BaseModelSerializer):
@@ -157,12 +189,14 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
     image = serializers.ImageField(
         source="customer_profile.image", required=False, allow_null=True
     )
-    is_primary = serializers.BooleanField(
-        source="customer_profile.is_primary", read_only=True
+    is_main = serializers.BooleanField(
+        source="customer_profile.is_main", read_only=True
     )
+
     is_active = serializers.BooleanField(
         source="customer_profile.customer.user.is_active", read_only=True
     )
+    is_primary = serializers.BooleanField(default=False, required=False)
 
     class Meta:
         model = CustomerCenterAssignment
@@ -175,6 +209,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             "gender",
             "date_of_birth",
             "image",
+            "is_main",
             "is_primary",
             "is_active",
             "created_at",
@@ -185,7 +220,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         center_id = validated_data.pop("center_id", None)
         if not center_id:
             raise serializers.ValidationError("Invalid Center ID provided.")
-
+        is_primary = validated_data.get('is_primary')
         profile_wrapper = validated_data.pop("customer_profile", {})
         customer_wrapper = profile_wrapper.pop("customer", {})
         user_wrapper = customer_wrapper.pop("user", {})
@@ -223,13 +258,14 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             )
             customer = Customer.objects.create(user=user)
             profile = CustomerProfile.objects.create(
-                customer=customer, is_primary=True, **profile_data
+                customer=customer, is_main=True, **profile_data
             )
             create_customer_user_account(customer)
 
             assignment = CustomerCenterAssignment.objects.create(
                 customer_profile=profile,
                 center_id=center_id,
+                is_primary=is_primary
             )
             increment_customer_count(center_id)
 
