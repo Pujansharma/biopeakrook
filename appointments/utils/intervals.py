@@ -34,10 +34,12 @@ def expand_weekly_schedule(
 
     intervals: list[Interval] = []
     while current <= effective_end:
-        intervals.append((
-            datetime.combine(current, start_time, tzinfo=IST),
-            datetime.combine(current, end_time, tzinfo=IST),
-        ))
+        intervals.append(
+            (
+                datetime.combine(current, start_time, tzinfo=IST),
+                datetime.combine(current, end_time, tzinfo=IST),
+            )
+        )
         current += timedelta(days=7)
 
     return intervals
@@ -67,7 +69,8 @@ def merge_intervals(intervals: list[Interval]) -> list[Interval]:
 
 
 def intersect_intervals(
-    a: list[Interval], b: list[Interval],
+    a: list[Interval],
+    b: list[Interval],
 ) -> list[Interval]:
     """
     Compute the intersection of two sorted, non-overlapping interval lists.
@@ -109,7 +112,8 @@ def intersect_many(*interval_lists: list[Interval]) -> list[Interval]:
 
 
 def subtract_intervals(
-    available: list[Interval], busy: list[Interval],
+    available: list[Interval],
+    busy: list[Interval],
 ) -> list[Interval]:
     """
     Remove busy intervals from available intervals. Both lists must be sorted.
