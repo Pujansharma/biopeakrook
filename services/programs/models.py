@@ -75,6 +75,7 @@ class ProgramService(BaseUUIDModel):
         related_name="cancelled_program_services",
         editable=False,
     )
+    cancelled_at = models.DateTimeField(editable=False, null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
