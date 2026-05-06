@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.centers.models import Center
@@ -22,6 +23,7 @@ from services.programs.utils.db import (
     update_program_sessions_count,
 )
 from services.serializers import BaseServiceSerializer
+from services.utils.db import redeem_all_program_services
 
 
 class ProgramSerializer(BaseModelSerializer):
@@ -32,6 +34,7 @@ class ProgramSerializer(BaseModelSerializer):
 
 class BaseProgramServiceSerializer(BaseModelSerializer):
     service = BaseServiceSerializer(read_only=True)
+    cancelled_by = BaseUserSerializer(read_only=True)
 
     class Meta:
         model = ProgramService
@@ -45,6 +48,7 @@ class BaseProgramServiceSerializer(BaseModelSerializer):
             "is_active",
             "cancellation_reason",
             "cancelled_by",
+            "cancelled_at",
         ]
 
 
@@ -353,6 +357,44 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
         )
+
+        return wellness_program
+
+
+class WellnessProgramRedeemSerializer(BaseModelSerializer):
+    center_id = serializers.UUIDField(write_only=True)
+
+    class Meta:
+        model = WellnessProgram
+        fields = ["center_id"]
+
+    def create(self, validated_data):
+        wellness_program: WellnessProgram = validated_data.pop("wellness_program")
+        redeemed_by = validated_data.pop("redeemed_by")
+        center_id = validated_data["center_id"]
+
+        if not wellness_program.is_active:
+            raise serializers.ValidationError("This program has been cancelled.")
+
+        if not Program.objects.filter(
+                pk=wellness_program.program.id
+        ).exclude(
+            expires_at__lt=timezone.localdate()
+        ).exists():
+            raise serializers.ValidationError("This program has expired.")
+
+        if not wellness_program.program.redeemable_centers.filter(pk=center_id).exists():
+            raise serializers.ValidationError(
+                {"center_id": "Center is not in the program's redeemable centers."}
+            )
+
+        redeemed = redeem_all_program_services(
+            wellness_program.program.id, center_id, redeemed_by
+        )
+        if redeemed == 0:
+            raise serializers.ValidationError(
+                "No sessions remaining across any service in this program."
+            )
 
         return wellness_program
 
