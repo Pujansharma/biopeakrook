@@ -12,7 +12,7 @@ from appointments.utils.intervals import (
     split_into_slots,
 )
 
-type ResourceType = Literal['associate', 'room', 'equipment']
+type ResourceType = Literal["associate", "room", "equipment"]
 
 
 def _expand_schedules_qs(qs, query_start: date, query_end: date) -> list[Interval]:
@@ -24,30 +24,37 @@ def _expand_schedules_qs(qs, query_start: date, query_end: date) -> list[Interva
     """
     intervals: list[Interval] = []
     for s in qs:
-        start_time = getattr(s, 'start_time', None) or getattr(s, 'open_time', None)
-        end_time = getattr(s, 'end_time', None) or getattr(s, 'close_time', None)
+        start_time = getattr(s, "start_time", None) or getattr(s, "open_time", None)
+        end_time = getattr(s, "end_time", None) or getattr(s, "close_time", None)
         if start_time is None or end_time is None:
             continue
-        intervals.extend(expand_weekly_schedule(
-            day_of_week=s.day_of_week,
-            start_time=start_time,
-            end_time=end_time,
-            query_start=query_start,
-            query_end=query_end,
-            valid_from=getattr(s, 'valid_from', None),
-            valid_until=getattr(s, 'valid_until', None),
-        ))
+        intervals.extend(
+            expand_weekly_schedule(
+                day_of_week=s.day_of_week,
+                start_time=start_time,
+                end_time=end_time,
+                query_start=query_start,
+                query_end=query_end,
+                valid_from=getattr(s, "valid_from", None),
+                valid_until=getattr(s, "valid_until", None),
+            )
+        )
     return merge_intervals(intervals)
 
 
-def _get_center_availability(center, query_start: date, query_end: date) -> list[Interval]:
+def _get_center_availability(
+    center, query_start: date, query_end: date
+) -> list[Interval]:
     """Expand center operating hours into available intervals."""
     qs = center.operating_hours.filter(is_open=True)
     return _expand_schedules_qs(qs, query_start, query_end)
 
 
 def _get_associate_availability(
-    associate, center, query_start: date, query_end: date,
+    associate,
+    center,
+    query_start: date,
+    query_end: date,
 ) -> list[Interval]:
     """Expand associate schedules for a specific center."""
     qs = associate.schedules.filter(center=center)
@@ -56,15 +63,17 @@ def _get_associate_availability(
 
 def _get_room_availability(room, query_start: date, query_end: date) -> list[Interval]:
     """Expand room operational schedules."""
-    qs = room.schedules.filter(schedule_type='operational')
+    qs = room.schedules.filter(schedule_type="operational")
     return _expand_schedules_qs(qs, query_start, query_end)
 
 
 def _get_equipment_availability(
-    equipment, query_start: date, query_end: date,
+    equipment,
+    query_start: date,
+    query_end: date,
 ) -> list[Interval]:
     """Expand equipment operational schedules."""
-    qs = equipment.schedules.filter(schedule_type='operational')
+    qs = equipment.schedules.filter(schedule_type="operational")
     return _expand_schedules_qs(qs, query_start, query_end)
 
 
@@ -88,10 +97,12 @@ def _get_busy_intervals(
 
     # Center holidays — full-day blocks
     for h in center.holidays.filter(date__range=(query_start, query_end)):
-        busy.append((
-            datetime.combine(h.date, time.min, tzinfo=IST),
-            datetime.combine(h.date, time.max, tzinfo=IST),
-        ))
+        busy.append(
+            (
+                datetime.combine(h.date, time.min, tzinfo=IST),
+                datetime.combine(h.date, time.max, tzinfo=IST),
+            )
+        )
 
     # Associate blocked periods
     for b in associate.blocked_periods.filter(
@@ -105,16 +116,21 @@ def _get_busy_intervals(
         associate=associate,
         start_datetime__date__lte=query_end,
         end_datetime__date__gte=query_start,
-    ).exclude(status__in=['cancelled']):
+    ).exclude(status__in=["cancelled"]):
         busy.append((a.start_datetime, a.end_datetime))
 
     # Room maintenance schedules (recurring)
     if room is not None:
-        for rs in room.schedules.filter(schedule_type='maintenance'):
-            busy.extend(expand_weekly_schedule(
-                rs.day_of_week, rs.start_time, rs.end_time,
-                query_start, query_end,
-            ))
+        for rs in room.schedules.filter(schedule_type="maintenance"):
+            busy.extend(
+                expand_weekly_schedule(
+                    rs.day_of_week,
+                    rs.start_time,
+                    rs.end_time,
+                    query_start,
+                    query_end,
+                )
+            )
 
     # Equipment bookings and maintenance
     if equipment is not None:
@@ -130,7 +146,7 @@ def _get_busy_intervals(
         for m in equipment.maintenance_records.filter(
             scheduled_start__date__lte=query_end,
             scheduled_end__date__gte=query_start,
-            status__in=['scheduled', 'in_progress'],
+            status__in=["scheduled", "in_progress"],
         ):
             busy.append((m.scheduled_start, m.scheduled_end))
 
@@ -189,7 +205,12 @@ def find_available_slots(
         return []
 
     busy = _get_busy_intervals(
-        associate, center, query_start, query_end, room, equipment,
+        associate,
+        center,
+        query_start,
+        query_end,
+        room,
+        equipment,
     )
 
     available = subtract_intervals(available, busy)
@@ -202,6 +223,7 @@ def find_available_slots(
 # ---------------------------------------------------------------------------
 # Public query functions
 # ---------------------------------------------------------------------------
+
 
 def get_schedule_intervals(
     resource,
@@ -224,11 +246,11 @@ def get_schedule_intervals(
         center:        Required when resource_type is 'associate'.
     """
     match resource_type:
-        case 'associate':
+        case "associate":
             return _get_associate_availability(resource, center, query_start, query_end)
-        case 'room':
+        case "room":
             return _get_room_availability(resource, query_start, query_end)
-        case 'equipment':
+        case "equipment":
             return _get_equipment_availability(resource, query_start, query_end)
 
 
@@ -254,10 +276,12 @@ def get_blocked_periods(
     blocked: list[Interval] = []
 
     for h in center.holidays.filter(date__range=(query_start, query_end)):
-        blocked.append((
-            datetime.combine(h.date, time.min, tzinfo=IST),
-            datetime.combine(h.date, time.max, tzinfo=IST),
-        ))
+        blocked.append(
+            (
+                datetime.combine(h.date, time.min, tzinfo=IST),
+                datetime.combine(h.date, time.max, tzinfo=IST),
+            )
+        )
 
     for b in associate.blocked_periods.filter(
         start_datetime__date__lte=query_end,
@@ -266,17 +290,22 @@ def get_blocked_periods(
         blocked.append((b.start_datetime, b.end_datetime))
 
     if room is not None:
-        for rs in room.schedules.filter(schedule_type='maintenance'):
-            blocked.extend(expand_weekly_schedule(
-                rs.day_of_week, rs.start_time, rs.end_time,
-                query_start, query_end,
-            ))
+        for rs in room.schedules.filter(schedule_type="maintenance"):
+            blocked.extend(
+                expand_weekly_schedule(
+                    rs.day_of_week,
+                    rs.start_time,
+                    rs.end_time,
+                    query_start,
+                    query_end,
+                )
+            )
 
     if equipment is not None:
         for m in equipment.maintenance_records.filter(
             scheduled_start__date__lte=query_end,
             scheduled_end__date__gte=query_start,
-            status__in=['scheduled', 'in_progress'],
+            status__in=["scheduled", "in_progress"],
         ):
             blocked.append((m.scheduled_start, m.scheduled_end))
 
@@ -306,7 +335,7 @@ def get_scheduled_periods(
             associate=associate,
             start_datetime__date__lte=query_end,
             end_datetime__date__gte=query_start,
-        ).exclude(status__in=['cancelled']):
+        ).exclude(status__in=["cancelled"]):
             booked.append((a.start_datetime, a.end_datetime))
 
     if equipment is not None:
@@ -360,7 +389,12 @@ def get_available_periods(
         return []
 
     busy = _get_busy_intervals(
-        associate, center, query_start, query_end, room, equipment,
+        associate,
+        center,
+        query_start,
+        query_end,
+        room,
+        equipment,
     )
 
     return subtract_intervals(available, busy)
@@ -384,16 +418,26 @@ def get_day_summary(
         }
     """
     return {
-        'scheduled': get_scheduled_periods(
-            target_date, target_date,
-            associate=associate, equipment=equipment,
+        "scheduled": get_scheduled_periods(
+            target_date,
+            target_date,
+            associate=associate,
+            equipment=equipment,
         ),
-        'available': get_available_periods(
-            associate, center, target_date, target_date,
-            room=room, equipment=equipment,
+        "available": get_available_periods(
+            associate,
+            center,
+            target_date,
+            target_date,
+            room=room,
+            equipment=equipment,
         ),
-        'blocked': get_blocked_periods(
-            associate, center, target_date, target_date,
-            room=room, equipment=equipment,
+        "blocked": get_blocked_periods(
+            associate,
+            center,
+            target_date,
+            target_date,
+            room=room,
+            equipment=equipment,
         ),
     }
