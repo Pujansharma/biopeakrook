@@ -2,6 +2,7 @@ from django.db import models
 
 from core.utils.models import BaseUUIDModel
 from services.programs.utils.constants import ProgramType
+from services.utils.helper import generate_redeemable_code
 
 
 class Program(BaseUUIDModel):
@@ -30,6 +31,15 @@ class Program(BaseUUIDModel):
         on_delete=models.SET_NULL,
         related_name="created_programs",
     )
+    cancellation_reason = models.TextField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cancelled_programs",
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -47,12 +57,23 @@ class ProgramService(BaseUUIDModel):
     )
     sessions_count = models.PositiveIntegerField(default=0)
     sessions_used = models.PositiveIntegerField(default=0, editable=False)
+    redeem_code = models.CharField(default=generate_redeemable_code, editable=False)
     created_by = models.ForeignKey(
         "users.User",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="created_program_services",
+        editable=False,
+    )
+    cancellation_reason = models.TextField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cancelled_program_services",
+        editable=False,
     )
 
     class Meta:
@@ -60,6 +81,11 @@ class ProgramService(BaseUUIDModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["program", "service"], name="unique_program_service"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["redeem_code", "service", "program"], name="redeem_code_idx"
             )
         ]
 
@@ -86,7 +112,7 @@ class RedemptionHistory(BaseUUIDModel):
     redeem_center = models.ForeignKey(
         "centers.Center", on_delete=models.PROTECT, related_name="redemptions"
     )
-    redeemed_at = models.DateTimeField()
+    redeemed_at = models.DateTimeField(editable=False)
     quantity = models.PositiveIntegerField(default=0)
     redeemed_by = models.ForeignKey(
         "users.User",

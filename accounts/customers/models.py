@@ -35,7 +35,7 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
     customer = models.ForeignKey(
         Customer, on_delete=models.PROTECT, related_name="profiles"
     )
-    is_primary = models.BooleanField(default=False, editable=False)
+    is_main = models.BooleanField(default=False, editable=False)
     is_onboarding_complete = models.BooleanField(default=False, editable=False)
     created_by = models.ForeignKey(
         User,
