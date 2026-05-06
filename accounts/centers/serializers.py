@@ -8,6 +8,16 @@ from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
 
 
+class MinimumCenterSerializer(BaseModelSerializer):
+    class Meta:
+        model = Center
+        fields = [
+            "id",
+            "code",
+            "name",
+        ]
+
+
 class BaseCenterSerializer(BaseModelSerializer):
     code = serializers.CharField(read_only=True)
     phone = PhoneNumberSerializerField(
