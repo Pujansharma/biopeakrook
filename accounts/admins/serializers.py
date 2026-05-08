@@ -178,3 +178,39 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
         instance.user.save(update_fields=[*user_data.keys(), "updated_at"])
 
         return super().update(instance, validated_data)
+
+
+class AdminProfileSerializer(BaseAdminUserSerializer):
+    """Serializer for admins to retrieve and update their own profile"""
+
+    class Meta:
+        model = Admin
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "is_active",
+            "date_joined",
+            "last_login",
+            "updated_at",
+        ]
+
+    def create(self, validated_data):
+        """Create not allowed in this serializer"""
+
+    def update(self, instance: Admin, validated_data):
+        user_data = validated_data.pop("user", {})
+        user_data.pop("email", None)
+        user_data.pop("phone", None)
+        validated_data.pop("is_active", None)
+
+        for key, value in user_data.items():
+            setattr(instance.user, key, value)
+        instance.user.save(update_fields=[*user_data.keys(), "updated_at"])
+
+        return super().update(instance, validated_data)
