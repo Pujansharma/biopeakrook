@@ -94,7 +94,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "gender",
             "date_of_birth",
             "image",
-            "is_primary",
+            "is_main",
             "is_onboarding_complete",
             "created_at",
             "updated_at",
