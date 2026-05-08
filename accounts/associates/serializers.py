@@ -161,6 +161,7 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
 
         validated_data.pop("is_admin", None)
         validated_data.pop("is_external", None)
+        validated_data.pop("is_active", None)
 
         for key, value in user_data.items():
             setattr(instance.user, key, value)
