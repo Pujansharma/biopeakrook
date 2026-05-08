@@ -5,7 +5,7 @@ from rest_framework import serializers
 from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer, MinimumCenterSerializer
 from accounts.customers.models import CustomerProfile
-from accounts.customers.serializers import CustomerProfileWithCenterSerializer
+from accounts.customers.serializers import CustomerProfileWithCenterSerializer, BaseCustomerProfileSerializer
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from services.models import Service
@@ -24,6 +24,32 @@ from services.programs.utils.db import (
 )
 from services.serializers import BaseServiceSerializer
 from services.utils.db import redeem_all_program_services
+
+
+class BaseProgramSerializer(BaseModelSerializer):
+    profile = BaseCustomerProfileSerializer(source='customer_profile', read_only=True)
+
+    class Meta:
+        model = Program
+        fields = [
+            "id",
+            "profile",
+            "program_type",
+            "notes",
+            "expires_at",
+            "is_complimentary",
+            "price",
+            "services_count",
+            "sessions_count",
+            "sessions_used",
+            "redeemable_centers_count",
+            "cancellation_reason",
+            "cancelled_by",
+            "cancelled_at",
+            "is_active",
+            "created_at",
+            "updated_at"
+        ]
 
 
 class ProgramSerializer(BaseModelSerializer):
@@ -65,6 +91,28 @@ class BaseWellnessProgramSerializer(BaseModelSerializer):
     class Meta:
         model = WellnessProgram
         fields = ["id"]
+
+
+class ProgramServiceSerializer(BaseModelSerializer):
+    program = BaseProgramSerializer(read_only=True)
+    service = BaseServiceSerializer(read_only=True)
+    cancelled_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = ProgramService
+        fields = [
+            "id",
+            "program",
+            "service",
+            "sessions_count",
+            "sessions_used",
+            "redeem_code",
+            "created_at",
+            "is_active",
+            "cancellation_reason",
+            "cancelled_by",
+            "cancelled_at",
+        ]
 
 
 class WellnessProgramDetailSerializer(BaseModelSerializer):
