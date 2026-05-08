@@ -13,7 +13,7 @@ from core.utils.views.main import (
 )
 from services.models import Service
 from services.programs.models import ProgramService, RedemptionHistory
-from services.programs.serializers import ProgramServiceRedemptionHistorySerializer
+from services.programs.serializers import ProgramServiceRedemptionHistorySerializer, ProgramServiceSerializer
 from services.serializers import (
     ProgramServiceCancelSerializer,
     ServiceRedeemSerializer,
@@ -70,6 +70,24 @@ class ServiceAvailableCenters(BaseListAPIView):
         )
 
         qs = Center.objects.filter(search).annotate(exists=Exists(exists_subquery))
+        return qs
+
+
+class ProgramServicesListView(BaseListAPIView):
+    serializer_class = ProgramServiceSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        code_query_param = self.request.query_params.get('code', None)
+
+        qs = ProgramService.objects.filter(
+            redeem_code__iexact=code_query_param
+        ).select_related(
+            'cancelled_by', 'program__customer_profile'
+        ).prefetch_related(
+            'service', 'created_by', 'cancelled_by'
+        )
         return qs
 
 
