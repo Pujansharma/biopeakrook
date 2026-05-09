@@ -56,45 +56,50 @@ class ServiceSerializer(BaseModelSerializer):
         )
         return set(center_ids) - set(_center_ids)
 
+    def add_centers_action(self, service: Service, add_centers: list) -> None:
+        if not add_centers:
+            return
+        center_ids = [i.get("id") for i in add_centers]
+        missing_ids = self.get_invalid_centers(center_ids)
+        if missing_ids:
+            raise serializers.ValidationError(
+                {"add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'}
+            )
+        service.centers.add(*center_ids)
+
+    def remove_centers_action(self, service: Service, remove_centers: list) -> None:
+        if not remove_centers:
+            return
+        center_ids = [i.get("id") for i in remove_centers]
+        missing_ids = self.get_invalid_centers(center_ids)
+        if missing_ids:
+            raise serializers.ValidationError(
+                {"remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'}
+            )
+        service.centers.remove(*center_ids)
+
     def create(self, validated_data):
         add_centers = validated_data.pop("add_centers", [])
         remove_centers = validated_data.pop("remove_centers", [])
-        _add_center_ids = [i.get("id") for i in add_centers]
-        _remove_center_ids = [i.get("id") for i in remove_centers]
-
         if not add_centers and not remove_centers:
             raise serializers.ValidationError("Center IDs must be provided")
-
-        if add_centers:
-            missing_ids = self.get_invalid_centers(_add_center_ids)
-            if missing_ids:
-                raise serializers.ValidationError(
-                    {
-                        "add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
-                    }
-                )
-        if remove_centers:
-            missing_ids = self.get_invalid_centers(_remove_center_ids)
-            if missing_ids:
-                raise serializers.ValidationError(
-                    {
-                        "remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
-                    }
-                )
         with transaction.atomic():
             service = super().create(validated_data)
-            if add_centers:
-                service.centers.add(*_add_center_ids)
-            if remove_centers:
-                service.centers.remvoe(*_remove_center_ids)
+            self.add_centers_action(service, add_centers)
+            self.remove_centers_action(service, remove_centers)
             update_service_center_count(service.pk)
             return service
 
-    def update(self, instance, validated_data):
-        validated_data.pop("add_centers", None)
-        validated_data.pop("remove_centers", None)
-
-        return instance
+    def update(self, instance: Service, validated_data):
+        add_centers = validated_data.pop("add_centers", [])
+        remove_centers = validated_data.pop("remove_centers", [])
+        with transaction.atomic():
+            instance = super().update(instance, validated_data)
+            self.add_centers_action(instance, add_centers)
+            self.remove_centers_action(instance, remove_centers)
+            if add_centers or remove_centers:
+                update_service_center_count(instance.pk)
+            return instance
 
 
 class ServiceRedeemSerializer(BaseModelSerializer):
@@ -152,11 +157,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
         if not center:
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
-        if not ProgramService.objects.filter(
-                pk=program_service.pk, program__redeemable_centers=center_id
-        ).exists():
+        if not program_service.service.centers.filter(pk=center_id).exists():
             raise serializers.ValidationError(
-                {"center_id": "Center is not in the program's redeemable centers."}
+                {"center_id": "This service is not available at the given center."}
             )
 
         remaining = program_service.sessions_count - program_service.sessions_used
