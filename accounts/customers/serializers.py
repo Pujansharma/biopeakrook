@@ -268,7 +268,138 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
+            ).exists():
+                raise serializers.ValidationError(
+                    "This profile already has a primary center assigned."
+                )
+            assignment = CustomerCenterAssignment.objects.create(
+                customer_profile=profile, center_id=center_id, is_primary=True
+            )
+            increment_customer_count(center_id)
+            increment_centers_count(profile.pk)
+
+        return assignment
+
+    def update(self, instance, validated_data):
+        """Update not allowed in this serializer"""
+        pass
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.customer_profile.get_gender_display()
+        return rep
+
+
+class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
+    """Serializer for center admins to list, create, and update customer profiles"""
+
+    id = serializers.UUIDField(source="customer_profile.id", read_only=True)
+    email = serializers.EmailField(
+        source="customer_profile.customer.user.email", required=True
+    )
+    phone = PhoneNumberSerializerField(
+        source="customer_profile.customer.user.phone", required=True
+    )
+    first_name = serializers.CharField(source="customer_profile.first_name")
+    last_name = serializers.CharField(
+        source="customer_profile.last_name", required=False, allow_null=True
+    )
+    gender = serializers.ChoiceField(
+        source="customer_profile.gender",
+        choices=Gender.CHOICES,
+        required=False,
+        allow_null=True,
+    )
+    date_of_birth = serializers.DateField(
+        source="customer_profile.date_of_birth", required=False, allow_null=True
+    )
+    image = serializers.ImageField(
+        source="customer_profile.image", required=False, allow_null=True
+    )
+    is_main = serializers.BooleanField(
+        source="customer_profile.is_main", read_only=True
+    )
+
+    is_active = serializers.BooleanField(
+        source="customer_profile.customer.user.is_active", read_only=True
+    )
+    is_primary = serializers.BooleanField(read_only=True)
+    home_center = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = CustomerCenterAssignment
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "is_main",
+            "is_primary",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "home_center"
+        ]
+
+    def get_home_center(self, instance):
+        assignments = getattr(instance.customer_profile, "primary_center_assignments", None)
+        if not assignments:
+            return None
+        return MinimumCenterSerializer(assignments[0].center, context=self.context).data
+
+    def create(self, validated_data):
+        center_id = validated_data.pop("center_id", None)
+        if not center_id:
+            raise serializers.ValidationError("Invalid Center ID provided.")
+        profile_wrapper = validated_data.pop("customer_profile", {})
+        customer_wrapper = profile_wrapper.pop("customer", {})
+        user_wrapper = customer_wrapper.pop("user", {})
+        phone = user_wrapper.get("phone")
+        email = user_wrapper.get("email")
+
+        phone_user = User.objects.filter(phone__iexact=phone).first()
+        if phone_user:
+            account_type = get_user_account_type(phone_user)
+            raise serializers.ValidationError(
+                {
+                    "phone": f"A user with this phone number already exists as an {account_type} account."
+                }
+            )
+        email_user = User.objects.filter(email__iexact=email).first()
+        if email_user:
+            account_type = get_user_account_type(email_user)
+            raise serializers.ValidationError(
+                {
+                    "email": f"A user with this email already exists as an {account_type} account."
+                }
+            )
+
+        profile_data = {
+            "first_name": profile_wrapper.get("first_name"),
+            "last_name": profile_wrapper.get("last_name"),
+            "gender": profile_wrapper.get("gender"),
+            "date_of_birth": profile_wrapper.get("date_of_birth"),
+            "image": profile_wrapper.get("image"),
+        }
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=email, password=None, phone=phone, **profile_data
+            )
+            customer = Customer.objects.create(user=user)
+            profile = CustomerProfile.objects.create(
+                customer=customer, is_main=True, **profile_data
+            )
+            create_customer_user_account(customer)
+
+            if CustomerCenterAssignment.objects.filter(
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."

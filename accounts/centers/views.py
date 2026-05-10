@@ -1,4 +1,4 @@
-from django.db.models import Q, ProtectedError, RestrictedError
+from django.db.models import Prefetch, Q, ProtectedError, RestrictedError
 
 from accounts.associates.models import AssociateCenterAssignment, AssociateRole
 from accounts.associates.serializers import (
@@ -12,7 +12,7 @@ from accounts.centers.serializers import (
     CenterWorkingHourSerializer,
 )
 from accounts.customers.models import CustomerCenterAssignment
-from accounts.customers.serializers import CenterCustomerProfileSerializer
+from accounts.customers.serializers import CenterCustomerProfileHomeCenterSerializer
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import (
@@ -177,7 +177,7 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
     """UUID-path scoped: list/create customer profiles for a center by UUID"""
 
     permission_classes = [IsAdminUser | IsAssociateUser]
-    serializer_class = CenterCustomerProfileSerializer
+    serializer_class = CenterCustomerProfileHomeCenterSerializer
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -202,10 +202,10 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
 
         if search_params:
             search_query |= (
-                Q(customer_profile__first_name__istartswith=search_params)
-                | Q(customer_profile__first_name__icontains=search_params)
-                | Q(customer_profile__customer__user__phone__istartswith=search_params)
-                | Q(customer_profile__customer__user__phone__icontains=search_params)
+                    Q(customer_profile__first_name__istartswith=search_params)
+                    | Q(customer_profile__first_name__icontains=search_params)
+                    | Q(customer_profile__customer__user__phone__istartswith=search_params)
+                    | Q(customer_profile__customer__user__phone__icontains=search_params)
             )
 
         return (
@@ -215,7 +215,17 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
             .select_related(
                 "customer_profile__customer__user",
             )
-            .prefetch_related("created_by")
+            .prefetch_related(
+                "created_by",
+                "center",
+                Prefetch(
+                    "customer_profile__center_assignments",
+                    queryset=CustomerCenterAssignment.objects.filter(
+                        is_primary=True
+                    ).select_related("center"),
+                    to_attr="primary_center_assignments",
+                ),
+            )
         )
 
     def perform_create(self, serializer):
