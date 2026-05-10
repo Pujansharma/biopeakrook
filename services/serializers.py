@@ -149,9 +149,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             )
 
         if (
-            not Program.objects.filter(pk=program_service.program.pk)
-            .exclude(expires_at__lt=timezone.localdate())
-            .exists()
+                not Program.objects.filter(pk=program_service.program.pk)
+                        .exclude(expires_at__lt=timezone.localdate())
+                        .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."
