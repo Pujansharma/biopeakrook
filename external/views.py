@@ -25,18 +25,18 @@ class ExternalUserProgramView(BaseListAPIView):
         phone_query = self.request.query_params.get("phone", None)
         phone_formatter = PhoneNumberFormat(phone_query, region=None)
         phone_cleaned = phone_formatter.clean(raise_exception=False)
-        active_query = self.request.query_params.get('active', None)
-        complete_query = self.request.query_params.get('complete', None)
-        expired_query = self.request.query_params.get('expired', None)
+        active_query = self.request.query_params.get("active", None)
+        complete_query = self.request.query_params.get("complete", None)
+        expired_query = self.request.query_params.get("expired", None)
 
-        if active_query and active_query in ['0', '1']:
-            filter_kwargs['is_active'] = bool(int(active_query))
+        if active_query and active_query in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_query))
 
-        if complete_query and complete_query in ['0', '1']:
-            filter_kwargs['is_complete'] = bool(int(complete_query))
+        if complete_query and complete_query in ["0", "1"]:
+            filter_kwargs["is_complete"] = bool(int(complete_query))
 
-        if expired_query and expired_query in ['0', '1']:
-            filter_kwargs['expires_at__lt'] = timezone.localdate()
+        if expired_query and expired_query in ["0", "1"]:
+            filter_kwargs["expires_at__lt"] = timezone.localdate()
 
         qs = (
             WellnessProgram.objects.annotate(
@@ -44,9 +44,10 @@ class ExternalUserProgramView(BaseListAPIView):
                     Q(program__sessions_count=F("program__sessions_used")),
                     output_field=BooleanField(),
                 )
-            ).filter(
+            )
+            .filter(
                 program__customer_profile__customer__user__phone=phone_cleaned,
-                **filter_kwargs
+                **filter_kwargs,
             )
             .select_related(
                 "program",
@@ -70,23 +71,20 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
 
     def get_queryset(self):
         customer_profile = self.get_customer_profile()
-        return (
-            CustomerProfile.objects.filter(pk=customer_profile.pk)
-            .annotate(
-                programs_count=Count("programs", distinct=True),
-                programs_expired=Count(
-                    "programs",
-                    filter=Q(programs__expires_at__lt=timezone.localdate()),
-                    distinct=True,
-                ),
-                programs_inactive=Count(
-                    "programs",
-                    filter=Q(programs__is_active=False),
-                    distinct=True,
-                ),
-                sessions_count=Sum("programs__sessions_count", default=0),
-                sessions_used=Sum("programs__sessions_used", default=0),
-            )
+        return CustomerProfile.objects.filter(pk=customer_profile.pk).annotate(
+            programs_count=Count("programs", distinct=True),
+            programs_expired=Count(
+                "programs",
+                filter=Q(programs__expires_at__lt=timezone.localdate()),
+                distinct=True,
+            ),
+            programs_inactive=Count(
+                "programs",
+                filter=Q(programs__is_active=False),
+                distinct=True,
+            ),
+            sessions_count=Sum("programs__sessions_count", default=0),
+            sessions_used=Sum("programs__sessions_used", default=0),
         )
 
     def get_object(self):
@@ -106,7 +104,6 @@ class ExternalUserProgramDetailView(BaseRetrieveAPIView):
             WellnessProgram.objects.filter(
                 program__customer_profile__customer__user__phone=phone_cleaned,
             )
-
             .select_related(
                 "program",
             )
