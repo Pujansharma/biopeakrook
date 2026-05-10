@@ -7,9 +7,11 @@ from accounts.associates.serializers import (
     BaseAssociateSerializer,
     BaseAssociateRoleSerializer,
 )
+from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.centers.utils.db import (
     increment_customer_count,
+    decrement_customer_count,
     increment_inactive_customer_count,
     decrement_inactive_customer_count,
 )
@@ -19,7 +21,11 @@ from accounts.customers.models import (
     CustomerProfile,
     CustomerAssociateAssignment,
 )
-from accounts.customers.utils.db import create_customer_user_account
+from accounts.customers.utils.db import (
+    create_customer_user_account,
+    increment_centers_count,
+    decrement_centers_count,
+)
 from accounts.users.models import User
 from accounts.users.serializers import BaseUserSerializer
 from accounts.users.utils.constants import Gender
@@ -148,7 +154,7 @@ class CustomerProfileSerializer(BaseModelSerializer):
     def update(self, instance, validated_data):
         profile: CustomerProfile = super().update(instance, validated_data)
 
-        if profile.is_primary:
+        if profile.is_main:
             user = profile.customer.user
             for field in PROFILE_FIELDS:
                 setattr(user, field, getattr(profile, field))
@@ -196,7 +202,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
     is_active = serializers.BooleanField(
         source="customer_profile.customer.user.is_active", read_only=True
     )
-    is_primary = serializers.BooleanField(default=False, required=False)
+    is_primary = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = CustomerCenterAssignment
@@ -220,7 +226,6 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         center_id = validated_data.pop("center_id", None)
         if not center_id:
             raise serializers.ValidationError("Invalid Center ID provided.")
-        is_primary = validated_data.get('is_primary')
         profile_wrapper = validated_data.pop("customer_profile", {})
         customer_wrapper = profile_wrapper.pop("customer", {})
         user_wrapper = customer_wrapper.pop("user", {})
@@ -262,12 +267,17 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             )
             create_customer_user_account(customer)
 
+            if CustomerCenterAssignment.objects.filter(
+                customer_profile=profile, is_primary=True
+            ).exists():
+                raise serializers.ValidationError(
+                    "This profile already has a primary center assigned."
+                )
             assignment = CustomerCenterAssignment.objects.create(
-                customer_profile=profile,
-                center_id=center_id,
-                is_primary=is_primary
+                customer_profile=profile, center_id=center_id, is_primary=True
             )
             increment_customer_count(center_id)
+            increment_centers_count(profile.pk)
 
         return assignment
 
@@ -318,8 +328,8 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     image = serializers.ImageField(
         source="customer_profile.image", required=False, allow_null=True
     )
-    is_primary = serializers.BooleanField(
-        source="customer_profile.is_primary", read_only=True
+    is_main = serializers.BooleanField(
+        source="customer_profile.is_main", read_only=True
     )
     is_active = serializers.BooleanField(
         source="customer_profile.customer.user.is_active"
@@ -336,11 +346,13 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "gender",
             "date_of_birth",
             "image",
+            "is_main",
             "is_primary",
             "is_active",
             "created_at",
             "updated_at",
         ]
+        read_only_fields = ["is_main", "is_primary"]
 
     def update(self, instance: CustomerCenterAssignment, validated_data):
         profile_wrapper = validated_data.pop("customer_profile", {})
@@ -372,7 +384,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
                 setattr(profile, key, value)
             profile.save(update_fields=[*list(profile_wrapper.keys()), "updated_at"])
 
-            if profile.is_primary:
+            if profile.is_main:
                 for field in PROFILE_FIELDS:
                     setattr(user, field, getattr(profile, field))
 
@@ -643,3 +655,106 @@ class CustomerProfileAvailableAssociateSerializer(BaseAssociateSerializer):
             "phone",
             "exists",
         ]
+
+
+class CenterIDSerializer(BaseSerializer):
+    id = serializers.UUIDField(write_only=True)
+
+
+class CustomerCenterAssignmentSerializer(BaseModelSerializer):
+    add = CenterIDSerializer(many=True, required=False, write_only=True)
+    remove = CenterIDSerializer(many=True, required=False, write_only=True)
+
+    class Meta:
+        model = CustomerCenterAssignment
+        fields = ["add", "remove"]
+
+    @classmethod
+    def _invalid_center_ids(cls, center_ids: list) -> set:
+        valid = set(
+            Center.objects.filter(id__in=center_ids).values_list("id", flat=True)
+        )
+        return set(center_ids) - valid
+
+    def validate(self, attrs):
+        add_ids = [i["id"] for i in attrs.get("add", [])]
+        remove_ids = [i["id"] for i in attrs.get("remove", [])]
+
+        if not add_ids and not remove_ids:
+            raise serializers.ValidationError(
+                "At least one of 'add' or 'remove' must be provided."
+            )
+        if add_ids:
+            invalid = self._invalid_center_ids(add_ids)
+            if invalid:
+                raise serializers.ValidationError(
+                    {"add": f"Centers not found: {[str(uid) for uid in invalid]}"}
+                )
+        if remove_ids:
+            invalid = self._invalid_center_ids(remove_ids)
+            if invalid:
+                raise serializers.ValidationError(
+                    {"remove": f"Centers not found: {[str(uid) for uid in invalid]}"}
+                )
+
+        attrs["add"] = add_ids
+        attrs["remove"] = remove_ids
+        return attrs
+
+    def create(self, validated_data):
+        customer_profile_id = validated_data.pop("customer_profile_id")
+        created_by = validated_data.pop("created_by")
+        add_center_ids = validated_data.get("add", [])
+        remove_center_ids = validated_data.get("remove", [])
+
+        with transaction.atomic():
+            if remove_center_ids:
+                primary_blocked = list(
+                    CustomerCenterAssignment.objects.filter(
+                        customer_profile_id=customer_profile_id,
+                        center_id__in=remove_center_ids,
+                        is_primary=True,
+                    ).values_list("center_id", flat=True)
+                )
+                if primary_blocked:
+                    raise serializers.ValidationError(
+                        {
+                            "remove": f"Cannot remove primary center: {[str(uid) for uid in primary_blocked]}"
+                        }
+                    )
+                CustomerCenterAssignment.objects.filter(
+                    customer_profile_id=customer_profile_id,
+                    center_id__in=remove_center_ids,
+                ).delete()
+                for center_id in remove_center_ids:
+                    decrement_customer_count(center_id)
+                    decrement_centers_count(customer_profile_id)
+
+            if add_center_ids:
+                existing_ids = set(
+                    CustomerCenterAssignment.objects.filter(
+                        customer_profile_id=customer_profile_id,
+                        center_id__in=add_center_ids,
+                    ).values_list("center_id", flat=True)
+                )
+                new_center_ids = [
+                    cid for cid in add_center_ids if cid not in existing_ids
+                ]
+                CustomerCenterAssignment.objects.bulk_create(
+                    [
+                        CustomerCenterAssignment(
+                            customer_profile_id=customer_profile_id,
+                            center_id=cid,
+                            created_by=created_by,
+                        )
+                        for cid in add_center_ids
+                    ],
+                    update_conflicts=True,
+                    unique_fields=["customer_profile", "center"],
+                    update_fields=["created_by"],
+                )
+                for center_id in new_center_ids:
+                    increment_customer_count(center_id)
+                    increment_centers_count(customer_profile_id)
+
+        return 1
