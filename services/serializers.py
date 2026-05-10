@@ -46,7 +46,7 @@ class ServiceSerializer(BaseModelSerializer):
         ]
 
     def get_centers(self, instance: Service):
-        qs = instance.centers.all()[:3]
+        qs = instance.centers.all()[:10]
         return BaseCenterSerializer(qs, many=True, context=self.context).data
 
     @classmethod
@@ -63,7 +63,9 @@ class ServiceSerializer(BaseModelSerializer):
         missing_ids = self.get_invalid_centers(center_ids)
         if missing_ids:
             raise serializers.ValidationError(
-                {"add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'}
+                {
+                    "add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
+                }
             )
         service.centers.add(*center_ids)
 
@@ -74,7 +76,9 @@ class ServiceSerializer(BaseModelSerializer):
         missing_ids = self.get_invalid_centers(center_ids)
         if missing_ids:
             raise serializers.ValidationError(
-                {"remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'}
+                {
+                    "remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
+                }
             )
         service.centers.remove(*center_ids)
 
@@ -145,9 +149,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             )
 
         if (
-                not Program.objects.filter(pk=program_service.program.pk)
-                        .exclude(expires_at__lt=timezone.localdate())
-                        .exists()
+            not Program.objects.filter(pk=program_service.program.pk)
+            .exclude(expires_at__lt=timezone.localdate())
+            .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."

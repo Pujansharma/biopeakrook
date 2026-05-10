@@ -1,4 +1,4 @@
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef, Q, Prefetch
 
 from accounts.centers.models import Center
 from accounts.centers.serializers import ServiceAvailableCenterSerializer
@@ -13,7 +13,10 @@ from core.utils.views.main import (
 )
 from services.models import Service
 from services.programs.models import ProgramService, RedemptionHistory
-from services.programs.serializers import ProgramServiceRedemptionHistorySerializer, ProgramServiceSerializer
+from services.programs.serializers import (
+    ProgramServiceRedemptionHistorySerializer,
+    ProgramServiceSerializer,
+)
 from services.serializers import (
     ProgramServiceCancelSerializer,
     ServiceRedeemSerializer,
@@ -32,8 +35,14 @@ class ServicesView(BaseListCreateAPIView):
             filter_kwargs["centers__in"] = center_ids
         qs = (
             Service.objects.filter(**filter_kwargs)
-            .prefetch_related("centers")
+            .prefetch_related(
+                Prefetch(
+                    "centers",
+                    queryset=Center.objects.filter(pk__in=center_ids),
+                )
+            )
             .select_related("created_by")
+            .distinct()
         )
         return qs
 
@@ -79,14 +88,12 @@ class ProgramServicesListView(BaseListAPIView):
 
     def get_queryset(self):
         filter_kwargs = {}
-        code_query_param = self.request.query_params.get('code', None)
+        code_query_param = self.request.query_params.get("code", None)
 
-        qs = ProgramService.objects.filter(
-            redeem_code__iexact=code_query_param
-        ).select_related(
-            'cancelled_by', 'program__customer_profile'
-        ).prefetch_related(
-            'service', 'created_by', 'cancelled_by'
+        qs = (
+            ProgramService.objects.filter(redeem_code__iexact=code_query_param)
+            .select_related("cancelled_by", "program__customer_profile")
+            .prefetch_related("service", "created_by", "cancelled_by")
         )
         return qs
 
@@ -98,7 +105,7 @@ class ServiceRedeemView(BaseCreateAPIView):
     def get_queryset(self):
         return ProgramService.objects.select_related(
             "program", "service", "created_by"
-        ).prefetch_related()
+        ).prefetch_related("service__centers")
 
     def perform_create(self, serializer):
         program_service = get_object_or_404(
