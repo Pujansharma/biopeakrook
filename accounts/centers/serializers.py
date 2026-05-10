@@ -223,3 +223,20 @@ class AssociateAvailableCenterSerializer(BaseModelSerializer):
             "is_active",
             "is_admin",
         ]
+
+
+class CustomerAvailableCenterSerializer(BaseModelSerializer):
+    exists = serializers.BooleanField(default=False, read_only=True)
+    is_primary = serializers.BooleanField(default=False, read_only=True)
+
+    class Meta:
+        model = Center
+        fields = [
+            "id",
+            "code",
+            "name",
+            "image",
+            "exists",
+            "is_active",
+            "is_primary",
+        ]
