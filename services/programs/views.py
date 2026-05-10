@@ -57,11 +57,9 @@ class WellnessProgramServicesListView(BaseListAPIView):
                 program__wellness_program__id=self.kwargs["pk"]
             )
             .select_related(
-                'cancelled_by',
+                "cancelled_by",
             )
-            .prefetch_related(
-                'service', 'created_by'
-            )
+            .prefetch_related("service", "created_by")
         )
 
         return qs
@@ -89,9 +87,7 @@ class WellnessProgramRedeemView(BaseCreateAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_wellness_program(self):
-        qs = WellnessProgram.objects.select_related("program").prefetch_related(
-            "program__redeemable_centers"
-        ).filter()
+        qs = WellnessProgram.objects.select_related("program").filter()
         return get_object_or_404(
             qs, "Wellness program not found with this ID", pk=self.kwargs["pk"]
         )

@@ -5,7 +5,10 @@ from rest_framework import serializers
 from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer, MinimumCenterSerializer
 from accounts.customers.models import CustomerProfile
-from accounts.customers.serializers import CustomerProfileWithCenterSerializer, BaseCustomerProfileSerializer
+from accounts.customers.serializers import (
+    CustomerProfileWithCenterSerializer,
+    BaseCustomerProfileSerializer,
+)
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from services.models import Service
@@ -27,7 +30,7 @@ from services.utils.db import redeem_all_program_services
 
 
 class BaseProgramSerializer(BaseModelSerializer):
-    profile = BaseCustomerProfileSerializer(source='customer_profile', read_only=True)
+    profile = BaseCustomerProfileSerializer(source="customer_profile", read_only=True)
 
     class Meta:
         model = Program
@@ -48,7 +51,7 @@ class BaseProgramSerializer(BaseModelSerializer):
             "cancelled_at",
             "is_active",
             "created_at",
-            "updated_at"
+            "updated_at",
         ]
 
 
@@ -212,7 +215,9 @@ class WellnessProgramSerializer(BaseModelSerializer):
     program_type = serializers.ChoiceField(
         source="program.program_type", choices=ProgramType, default=ProgramType.WELLNESS
     )
-    notes = serializers.CharField(source="program.notes", required=False, allow_null=True, allow_blank=True)
+    notes = serializers.CharField(
+        source="program.notes", required=False, allow_null=True, allow_blank=True
+    )
     expires_at = serializers.DateField(source="program.expires_at", required=True)
     is_complimentary = serializers.BooleanField(
         source="program.is_complimentary", default=True
@@ -371,7 +376,10 @@ class WellnessProgramSerializer(BaseModelSerializer):
 
 class WellnessProgramCancelSerializer(BaseModelSerializer):
     cancellation_reason = serializers.CharField(
-        source="program.cancellation_reason", required=False
+        source="program.cancellation_reason",
+        required=False,
+        allow_null=True,
+        allow_blank=True,
     )
     cancelled_by = BaseUserSerializer(source="program.cancelled_by", read_only=True)
     cancelled_at = serializers.DateTimeField(
@@ -424,16 +432,20 @@ class WellnessProgramRedeemSerializer(BaseModelSerializer):
         if not wellness_program.is_active:
             raise serializers.ValidationError("This program has been cancelled.")
 
-        if not Program.objects.filter(
-                pk=wellness_program.program.id
-        ).exclude(
-            expires_at__lt=timezone.localdate()
-        ).exists():
+        if (
+            not Program.objects.filter(pk=wellness_program.program.id)
+            .exclude(expires_at__lt=timezone.localdate())
+            .exists()
+        ):
             raise serializers.ValidationError("This program has expired.")
 
-        if not wellness_program.program.redeemable_centers.filter(pk=center_id).exists():
+        if not ProgramService.objects.filter(
+            program=wellness_program.program,
+            is_active=True,
+            service__centers=center_id,
+        ).exists():
             raise serializers.ValidationError(
-                {"center_id": "Center is not in the program's redeemable centers."}
+                {"center_id": "This center does not offer any service in this program."}
             )
 
         redeemed = redeem_all_program_services(
@@ -459,6 +471,5 @@ class ProgramServiceRedemptionHistorySerializer(BaseModelSerializer):
             "redeemed_at",
             "quantity",
             "redeemed_by",
-            "notes",
         ]
         read_only_fields = fields
