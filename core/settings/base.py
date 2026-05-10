@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "services.programs",
     "inventory",
     "webhooks",
+    "external",
 ]
 
 AUTH_USER_MODEL = "users.User"
