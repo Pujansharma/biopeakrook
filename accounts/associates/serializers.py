@@ -8,6 +8,11 @@ from accounts.associates.models import (
 )
 from accounts.associates.utils.db import create_associate_user_account
 from accounts.centers.models import Center
+from accounts.customers.models import (
+    CustomerAssociateAssignment,
+    CustomerCenterAssignment,
+    CustomerProfile,
+)
 from accounts.centers.serializers import CenterSerializer
 from accounts.centers.utils.db import (
     increment_staff_count,
@@ -647,3 +652,170 @@ class AssociateCenterPermissionSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class AssociateLinkedProfileSerializer(BaseModelSerializer):
+    """Serializer for listing customer profiles linked to an associate."""
+
+    id = serializers.UUIDField(source="customer_profile.id", read_only=True)
+    first_name = serializers.CharField(
+        source="customer_profile.first_name", read_only=True
+    )
+    last_name = serializers.CharField(
+        source="customer_profile.last_name", read_only=True
+    )
+    gender = serializers.CharField(source="customer_profile.gender", read_only=True)
+    date_of_birth = serializers.DateField(
+        source="customer_profile.date_of_birth", read_only=True
+    )
+    image = serializers.ImageField(source="customer_profile.image", read_only=True)
+    email = serializers.EmailField(
+        source="customer_profile.customer.user.email", read_only=True
+    )
+    phone = PhoneNumberSerializerField(
+        source="customer_profile.customer.user.phone", read_only=True
+    )
+    is_main = serializers.BooleanField(
+        source="customer_profile.is_main", read_only=True
+    )
+    is_active = serializers.BooleanField(
+        source="customer_profile.customer.user.is_active", read_only=True
+    )
+
+    class Meta:
+        model = CustomerAssociateAssignment
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "is_main",
+            "is_active",
+            "created_at",
+        ]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["gender"] = instance.customer_profile.get_gender_display()
+        return rep
+
+
+class AssociateAvailableProfileSerializer(BaseModelSerializer):
+    """Serializer for listing customer profiles available to be linked to an associate."""
+
+    email = serializers.EmailField(source="customer.user.email", read_only=True)
+    phone = PhoneNumberSerializerField(source="customer.user.phone", read_only=True)
+    is_active = serializers.BooleanField(
+        source="customer.user.is_active", read_only=True
+    )
+    exists = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = CustomerProfile
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "is_main",
+            "is_active",
+            "exists",
+            "created_at",
+        ]
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["gender"] = instance.get_gender_display()
+        return rep
+
+
+class ProfileIDSerializer(BaseSerializer):
+    id = serializers.UUIDField()
+
+
+class AssociateProfileLinkSerializer(BaseSerializer):
+    """Serializer to link/unlink customer profiles to an associate at a center."""
+
+    center_id = serializers.UUIDField(write_only=True)
+    add = ProfileIDSerializer(many=True, required=False, write_only=True)
+    remove = ProfileIDSerializer(many=True, required=False, write_only=True)
+
+    @classmethod
+    def _invalid_profile_ids(cls, center_id, profile_ids: list) -> set:
+        valid = set(
+            CustomerCenterAssignment.objects.filter(
+                center_id=center_id, customer_profile_id__in=profile_ids
+            ).values_list("customer_profile_id", flat=True)
+        )
+        return set(profile_ids) - valid
+
+    def validate(self, attrs):
+        add_ids = [i["id"] for i in attrs.get("add", [])]
+        remove_ids = [i["id"] for i in attrs.get("remove", [])]
+
+        if not add_ids and not remove_ids:
+            raise serializers.ValidationError(
+                "At least one of 'add' or 'remove' must be provided."
+            )
+
+        center_id = attrs.get("center_id")
+        if add_ids:
+            invalid = self._invalid_profile_ids(center_id, add_ids)
+            if invalid:
+                raise serializers.ValidationError(
+                    {
+                        "add": f"Profiles not found at this center: {[str(uid) for uid in invalid]}"
+                    }
+                )
+        if remove_ids:
+            invalid = self._invalid_profile_ids(center_id, remove_ids)
+            if invalid:
+                raise serializers.ValidationError(
+                    {
+                        "remove": f"Profiles not found at this center: {[str(uid) for uid in invalid]}"
+                    }
+                )
+
+        attrs["add"] = add_ids
+        attrs["remove"] = remove_ids
+        return attrs
+
+    def create(self, validated_data):
+        associate = validated_data.pop("associate")
+        center_id = validated_data.pop("center_id")
+        created_by = validated_data.pop("created_by", None)
+        add_ids = validated_data.get("add", [])
+        remove_ids = validated_data.get("remove", [])
+
+        if add_ids:
+            CustomerAssociateAssignment.objects.bulk_create(
+                [
+                    CustomerAssociateAssignment(
+                        associate=associate,
+                        customer_profile_id=profile_id,
+                        center_id=center_id,
+                        created_by=created_by,
+                    )
+                    for profile_id in add_ids
+                ],
+                update_conflicts=True,
+                unique_fields=["customer_profile", "associate", "center"],
+                update_fields=["created_by"],
+            )
+
+        if remove_ids:
+            CustomerAssociateAssignment.objects.filter(
+                associate=associate,
+                center_id=center_id,
+                customer_profile_id__in=remove_ids,
+            ).delete()
+
+        return associate
