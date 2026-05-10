@@ -30,15 +30,17 @@ class ServicesView(BaseListCreateAPIView):
 
     def get_queryset(self):
         filter_kwargs = {}
+        prefetch_kwargs = {}
         center_ids = self.request.query_params.getlist("center_id", [])
         if center_ids:
             filter_kwargs["centers__in"] = center_ids
+            prefetch_kwargs['pk__in'] = center_ids
         qs = (
             Service.objects.filter(**filter_kwargs)
             .prefetch_related(
                 Prefetch(
                     "centers",
-                    queryset=Center.objects.filter(pk__in=center_ids),
+                    queryset=Center.objects.filter(**prefetch_kwargs),
                 )
             )
             .select_related("created_by")
