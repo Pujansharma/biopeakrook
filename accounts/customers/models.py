@@ -45,6 +45,8 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
         related_name="created_customer_profiles",
     )
 
+    centers_count = models.PositiveBigIntegerField(default=0, editable=False)
+
     class Meta:
         ordering = ["-created_at"]
         constraints = [
@@ -93,8 +95,14 @@ class CustomerCenterAssignment(BaseUUIDModel):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["customer_profile", "center"], name="uniq_customer_center"
-            )
+                fields=["customer_profile", "center"],
+                name="uniq_customer_center",
+            ),
+            models.UniqueConstraint(
+                fields=["customer_profile"],
+                condition=models.Q(is_primary=True),
+                name="uniq_primary_center",
+            ),
         ]
         verbose_name = "Customer-Center Assignment"
 
