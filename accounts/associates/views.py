@@ -16,9 +16,15 @@ from accounts.associates.serializers import (
     AssociateCenterSerializer,
     AssociateProfileSerializer,
     AssociateCenterPermissionSerializer,
+    AssociateLinkedProfileSerializer,
+    AssociateAvailableProfileSerializer,
+    AssociateProfileLinkSerializer,
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import AssociateAvailableCenterSerializer
+from accounts.customers.models import CustomerAssociateAssignment, CustomerProfile
+from accounts.utils.constants import UserType
+from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import (
     IsAdminUser,
     AssociateAdminPermission,
@@ -205,3 +211,113 @@ class AssociatePermissionView(BaseRetrieveAPIView):
 
     def get_object(self):
         return self.get_queryset().first()
+
+
+class AssociateLinkedProfilesView(BaseListAPIView):
+    """List customer profiles linked to an associate."""
+
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = AssociateLinkedProfileSerializer
+
+    def get_associate(self):
+        qs = Associate.objects.select_related()
+        return get_object_or_404(
+            qs, "Associate with the given ID does not exist", pk=self.kwargs.get("pk")
+        )
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        search = Q()
+        associate = self.get_associate()
+        center_id = self.request.query_params.get("center_id", None)
+        search_param = self.request.query_params.get("search", "").strip()
+
+        if search_param:
+            search |= Q(customer_profile__first_name__istartswith=search_param)
+            search |= Q(customer_profile__first_name__icontains=search_param)
+            search |= Q(customer_profile__last_name__icontains=search_param)
+
+        if center_id:
+            filter_kwargs["center_id"] = center_id
+
+        account_type = get_user_account_type(self.request.user)
+        if account_type == UserType.ASSOCIATE:
+            request_associate = getattr(self.request.user, "associate", None)
+            filter_kwargs["center__associate_assignments__associate"] = (
+                request_associate
+            )
+
+        return (
+            CustomerAssociateAssignment.objects.select_related(
+                "customer_profile__customer__user",
+            )
+            .filter(search, associate=associate, **filter_kwargs)
+            .order_by("-created_at")
+        )
+
+
+class AssociateAvailableProfilesView(BaseListAPIView):
+    """List customer profiles available to be linked to an associate, scoped by center."""
+
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = AssociateAvailableProfileSerializer
+
+    def get_associate(self):
+        qs = Associate.objects.select_related()
+        return get_object_or_404(
+            qs, "Associate with the given ID does not exist", pk=self.kwargs.get("pk")
+        )
+
+    def get_queryset(self):
+        search = Q()
+        filter_kwargs = {}
+        associate = self.get_associate()
+        center_id = self.request.query_params.get("center_id", None)
+        search_param = self.request.query_params.get("search", "").strip()
+
+        if search_param:
+            search |= Q(first_name__istartswith=search_param)
+            search |= Q(first_name__icontains=search_param)
+            search |= Q(last_name__icontains=search_param)
+            search |= Q(customer__user__email__istartswith=search_param)
+
+        account_type = get_user_account_type(self.request.user)
+        if account_type == UserType.ASSOCIATE:
+            request_associate = getattr(self.request.user, "associate", None)
+            filter_kwargs[
+                "center_assignments__center__associate_assignments__associate"
+            ] = request_associate
+
+        if center_id:
+            filter_kwargs["center_assignments__center_id"] = center_id
+
+        exists_subquery = CustomerAssociateAssignment.objects.filter(
+            associate=associate,
+            customer_profile=OuterRef("pk"),
+            **({"center_id": center_id} if center_id else {}),
+        )
+
+        return (
+            CustomerProfile.objects.select_related("customer__user")
+            .filter(search, **filter_kwargs)
+            .annotate(exists=Exists(exists_subquery))
+            .distinct()
+            .order_by("-created_at")
+        )
+
+
+class AssociateLinkProfileView(BaseCreateAPIView):
+    """Link or unlink customer profiles to an associate at a center."""
+
+    permission_classes = [IsAdminUser]
+    serializer_class = AssociateProfileLinkSerializer
+
+    def get_associate(self):
+        qs = Associate.objects.select_related()
+        return get_object_or_404(
+            qs, "Associate with the given ID does not exist", pk=self.kwargs.get("pk")
+        )
+
+    def perform_create(self, serializer):
+        associate = self.get_associate()
+        serializer.save(associate=associate, created_by=self.request.user)
