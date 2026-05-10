@@ -1,7 +1,10 @@
-from django.db.models import Exists, OuterRef, Q, FilteredRelation, F
+from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
+from django.db.models.functions import Coalesce
 
 from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
+from accounts.centers.models import Center
+from accounts.centers.serializers import CustomerAvailableCenterSerializer
 from accounts.customers.models import (
     Customer,
     CustomerAssociateAssignment,
@@ -11,6 +14,7 @@ from accounts.customers.models import (
 from accounts.customers.serializers import (
     CustomerAccountSerializer,
     CustomerAssociateAssignmentSerializer,
+    CustomerCenterAssignmentSerializer,
     CustomerProfileSerializer,
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
@@ -73,6 +77,7 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         filter_kwargs = {}
+
         if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
             associate = getattr(self.request.user, "associate", None)
             filter_kwargs["center__associate_assignments__associate"] = associate
@@ -83,7 +88,14 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
 
     def get_object(self):
         qs = self.get_queryset()
-        return get_object_or_404(qs, customer_profile__id=self.kwargs["pk"])
+        header_center_id = self.request.headers.get("x-center-id", None)
+        query_center_id = self.request.query_params.get("center_id", None)
+        center_id = header_center_id or query_center_id or None
+        return get_object_or_404(
+            qs,
+            center_id=center_id,
+            customer_profile__id=self.kwargs["pk"],
+        )
 
 
 class CustomerAvailableAssociateView(BaseListAPIView):
@@ -196,6 +208,51 @@ class CustomerAssociateListView(BaseListAPIView):
         )
 
         return qs
+
+
+class CustomerAvailableCenterView(BaseListAPIView):
+    """List all centers annotated with exists/is_primary for a customer profile."""
+
+    serializer_class = CustomerAvailableCenterSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_customer_profile(self):
+        qs = CustomerProfile.objects.select_related()
+        return get_object_or_404(qs, pk=self.kwargs["pk"])
+
+    def get_queryset(self):
+        search = Q()
+        search_params = self.request.query_params.get("search", "").strip()
+        if search_params:
+            search |= Q(name__istartswith=search_params)
+            search |= Q(name__icontains=search_params)
+            search |= Q(code__istartswith=search_params)
+
+        customer_profile = self.get_customer_profile()
+        exists_subquery = CustomerCenterAssignment.objects.filter(
+            customer_profile=customer_profile, center=OuterRef("pk")
+        )
+        is_primary_subquery = CustomerCenterAssignment.objects.filter(
+            customer_profile=customer_profile, center=OuterRef("pk")
+        ).values("is_primary")
+
+        return Center.objects.annotate(
+            exists=Exists(exists_subquery),
+            is_primary=Coalesce(Subquery(is_primary_subquery), Value(False)),
+        ).filter(search)
+
+
+class CustomerCenterLinkView(BaseCreateAPIView):
+    """Link or unlink centers for a customer profile."""
+
+    permission_classes = [IsAdminUser]
+    serializer_class = CustomerCenterAssignmentSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            customer_profile_id=self.kwargs["pk"],
+            created_by=self.request.user,
+        )
 
 
 class CustomerCenterListView(BaseListAPIView):

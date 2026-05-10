@@ -13,4 +13,6 @@ urlpatterns = [
     ),
     path("<uuid:pk>/link-associates/", views.CustomerLinkAssociateView.as_view()),
     path("<uuid:pk>/centers/", views.CustomerCenterListView.as_view()),
+    path("<uuid:pk>/available-centers/", views.CustomerAvailableCenterView.as_view()),
+    path("<uuid:pk>/link-centers/", views.CustomerCenterLinkView.as_view()),
 ]
