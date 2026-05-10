@@ -1,12 +1,17 @@
 from django.db.models import Q, RestrictedError, ProtectedError
 
 from accounts.admins.models import Admin
-from accounts.admins.serializers import AdminUserSerializer, AdminUserDetailSerializer
+from accounts.admins.serializers import (
+    AdminUserSerializer,
+    AdminUserDetailSerializer,
+    AdminProfileSerializer,
+)
 from accounts.utils.permissions import IsAdminUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListCreateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
+    BaseRetrieveUpdateAPIView,
 )
 
 
@@ -53,3 +58,17 @@ class AdminUserDetailView(BaseRetrieveUpdateDestroyAPIView):
             user.delete()
         except RestrictedError, ProtectedError:
             self.raise_bad_request(f"This admin cannot be deleted")
+
+
+class AdminProfileView(BaseRetrieveUpdateAPIView):
+    """View for admins to retrieve and update their own profile"""
+
+    permission_classes = [IsAdminUser]
+    serializer_class = AdminProfileSerializer
+
+    def get_object(self):
+        # TODO: Remove this logic, here an admin model is being created if it does not exist
+        instance, _ = Admin.objects.select_related("user__account").get_or_create(
+            user=self.request.user
+        )
+        return instance
