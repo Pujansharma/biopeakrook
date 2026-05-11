@@ -18,7 +18,7 @@ from accounts.associates.serializers import (
     AssociateCenterPermissionSerializer,
     AssociateLinkedProfileSerializer,
     AssociateAvailableProfileSerializer,
-    AssociateProfileLinkSerializer,
+    AssociateProfileLinkSerializer, AdminAssociateDetailSerializer,
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import AssociateAvailableCenterSerializer
@@ -53,9 +53,9 @@ class AssociateView(BaseListCreateAPIView):
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
             search_query |= (
-                Q(user__email__istartswith=search_params)
-                | Q(user__phone__istartswith=search_params)
-                | Q(user__first_name__istartswith=search_params)
+                    Q(user__email__istartswith=search_params)
+                    | Q(user__phone__istartswith=search_params)
+                    | Q(user__first_name__istartswith=search_params)
             )
 
         return Associate.objects.select_related().filter(search_query)
@@ -68,7 +68,7 @@ class AssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
     """Endpoint to view details for any associate"""
 
     permission_classes = [IsAdminUser]
-    serializer_class = AdminAssociateSerializer
+    serializer_class = AdminAssociateDetailSerializer
 
     def get_queryset(self):
         return Associate.objects.select_related()
@@ -102,10 +102,10 @@ class AssociateAvailableCenterView(BaseListAPIView):
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
             search_query |= (
-                Q(name__istartswith=search_params)
-                | Q(code__istartswith=search_params)
-                | Q(code__icontains=search_params)
-                | Q(name__icontains=search_params)
+                    Q(name__istartswith=search_params)
+                    | Q(code__istartswith=search_params)
+                    | Q(code__icontains=search_params)
+                    | Q(name__icontains=search_params)
             )
         associate = self.get_associate()
         associated_centers_subquery = AssociateCenterAssignment.objects.filter(
@@ -155,10 +155,10 @@ class AssociateAssignedCenters(BaseListAPIView):
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
             search_query |= (
-                Q(name__istartswith=search_params)
-                | Q(code__istartswith=search_params)
-                | Q(code__icontains=search_params)
-                | Q(name__icontains=search_params)
+                    Q(name__istartswith=search_params)
+                    | Q(code__istartswith=search_params)
+                    | Q(code__icontains=search_params)
+                    | Q(name__icontains=search_params)
             )
         is_admin_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate, center=OuterRef("pk")

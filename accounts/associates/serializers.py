@@ -138,6 +138,42 @@ class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptiona
         return rep
 
 
+class AdminAssociateDetailSerializer(BaseAssociateSerializer):
+    """Serializers for admins to update or create associates"""
+
+    class Meta:
+        model = Associate
+        fields = [
+            "id",
+            "email",
+            "phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "image",
+            "is_external",
+            "is_active",
+            "date_joined",
+            "last_login",
+            "updated_at",
+
+        ]
+
+    def create(self, validated_data):
+        pass
+
+    def update(self, instance: Associate, validated_data):
+        """Only Admins will be able to update associates"""
+        user_data = validated_data.pop("user", {})
+        is_active = user_data.get("is_active", False)
+        for key, value in user_data.items():
+            setattr(instance.user, key, value)
+        instance.user.save(update_fields=[*user_data.keys(), "updated_at"])
+        validated_data["is_active"] = is_active
+        return super().update(instance, validated_data)
+
+ 
 class AssociateProfileSerializer(BaseAssociateSerializer):
     """Serializer only for associates to update or view their profile"""
 
