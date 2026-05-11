@@ -247,7 +247,7 @@ class CustomerAvailableCenterView(BaseListAPIView):
 class CustomerCenterLinkView(BaseCreateAPIView):
     """Link or unlink centers for a customer profile."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CustomerCenterAssignmentSerializer
 
     def perform_create(self, serializer):

@@ -21,7 +21,7 @@ class CustomerProfileAdmin(admin.ModelAdmin):
     readonly_fields = ["id", "created_at", "updated_at"]
     list_display = ["id", "first_name", "last_name"]
     list_filter = ["is_active"]
-    raw_id_fields = ["customer"]
+    raw_id_fields = ["customer", "created_by"]
     list_select_related = True
     list_per_page = 25
 

@@ -38,6 +38,9 @@ class CentersView(BaseListCreateAPIView):
         search = Q()
         filter_kwargs = {}
         search_params = self.request.query_params.get("search", "").strip()
+        active_query_param = self.request.query_params.get('active', None)
+        if active_query_param and active_query_param in ['0', '1']:
+            filter_kwargs['is_active'] = bool(int(active_query_param))
         if search_params:
             search |= Q(name__istartswith=search_params) | Q(
                 code__icontains=search_params
