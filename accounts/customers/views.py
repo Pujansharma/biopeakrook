@@ -1,4 +1,5 @@
-from django.db.models import Exists, OuterRef, Q, FilteredRelation, F
+from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
+from django.db.models.functions import Coalesce
 
 from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
@@ -231,13 +232,13 @@ class CustomerAvailableCenterView(BaseListAPIView):
         exists_subquery = CustomerCenterAssignment.objects.filter(
             customer_profile=customer_profile, center=OuterRef("pk")
         )
-        # is_primary_subquery = CustomerCenterAssignment.objects.filter(
-        #     customer_profile=customer_profile, center=OuterRef("pk")
-        # ).values("is_primary")
+        is_primary_subquery = CustomerCenterAssignment.objects.filter(
+            customer_profile=customer_profile, center=OuterRef("pk")
+        ).values("is_primary")
 
         return Center.objects.annotate(
             exists=Exists(exists_subquery),
-            # is_primary=Coalesce(Subquery(is_primary_subquery), Value(False)),
+            is_primary=Coalesce(Subquery(is_primary_subquery), Value(False)),
         ).filter(
             search, is_primary=False
         )

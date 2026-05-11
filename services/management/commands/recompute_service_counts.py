@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 
-from services.models import Service
+from services.models import Service, CenterServiceAssignment
 
 
 class Command(BaseCommand):
@@ -11,7 +11,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         centers_count_subquery = Coalesce(
             Subquery(
-                Service.centers.through.objects.filter(service_id=OuterRef("pk"))
+                CenterServiceAssignment.objects.filter(service_id=OuterRef("pk"), is_active=True)
                 .values("service_id")
                 .annotate(cnt=Count("center_id"))
                 .values("cnt")

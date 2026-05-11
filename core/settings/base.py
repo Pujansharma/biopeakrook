@@ -35,7 +35,6 @@ INSTALLED_APPS = [
     "accounts.admins",
     "appointments",
     "services",
-    "services.packages",
     "services.programs",
     "inventory",
     "webhooks",

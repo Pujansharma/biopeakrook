@@ -4,13 +4,13 @@ from django.db import transaction
 from django.db.models import Count, F, OuterRef, Subquery
 from django.utils import timezone
 
-from services.models import Service
+from services.models import Service, CenterServiceAssignment
 from services.programs.models import Program, ProgramService, RedemptionHistory
 
 
 def update_service_center_count(service_id: UUID) -> None:
     subquery = (
-        Service.centers.through.objects.filter(service_id=OuterRef("pk"))
+        CenterServiceAssignment.objects.filter(service_id=OuterRef("pk"), is_active=True)
         .values("service_id")
         .annotate(cnt=Count("center_id"))
         .values("cnt")

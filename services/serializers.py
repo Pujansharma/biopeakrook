@@ -5,7 +5,7 @@ from rest_framework import serializers
 from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from services.models import Service
+from services.models import Service, CenterServiceAssignment
 from services.programs.models import Program, ProgramService
 from services.utils.db import redeem_program_service, update_service_center_count
 
@@ -29,6 +29,7 @@ class ServiceSerializer(BaseModelSerializer):
     )
     centers = serializers.SerializerMethodField(read_only=True)
     is_active = serializers.BooleanField(default=True, required=False)
+    is_locked = serializers.BooleanField(default=False, read_only=True)
 
     class Meta:
         model = Service
@@ -42,12 +43,14 @@ class ServiceSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
             "is_active",
+            "is_locked",
             "created_by",
         ]
 
     def get_centers(self, instance: Service):
-        qs = instance.centers.all()[:10]
-        return BaseCenterSerializer(qs, many=True, context=self.context).data
+        assignments = instance.center_assignments.select_related("center").filter(is_active=True)[:10]
+        centers = [asg.center for asg in assignments]
+        return BaseCenterSerializer(centers, many=True, context=self.context).data
 
     @classmethod
     def get_invalid_centers(cls, center_ids):
@@ -67,7 +70,12 @@ class ServiceSerializer(BaseModelSerializer):
                     "add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
                 }
             )
-        service.centers.add(*center_ids)
+
+        assignments = [
+            CenterServiceAssignment(service=service, center_id=cid, is_active=True)
+            for cid in center_ids
+        ]
+        CenterServiceAssignment.objects.bulk_create(assignments, ignore_conflicts=True)
 
     def remove_centers_action(self, service: Service, remove_centers: list) -> None:
         if not remove_centers:
@@ -80,7 +88,10 @@ class ServiceSerializer(BaseModelSerializer):
                     "remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
                 }
             )
-        service.centers.remove(*center_ids)
+
+        CenterServiceAssignment.objects.filter(
+            service=service, center_id__in=center_ids
+        ).delete()
 
     def create(self, validated_data):
         add_centers = validated_data.pop("add_centers", [])
@@ -161,7 +172,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
         if not center:
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
-        if not program_service.service.centers.filter(pk=center_id).exists():
+        if not CenterServiceAssignment.objects.filter(
+            service=program_service.service, center_id=center_id, is_active=True
+        ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This service is not available at the given center."}
             )

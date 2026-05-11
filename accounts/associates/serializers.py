@@ -8,16 +8,16 @@ from accounts.associates.models import (
 )
 from accounts.associates.utils.db import create_associate_user_account
 from accounts.centers.models import Center
-from accounts.customers.models import (
-    CustomerAssociateAssignment,
-    CustomerCenterAssignment,
-    CustomerProfile,
-)
 from accounts.centers.serializers import CenterSerializer
 from accounts.centers.utils.db import (
     increment_staff_count,
     increment_inactive_staff_count,
     decrement_inactive_staff_count,
+)
+from accounts.customers.models import (
+    CustomerAssociateAssignment,
+    CustomerCenterAssignment,
+    CustomerProfile,
 )
 from accounts.serializers import BasePasswordCheckOptionalSerializer
 from accounts.users.models import User
@@ -80,7 +80,7 @@ class BaseAssociateSerializer(BaseModelSerializer):
         return rep
 
 
-class AdminAssociateSerializer(BaseAssociateSerializer):
+class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptionalSerializer):
     """Serializers for admins to update or create associates"""
 
     class Meta:
@@ -99,6 +99,8 @@ class AdminAssociateSerializer(BaseAssociateSerializer):
             "date_joined",
             "last_login",
             "updated_at",
+            "password1",
+            "password2"
         ]
         extra_kwargs = {"email": {"required": True}}
 
@@ -108,12 +110,14 @@ class AdminAssociateSerializer(BaseAssociateSerializer):
         email = user_data.get("email")
         phone = user_data.get("phone")
 
+        password = self.get_validated_password(validated_data)
+
         errors = check_user_exists(email, phone)
         if errors:
             raise serializers.ValidationError(errors)
 
         with transaction.atomic():
-            user = User.objects.create_user(**user_data)
+            user = User.objects.create_user(**user_data, password=password)
             validated_data["user"] = user
             associate = super().create(validated_data)
             create_associate_user_account(associate)
@@ -585,13 +589,13 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
 
         errors = {}
         if (
-            email
-            and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
+                email
+                and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
         ):
             errors["email"] = "User with this email already exists."
         if (
-            phone
-            and User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists()
+                phone
+                and User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists()
         ):
             errors["phone"] = "User with this phone already exists."
         if errors:
@@ -603,7 +607,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                pk=role_id, center=instance.center
+                    pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}

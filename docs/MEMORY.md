@@ -22,7 +22,12 @@
 
 ## Known Issues / In-Progress Work
 
-_(Add entries as issues are identified or work begins)_
+**Planned:** CenterServiceAssignment Bridged Model (2026-05-11)
+- Replace Service.centers M2M with explicit bridged model for per-center activation control
+- Enables granular service availability without losing relationships
+- Task doc: `docs/tasks/center-services-bridge-model.md`
+- Affects: views.py, serializers.py, utils/db.py, admin.py
+- Will require data migration to move existing M2M relationships
 
 ---
 
