@@ -25,6 +25,9 @@ from accounts.customers.utils.db import (
     create_customer_user_account,
     increment_centers_count,
     decrement_centers_count,
+    increment_external_centers_count,
+    decrement_external_centers_count,
+    compute_customer_profile_center_counts,
 )
 from accounts.users.models import User
 from accounts.users.serializers import BaseUserSerializer
@@ -203,6 +206,12 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         source="customer_profile.customer.user.is_active", read_only=True
     )
     is_primary = serializers.BooleanField(read_only=True)
+    centers_count = serializers.IntegerField(
+        source="customer_profile.centers_count", read_only=True, default=0
+    )
+    external_centers_count = serializers.IntegerField(
+        source="customer_profile.external_centers_count", read_only=True, default=0
+    )
 
     class Meta:
         model = CustomerCenterAssignment
@@ -218,6 +227,8 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
+            "centers_count",
+            "external_centers_count",
             "created_at",
             "updated_at",
         ]
@@ -327,6 +338,12 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
     )
     is_primary = serializers.BooleanField(read_only=True)
     home_center = serializers.SerializerMethodField(read_only=True)
+    centers_count = serializers.IntegerField(
+        source="customer_profile.centers_count", read_only=True, default=0
+    )
+    external_centers_count = serializers.IntegerField(
+        source="customer_profile.external_centers_count", read_only=True, default=0
+    )
 
     class Meta:
         model = CustomerCenterAssignment
@@ -342,6 +359,8 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
+            "centers_count",
+            "external_centers_count",
             "created_at",
             "updated_at",
             "home_center"
@@ -465,6 +484,12 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     is_active = serializers.BooleanField(
         source="customer_profile.customer.user.is_active"
     )
+    centers_count = serializers.IntegerField(
+        source="customer_profile.centers_count", read_only=True, default=0
+    )
+    external_centers_count = serializers.IntegerField(
+        source="customer_profile.external_centers_count", read_only=True, default=0
+    )
 
     class Meta:
         model = CustomerCenterAssignment
@@ -480,10 +505,12 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
+            "centers_count",
+            "external_centers_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["is_main", "is_primary"]
+        read_only_fields = ["is_main", "is_primary", "centers_count", "external_centers_count"]
 
     def update(self, instance: CustomerCenterAssignment, validated_data):
         profile_wrapper = validated_data.pop("customer_profile", {})
@@ -859,7 +886,6 @@ class CustomerCenterAssignmentSerializer(BaseModelSerializer):
                 ).delete()
                 for center_id in remove_center_ids:
                     decrement_customer_count(center_id)
-                    decrement_centers_count(customer_profile_id)
 
             if add_center_ids:
                 existing_ids = set(
@@ -886,6 +912,8 @@ class CustomerCenterAssignmentSerializer(BaseModelSerializer):
                 )
                 for center_id in new_center_ids:
                     increment_customer_count(center_id)
-                    increment_centers_count(customer_profile_id)
+
+            if add_center_ids or remove_center_ids:
+                compute_customer_profile_center_counts(customer_profile_id)
 
         return 1

@@ -12,8 +12,8 @@ def update_service_center_count(service_id: UUID) -> None:
     subquery = (
         CenterServiceAssignment.objects.filter(service_id=OuterRef("pk"), is_active=True)
         .values("service_id")
-        .annotate(cnt=Count("center_id"))
-        .values("cnt")
+        .annotate(count=Count("center_id"))
+        .values("count")
     )
     Service.objects.filter(pk=service_id).update(centers_count=Subquery(subquery))
 
@@ -51,13 +51,13 @@ def redeem_all_program_services(program_id: UUID, center_id: UUID, redeemed_by) 
     service_ids = []
     histories = []
 
-    for s in services:
-        remaining = s["sessions_count"] - s["sessions_used"]
+    for service in services:
+        remaining = service["sessions_count"] - service["sessions_used"]
         total_quantity += remaining
-        service_ids.append(s["pk"])
+        service_ids.append(service["pk"])
         histories.append(
             RedemptionHistory(
-                program_service_id=s["pk"],
+                program_service_id=service["pk"],
                 redeem_center_id=center_id,
                 redeemed_at=now,
                 quantity=remaining,

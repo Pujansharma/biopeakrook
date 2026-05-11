@@ -7,10 +7,74 @@
 3. **Vectorize operations when working with data**
 4. **Handle exceptions specifically, not broadly**
 5. **Minimize branching and conditionals**
+6. **Use explicit, brief, and formal naming — no abbreviations**
 
 ---
 
-## 1. Vectorization & Performance
+## 1. Naming Conventions
+
+### ⚠️ CRITICAL: No abbreviations in variable, parameter, or annotation names
+
+**Abbreviations reduce readability and introduce inconsistency. Use full, explicit names.**
+
+### ✅ DO: Use explicit, full names
+
+```python
+# Good - Clear, formal naming
+for customer_assignment in assignments:
+    process_assignment(customer_assignment)
+
+# Good - Full names in annotations
+subquery = (
+    Model.objects.filter(...)
+    .annotate(count=Count("id"))
+    .values("count")
+)
+
+# Good - Loop variables are explicit
+for service in services:
+    price = service.price * quantity
+    total += price
+```
+
+### ❌ DON'T: Use abbreviations
+
+```python
+# Bad - Abbreviations reduce clarity
+for ca in assignments:          # ❌ What is 'ca'?
+    process_assignment(ca)
+
+# Bad - Short form annotations
+.annotate(cnt=Count("id"))      # ❌ 'cnt' vs 'count'
+.values("cnt")
+
+# Bad - Single-letter or short loop variables
+for s in services:              # ❌ What is 's'?
+    price = s.price * qty       # ❌ What is 'qty'?
+    total += price
+
+# Bad - Config/temp variable abbreviations
+cfg = load_config()             # ❌ Use 'config'
+tmp_results = []                # ❌ Use 'temporary_results' or 'processing_results'
+asg = Assignment(...)           # ❌ Use 'assignment'
+```
+
+### Common abbreviations to AVOID:
+
+- `cnt` → `count`
+- `asg` / `asn` → `assignment`
+- `pkg` → `package`
+- `cfg` → `config`
+- `tmp` → Use descriptive name (`processing_results`, `temporary_buffer`)
+- `qty` → `quantity`
+- `num` → `number`
+- `val` → `value`
+- `i`, `j`, `k` in loops → Use `index`, `item`, or descriptive names
+- `s`, `u`, `r` → Use full names (`service`, `user`, `result`)
+
+---
+
+## 2. Vectorization & Performance
 
 ### ✅ DO: Use vectorized operations
 

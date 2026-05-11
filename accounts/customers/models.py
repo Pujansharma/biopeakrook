@@ -46,6 +46,7 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
     )
 
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
+    external_centers_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]

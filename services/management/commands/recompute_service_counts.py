@@ -13,8 +13,8 @@ class Command(BaseCommand):
             Subquery(
                 CenterServiceAssignment.objects.filter(service_id=OuterRef("pk"), is_active=True)
                 .values("service_id")
-                .annotate(cnt=Count("center_id"))
-                .values("cnt")
+                .annotate(count=Count("center_id"))
+                .values("count")
             ),
             Value(0),
         )

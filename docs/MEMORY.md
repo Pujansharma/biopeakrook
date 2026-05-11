@@ -22,15 +22,25 @@
 
 ## Known Issues / In-Progress Work
 
-**Planned:** CenterServiceAssignment Bridged Model (2026-05-11)
-- Replace Service.centers M2M with explicit bridged model for per-center activation control
-- Enables granular service availability without losing relationships
-- Task doc: `docs/tasks/center-services-bridge-model.md`
-- Affects: views.py, serializers.py, utils/db.py, admin.py
-- Will require data migration to move existing M2M relationships
+**Implemented:** CenterServiceAssignment Bridged Model (2026-05-11)
+- ✅ Replace Service.centers M2M with explicit bridged model for per-center activation control
+- ✅ Updated: services/, external/ (views, serializers, utilities, admin)
+- ✅ Task doc: `docs/tasks/center-services-bridge-model.md`
+- Pending: Migration creation and execution
+
+**Implemented:** External Centers Count Tracking (2026-05-11)
+- ✅ Added `external_centers_count` to CustomerProfile (tracks non-primary center links)
+- ✅ Increment/decrement functions in `accounts/customers/utils/db.py`
+- ✅ Serializer updated to call count updates on add/remove
+- ✅ Management command: `python manage.py recompute_external_centers_count`
 
 ---
 
 ## Conventions Established Through Collaboration
 
-_(Add entries when non-obvious patterns are confirmed or corrected during sessions)_
+**Naming Standards (2026-05-11)**
+- **NO abbreviations** in code: variables, parameters, loop variables, annotations
+- Use explicit, brief, and formal names
+- Examples: `count` not `cnt`, `assignment` not `asg`, `service` not `s`
+- Added to CODING_RULES.md Section 1 with examples
+- Why: Readability, consistency, prevents ambiguity (especially in subquery annotations)
