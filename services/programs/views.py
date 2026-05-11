@@ -1,4 +1,4 @@
-from django.db.models import Prefetch
+from django.db.models import Prefetch, OuterRef, Exists
 
 from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
@@ -8,6 +8,7 @@ from core.utils.views.main import (
     BaseRetrieveUpdateAPIView,
     BaseCreateAPIView,
 )
+from services.models import CenterServiceAssignment
 from services.programs.models import ProgramService, WellnessProgram
 from services.programs.serializers import (
     BaseProgramServiceSerializer,
@@ -52,6 +53,15 @@ class WellnessProgramServicesListView(BaseListAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
+        subquery_filter_kwargs = {}
+        center_id = self.request.headers.get('x-center-id', None)
+        if center_id:
+            subquery_filter_kwargs['center_id'] = center_id
+        can_redeem_subquery = CenterServiceAssignment.objects.filter(
+            service_id=OuterRef('service_id'),
+            is_active=True,
+            **subquery_filter_kwargs
+        )
         qs = (
             ProgramService.objects.filter(
                 program__wellness_program__id=self.kwargs["pk"]
@@ -60,6 +70,10 @@ class WellnessProgramServicesListView(BaseListAPIView):
                 "cancelled_by",
             )
             .prefetch_related("service", "created_by")
+            .annotate(
+                can_redeem=Exists(can_redeem_subquery)
+            )
+            .order_by('-created_at')
         )
 
         return qs

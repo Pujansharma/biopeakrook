@@ -173,10 +173,10 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
         if not CenterServiceAssignment.objects.filter(
-            service=program_service.service, center_id=center_id, is_active=True
+                service=program_service.service, center_id=center_id, is_active=True
         ).exists():
             raise serializers.ValidationError(
-                {"center_id": "This service is not available at the given center."}
+                "This service is not available at the given center."
             )
 
         remaining = program_service.sessions_count - program_service.sessions_used
