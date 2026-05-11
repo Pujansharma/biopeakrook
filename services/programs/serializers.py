@@ -11,7 +11,7 @@ from accounts.customers.serializers import (
 )
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from services.models import Service
+from services.models import Service, CenterServiceAssignment
 from services.programs.models import (
     Program,
     WellnessProgram,
@@ -442,7 +442,8 @@ class WellnessProgramRedeemSerializer(BaseModelSerializer):
         if not ProgramService.objects.filter(
             program=wellness_program.program,
             is_active=True,
-            service__centers=center_id,
+            service__center_assignments__center_id=center_id,
+            service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}

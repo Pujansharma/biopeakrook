@@ -3,7 +3,7 @@ from rest_framework import serializers
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import CustomerProfile
 from core.utils.serializers import BaseModelSerializer
-from services.models import Service
+from services.models import Service, CenterServiceAssignment
 from services.programs.models import ProgramService, WellnessProgram
 from services.programs.utils.constants import ProgramType
 
@@ -16,10 +16,11 @@ class ExternalCustomerServiceSerializer(BaseModelSerializer):
         fields = ["id", "name", "centers"]
 
     def get_centers(self, instance):
-        qs = instance.centers.all()[:10]
-        if not qs:
+        assignments = instance.center_assignments.select_related("center").filter(is_active=True)[:10]
+        if not assignments:
             return None
-        return MinimumCenterSerializer(qs, many=True, context=self.context).data
+        centers = [asg.center for asg in assignments]
+        return MinimumCenterSerializer(centers, many=True, context=self.context).data
 
 
 class ExternalProgramServiceSerializer(BaseModelSerializer):

@@ -13,6 +13,7 @@ from external.serializers import (
     CustomerWellnessProgramDetailSerializer,
     CustomerServiceDetailSerializer,
 )
+from services.models import CenterServiceAssignment
 from services.programs.models import ProgramService, RedemptionHistory, WellnessProgram
 from services.programs.serializers import ProgramServiceRedemptionHistorySerializer
 
@@ -129,10 +130,11 @@ class ExternalUserProgramServicesListView(BaseListAPIView):
             .select_related("cancelled_by")
             .prefetch_related(
                 Prefetch(
-                    "service__centers",
-                    queryset=Center.objects.filter(
-                        redeemable_programs__wellness_program__id=self.kwargs["pk"]
-                    ),
+                    "service__center_assignments",
+                    queryset=CenterServiceAssignment.objects.filter(
+                        center__redeemable_programs__wellness_program__id=self.kwargs["pk"],
+                        is_active=True,
+                    ).select_related("center"),
                 ),
                 "created_by",
             )
@@ -171,10 +173,11 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
             .select_related("cancelled_by")
             .prefetch_related(
                 Prefetch(
-                    "service__centers",
-                    queryset=Center.objects.filter(
-                        redeemable_programs__program_services__pk=self.kwargs["pk"]
-                    ),
+                    "service__center_assignments",
+                    queryset=CenterServiceAssignment.objects.filter(
+                        center__redeemable_programs__program_services__pk=self.kwargs["pk"],
+                        is_active=True,
+                    ).select_related("center"),
                 ),
                 "created_by",
             )

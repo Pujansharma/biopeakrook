@@ -104,7 +104,11 @@ class ServiceAvailableCenters(BaseListAPIView):
         exists_subquery = CenterServiceAssignment.objects.filter(
             center_id=OuterRef("pk"), service_id=self.kwargs["pk"], is_active=True
         )
-        qs = Center.objects.filter(search).annotate(exists=Exists(exists_subquery))
+        qs = Center.objects.filter(
+            search, is_active=True
+        ).annotate(
+            exists=Exists(exists_subquery)
+        ).order_by('-created_at')
         return qs
 
 
@@ -134,7 +138,9 @@ class ServiceRedeemView(BaseCreateAPIView):
         ).prefetch_related(
             Prefetch(
                 "service__center_assignments",
-                queryset=CenterServiceAssignment.objects.filter(is_active=True).select_related("center")
+                queryset=CenterServiceAssignment.objects.filter(
+                    is_active=True
+                ).select_related("center")
             )
         )
 
@@ -144,7 +150,9 @@ class ServiceRedeemView(BaseCreateAPIView):
             "Program Service not found with the given ID",
             pk=self.kwargs["pk"],
         )
-        serializer.save(program_service=program_service, redeemed_by=self.request.user)
+        serializer.save(
+            program_service=program_service, redeemed_by=self.request.user
+        )
 
 
 class ProgramServiceRedemptionHistory(BaseListAPIView):
