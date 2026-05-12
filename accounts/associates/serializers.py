@@ -23,7 +23,10 @@ from accounts.serializers import BasePasswordCheckOptionalSerializer
 from accounts.users.models import User
 from accounts.users.serializers import BaseUserSerializer
 from accounts.users.utils.constants import Gender
-from accounts.utils.db import check_user_exists
+from accounts.utils.db import (
+    check_admin_associate_user_exists,
+    check_customer_user_exists,
+)
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
@@ -33,9 +36,7 @@ class BaseAssociateSerializer(BaseModelSerializer):
 
     id = serializers.UUIDField(source="user.id", read_only=True)
     email = serializers.EmailField(source="user.email", required=False)
-    phone = PhoneNumberSerializerField(
-        source="user.phone", required=False, allow_null=True
-    )
+    contact_phone = PhoneNumberSerializerField(required=False, allow_null=True)
     first_name = serializers.CharField(
         source="user.first_name", required=False, allow_null=True
     )
@@ -60,7 +61,7 @@ class BaseAssociateSerializer(BaseModelSerializer):
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -80,7 +81,9 @@ class BaseAssociateSerializer(BaseModelSerializer):
         return rep
 
 
-class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptionalSerializer):
+class AdminAssociateSerializer(
+    BaseAssociateSerializer, BasePasswordCheckOptionalSerializer
+):
     """Serializers for admins to update or create associates"""
 
     class Meta:
@@ -88,7 +91,7 @@ class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptiona
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -100,7 +103,7 @@ class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptiona
             "last_login",
             "updated_at",
             "password1",
-            "password2"
+            "password2",
         ]
         extra_kwargs = {"email": {"required": True}}
 
@@ -108,16 +111,15 @@ class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptiona
         """Admins will create via this serializer"""
         user_data = validated_data.pop("user", {})
         email = user_data.get("email")
-        phone = user_data.get("phone")
 
         password = self.get_validated_password(validated_data)
 
-        errors = check_user_exists(email, phone)
+        errors = check_admin_associate_user_exists(email)
         if errors:
             raise serializers.ValidationError(errors)
 
         with transaction.atomic():
-            user = User.objects.create_user(**user_data, password=password)
+            user = User.objects.create_user(**user_data, password=password, phone=None)
             validated_data["user"] = user
             associate = super().create(validated_data)
             create_associate_user_account(associate)
@@ -126,6 +128,7 @@ class AdminAssociateSerializer(BaseAssociateSerializer, BasePasswordCheckOptiona
     def update(self, instance: Associate, validated_data):
         """Only Admins will be able to update associates"""
         user_data = validated_data.pop("user", {})
+        user_data.pop("phone", None)
         is_active = user_data.get("is_active", False)
         for key, value in user_data.items():
             setattr(instance.user, key, value)
@@ -146,7 +149,7 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -157,7 +160,6 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
             "date_joined",
             "last_login",
             "updated_at",
-
         ]
 
     def create(self, validated_data):
@@ -166,6 +168,7 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
     def update(self, instance: Associate, validated_data):
         """Only Admins will be able to update associates"""
         user_data = validated_data.pop("user", {})
+        user_data.pop("phone", None)
         is_active = user_data.get("is_active", False)
         for key, value in user_data.items():
             setattr(instance.user, key, value)
@@ -173,7 +176,7 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
         validated_data["is_active"] = is_active
         return super().update(instance, validated_data)
 
- 
+
 class AssociateProfileSerializer(BaseAssociateSerializer):
     """Serializer only for associates to update or view their profile"""
 
@@ -181,8 +184,8 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
         model = Associate
         fields = [
             "id",
+            "contact_phone",
             "email",
-            "phone",
             "first_name",
             "last_name",
             "gender",
@@ -426,8 +429,8 @@ class CenterAssociateSerializer(
     email = serializers.EmailField(
         source="associate.user.email", allow_null=True, required=True
     )
-    phone = PhoneNumberSerializerField(
-        source="associate.user.phone", allow_null=True, required=False
+    contact_phone = PhoneNumberSerializerField(
+        source="associate.contact_phone", allow_null=True, required=False
     )
     first_name = serializers.CharField(
         source="associate.user.first_name", required=True
@@ -460,7 +463,7 @@ class CenterAssociateSerializer(
             # User fields (flattened)
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -492,15 +495,13 @@ class CenterAssociateSerializer(
         is_admin = validated_data.pop("is_admin", False)
 
         email = user_data.get("email")
-        phone = user_data.get("phone")
+        contact_phone = associate_data.get("contact_phone")
         password1 = None
         role = None
 
         errors = {}
         if email and User.objects.filter(email__iexact=email).exists():
             errors["email"] = "User with this email already exists."
-        if phone and User.objects.filter(phone__iexact=phone).exists():
-            errors["phone"] = "User with this phone already exists."
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -522,8 +523,10 @@ class CenterAssociateSerializer(
         validated_data["is_admin"] = is_admin
 
         with transaction.atomic():
-            user = User.objects.create_user(**user_data, password=password1)
-            associate = Associate.objects.create(user=user, **associate_data)
+            user = User.objects.create_user(**user_data, password=password1, phone=None)
+            associate = Associate.objects.create(
+                user=user, contact_phone=contact_phone, **associate_data
+            )
             create_associate_user_account(associate)
 
             assignment = AssociateCenterAssignment.objects.create(
@@ -555,8 +558,8 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
     email = serializers.EmailField(
         source="associate.user.email", allow_null=True, required=True
     )
-    phone = PhoneNumberSerializerField(
-        source="associate.user.phone", allow_null=True, required=False
+    contact_phone = PhoneNumberSerializerField(
+        source="associate.contact_phone", allow_null=True, required=False
     )
     first_name = serializers.CharField(
         source="associate.user.first_name", required=True
@@ -591,7 +594,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
             # User fields (flattened)
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -609,31 +612,24 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
             "updated_at",
         ]
 
-    def create(self, validated_data):
-        pass
-
     def update(self, instance: AssociateCenterAssignment, validated_data):
         """Update user fields, associate fields, and role on the assignment."""
         associate_data = validated_data.pop("associate", {})
         user_data = associate_data.pop("user", {})
+        user_data.pop("phone", None)
         role_id = validated_data.pop("role_id", None)
 
         user = instance.associate.user
 
         email = user_data.get("email")
-        phone = user_data.get("phone")
 
         errors = {}
         if (
-                email
-                and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
+            email
+            and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
         ):
             errors["email"] = "User with this email already exists."
-        if (
-                phone
-                and User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists()
-        ):
-            errors["phone"] = "User with this phone already exists."
+
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -643,7 +639,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
+                pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
@@ -709,8 +705,8 @@ class AssociateLinkedProfileSerializer(BaseModelSerializer):
         source="customer_profile.date_of_birth", read_only=True
     )
     image = serializers.ImageField(source="customer_profile.image", read_only=True)
-    email = serializers.EmailField(
-        source="customer_profile.customer.user.email", read_only=True
+    contact_email = serializers.EmailField(
+        source="customer_profile.customer.contact_email", read_only=True
     )
     phone = PhoneNumberSerializerField(
         source="customer_profile.customer.user.phone", read_only=True
@@ -726,7 +722,7 @@ class AssociateLinkedProfileSerializer(BaseModelSerializer):
         model = CustomerAssociateAssignment
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -740,14 +736,17 @@ class AssociateLinkedProfileSerializer(BaseModelSerializer):
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep["gender"] = instance.customer_profile.get_gender_display()
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.customer_profile.get_gender_display()
         return rep
 
 
 class AssociateAvailableProfileSerializer(BaseModelSerializer):
     """Serializer for listing customer profiles available to be linked to an associate."""
 
-    email = serializers.EmailField(source="customer.user.email", read_only=True)
+    contact_email = serializers.EmailField(
+        source="customer.contact_email", read_only=True
+    )
     phone = PhoneNumberSerializerField(source="customer.user.phone", read_only=True)
     is_active = serializers.BooleanField(
         source="customer.user.is_active", read_only=True
@@ -758,7 +757,7 @@ class AssociateAvailableProfileSerializer(BaseModelSerializer):
         model = CustomerProfile
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -773,7 +772,8 @@ class AssociateAvailableProfileSerializer(BaseModelSerializer):
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep["gender"] = instance.get_gender_display()
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.get_gender_display()
         return rep
 
 
