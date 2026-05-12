@@ -1,4 +1,11 @@
-from django.db.models import Exists, OuterRef, Q, Prefetch, ProtectedError, RestrictedError
+from django.db.models import (
+    Exists,
+    OuterRef,
+    Q,
+    Prefetch,
+    ProtectedError,
+    RestrictedError,
+)
 
 from accounts.centers.models import Center
 from accounts.centers.serializers import ServiceAvailableCenterSerializer
@@ -30,32 +37,40 @@ class ServicesView(BaseListCreateAPIView):
 
     def get_queryset(self):
         filter_kwargs = {}
+        search = Q()
+        search_params = self.request.query_params.get("search", "").strip()
+        active_query = self.request.query_params.get("active", None)
         center_ids = self.request.query_params.getlist("center_id", [])
         if center_ids:
             filter_kwargs["center_assignments__center_id__in"] = center_ids
 
-        locked_subquery = ProgramService.objects.filter(service=OuterRef('pk'))
+        if active_query and active_query in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_query))
+
+        if search_params:
+            search |= Q(name__istartswith=search_params)
+            search |= Q(name__icontains=search_params)
+
+        locked_subquery = ProgramService.objects.filter(service=OuterRef("pk"))
 
         prefetch = Prefetch(
             "center_assignments",
-            queryset=CenterServiceAssignment.objects.select_related("center")
+            queryset=CenterServiceAssignment.objects.select_related("center"),
         )
         if center_ids:
             prefetch = Prefetch(
                 "center_assignments",
                 queryset=CenterServiceAssignment.objects.filter(
                     center_id__in=center_ids
-                ).select_related("center")
+                ).select_related("center"),
             )
 
         qs = (
-            Service.objects.filter(**filter_kwargs)
-            .annotate(
-                is_locked=Exists(locked_subquery)
-            )
+            Service.objects.filter(search, **filter_kwargs)
+            .annotate(is_locked=Exists(locked_subquery))
             .prefetch_related(prefetch)
             .select_related("created_by")
-            .order_by('-created_by')
+            .order_by("-created_by")
             .distinct()
         )
         return qs
@@ -74,7 +89,7 @@ class ServiceDetailView(BaseRetrieveUpdateDestroyAPIView):
             .prefetch_related(
                 Prefetch(
                     "center_assignments",
-                    queryset=CenterServiceAssignment.objects.select_related("center")
+                    queryset=CenterServiceAssignment.objects.select_related("center"),
                 )
             )
             .select_related("created_by")
@@ -84,7 +99,7 @@ class ServiceDetailView(BaseRetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         try:
             super().perform_destroy(instance)
-        except (ProtectedError, RestrictedError):
+        except ProtectedError, RestrictedError:
             self.raise_bad_request(
                 "This service is currently in use and cannot be deleted. Deactivate it instead."
             )
@@ -104,11 +119,11 @@ class ServiceAvailableCenters(BaseListAPIView):
         exists_subquery = CenterServiceAssignment.objects.filter(
             center_id=OuterRef("pk"), service_id=self.kwargs["pk"], is_active=True
         )
-        qs = Center.objects.filter(
-            search, is_active=True
-        ).annotate(
-            exists=Exists(exists_subquery)
-        ).order_by('-created_at')
+        qs = (
+            Center.objects.filter(search, is_active=True)
+            .annotate(exists=Exists(exists_subquery))
+            .order_by("-created_at")
+        )
         return qs
 
 
@@ -140,7 +155,7 @@ class ServiceRedeemView(BaseCreateAPIView):
                 "service__center_assignments",
                 queryset=CenterServiceAssignment.objects.filter(
                     is_active=True
-                ).select_related("center")
+                ).select_related("center"),
             )
         )
 
@@ -150,9 +165,7 @@ class ServiceRedeemView(BaseCreateAPIView):
             "Program Service not found with the given ID",
             pk=self.kwargs["pk"],
         )
-        serializer.save(
-            program_service=program_service, redeemed_by=self.request.user
-        )
+        serializer.save(program_service=program_service, redeemed_by=self.request.user)
 
 
 class ProgramServiceRedemptionHistory(BaseListAPIView):
