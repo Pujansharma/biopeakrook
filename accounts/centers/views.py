@@ -38,9 +38,9 @@ class CentersView(BaseListCreateAPIView):
         search = Q()
         filter_kwargs = {}
         search_params = self.request.query_params.get("search", "").strip()
-        active_query_param = self.request.query_params.get('active', None)
-        if active_query_param and active_query_param in ['0', '1']:
-            filter_kwargs['is_active'] = bool(int(active_query_param))
+        active_query_param = self.request.query_params.get("active", None)
+        if active_query_param and active_query_param in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_query_param))
         if search_params:
             search |= Q(name__istartswith=search_params) | Q(
                 code__icontains=search_params
@@ -149,8 +149,8 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
 
 
 class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
-    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateRoleSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
         center = self.get_center()
@@ -179,8 +179,8 @@ class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
 class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
     """UUID-path scoped: list/create customer profiles for a center by UUID"""
 
-    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CenterCustomerProfileHomeCenterSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -205,10 +205,12 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
 
         if search_params:
             search_query |= (
-                    Q(customer_profile__first_name__istartswith=search_params)
-                    | Q(customer_profile__first_name__icontains=search_params)
-                    | Q(customer_profile__customer__user__phone__istartswith=search_params)
-                    | Q(customer_profile__customer__user__phone__icontains=search_params)
+                Q(customer_profile__first_name__istartswith=search_params)
+                | Q(customer_profile__first_name__icontains=search_params)
+                | Q(customer_profile__customer__user__phone__istartswith=search_params)
+                | Q(customer_profile__customer__user__phone__icontains=search_params)
+                | Q(customer__contact_email__istartswith=search_params)
+                | Q(customer__contact_email__icontaints=search_params)
             )
 
         return (
