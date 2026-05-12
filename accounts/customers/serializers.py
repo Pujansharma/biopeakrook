@@ -24,9 +24,6 @@ from accounts.customers.models import (
 from accounts.customers.utils.db import (
     create_customer_user_account,
     increment_centers_count,
-    decrement_centers_count,
-    increment_external_centers_count,
-    decrement_external_centers_count,
     compute_customer_profile_center_counts,
 )
 from accounts.users.models import User
@@ -45,21 +42,26 @@ class CustomerAccountSerializer(BaseModelSerializer):
 
     phone = PhoneNumberSerializerField(source="user.phone", read_only=True)
     phone_otp = serializers.CharField(write_only=True, required=False)
-    email = serializers.EmailField(source="user.email", required=False, allow_null=True)
+    # email = serializers.EmailField(source="", required=False, allow_null=True)
     email_otp = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Customer
         fields = [
             "phone",
+            "contact_email",
             "phone_otp",
             "email",
             "email_otp",
         ]
 
     def update(self, instance: Customer, validated_data):
-        phone = validated_data.get("phone", None)
-        phone_otp = validated_data.get("phone_otp", None)
+        phone = validated_data.pop("phone", None)
+        phone_otp = validated_data.pop("phone_otp", None)
+
+        contact_email = validated_data.get("contact_email", None)
+        email_otp = validated_data.pop("email_otp", None)
+
         if phone and not phone_otp:
             raise serializers.ValidationError(
                 {"phone_otp": "OTP is required for phone validation"}
@@ -73,10 +75,10 @@ class CustomerAccountSerializer(BaseModelSerializer):
                 {"phone": "Invalid Phone number provided"}
             )
 
-        email = validated_data.get("email", None)
-        email_otp = validated_data.get("email_otp", None)
-        if email and not email_otp:
+        if contact_email and not email_otp:
             raise serializers.ValidationError({"email_otp": "Invalid OTP provided"})
+
+        # TODO: Validate OTPs for phone and email
 
         user_data = validated_data.pop("user", {})
 
@@ -85,18 +87,20 @@ class CustomerAccountSerializer(BaseModelSerializer):
             for key, value in user_data.items():
                 setattr(user, key, value)
             user.save()
-        return instance
+        return super().update(instance, validated_data)
 
 
 class BaseCustomerProfileSerializer(BaseModelSerializer):
-    email = serializers.EmailField(source="customer.user.email", read_only=True)
+    contact_email = serializers.EmailField(
+        source="customer.contact_email", read_only=True
+    )
     phone = PhoneNumberSerializerField(source="customer.user.phone", read_only=True)
 
     class Meta:
         model = CustomerProfile
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -117,7 +121,7 @@ class CustomerProfileWithCenterSerializer(BaseCustomerProfileSerializer):
         model = CustomerProfile
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -176,8 +180,8 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
     """Serializer for center admins to list, create, and update customer profiles"""
 
     id = serializers.UUIDField(source="customer_profile.id", read_only=True)
-    email = serializers.EmailField(
-        source="customer_profile.customer.user.email", required=True
+    contact_email = serializers.EmailField(
+        source="customer_profile.customer.contact_email", required=True
     )
     phone = PhoneNumberSerializerField(
         source="customer_profile.customer.user.phone", required=True
@@ -217,7 +221,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         model = CustomerCenterAssignment
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -240,8 +244,9 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         profile_wrapper = validated_data.pop("customer_profile", {})
         customer_wrapper = profile_wrapper.pop("customer", {})
         user_wrapper = customer_wrapper.pop("user", {})
+        contact_email = customer_wrapper.pop("contact_email", None)
         phone = user_wrapper.get("phone")
-        email = user_wrapper.get("email")
+        # email = user_wrapper.get("email")
 
         phone_user = User.objects.filter(phone__iexact=phone).first()
         if phone_user:
@@ -251,14 +256,14 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
                     "phone": f"A user with this phone number already exists as an {account_type} account."
                 }
             )
-        email_user = User.objects.filter(email__iexact=email).first()
-        if email_user:
-            account_type = get_user_account_type(email_user)
-            raise serializers.ValidationError(
-                {
-                    "email": f"A user with this email already exists as an {account_type} account."
-                }
-            )
+        # email_user = User.objects.filter(email__iexact=email).first()
+        # if email_user:
+        #     account_type = get_user_account_type(email_user)
+        #     raise serializers.ValidationError(
+        #         {
+        #             "email": f"A user with this email already exists as an {account_type} account."
+        #         }
+        #     )
 
         profile_data = {
             "first_name": profile_wrapper.get("first_name"),
@@ -270,16 +275,16 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
 
         with transaction.atomic():
             user = User.objects.create_user(
-                email=email, password=None, phone=phone, **profile_data
+                email=None, password=None, phone=phone, **profile_data
             )
-            customer = Customer.objects.create(user=user)
+            customer = Customer.objects.create(user=user, contact_email=contact_email)
             profile = CustomerProfile.objects.create(
                 customer=customer, is_main=True, **profile_data
             )
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                    customer_profile=profile, is_primary=True
+                customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -307,8 +312,8 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
     """Serializer for center admins to list, create, and update customer profiles"""
 
     id = serializers.UUIDField(source="customer_profile.id", read_only=True)
-    email = serializers.EmailField(
-        source="customer_profile.customer.user.email", required=True
+    contact_email = serializers.EmailField(
+        source="customer_profile.customer.contact_email", required=True
     )
     phone = PhoneNumberSerializerField(
         source="customer_profile.customer.user.phone", required=True
@@ -349,7 +354,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
         model = CustomerCenterAssignment
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -363,11 +368,13 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             "external_centers_count",
             "created_at",
             "updated_at",
-            "home_center"
+            "home_center",
         ]
 
     def get_home_center(self, instance):
-        assignments = getattr(instance.customer_profile, "primary_center_assignments", None)
+        assignments = getattr(
+            instance.customer_profile, "primary_center_assignments", None
+        )
         if not assignments:
             return None
         return MinimumCenterSerializer(assignments[0].center, context=self.context).data
@@ -380,7 +387,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
         customer_wrapper = profile_wrapper.pop("customer", {})
         user_wrapper = customer_wrapper.pop("user", {})
         phone = user_wrapper.get("phone")
-        email = user_wrapper.get("email")
+        contact_email = customer_wrapper.get("contact_email")
 
         phone_user = User.objects.filter(phone__iexact=phone).first()
         if phone_user:
@@ -388,14 +395,6 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             raise serializers.ValidationError(
                 {
                     "phone": f"A user with this phone number already exists as an {account_type} account."
-                }
-            )
-        email_user = User.objects.filter(email__iexact=email).first()
-        if email_user:
-            account_type = get_user_account_type(email_user)
-            raise serializers.ValidationError(
-                {
-                    "email": f"A user with this email already exists as an {account_type} account."
                 }
             )
 
@@ -409,16 +408,16 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
 
         with transaction.atomic():
             user = User.objects.create_user(
-                email=email, password=None, phone=phone, **profile_data
+                email=None, password=None, phone=phone, **profile_data
             )
-            customer = Customer.objects.create(user=user)
+            customer = Customer.objects.create(user=user, contact_email=contact_email)
             profile = CustomerProfile.objects.create(
                 customer=customer, is_main=True, **profile_data
             )
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                    customer_profile=profile, is_primary=True
+                customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -456,8 +455,8 @@ class BaseCustomerAssignedCenterSerializer(BaseModelSerializer):
 
 class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="customer_profile.id", read_only=True)
-    email = serializers.EmailField(
-        source="customer_profile.customer.user.email", required=True
+    contact_email = serializers.EmailField(
+        source="customer_profile.customer.contact_email", required=True
     )
     phone = PhoneNumberSerializerField(
         source="customer_profile.customer.user.phone", required=True
@@ -495,7 +494,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
         model = CustomerCenterAssignment
         fields = [
             "id",
-            "email",
+            "contact_email",
             "phone",
             "first_name",
             "last_name",
@@ -510,14 +509,22 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["is_main", "is_primary", "centers_count", "external_centers_count"]
+        read_only_fields = [
+            "is_main",
+            "is_primary",
+            "centers_count",
+            "external_centers_count",
+        ]
 
     def update(self, instance: CustomerCenterAssignment, validated_data):
         profile_wrapper = validated_data.pop("customer_profile", {})
         customer_wrapper = profile_wrapper.pop("customer", {})
         user_wrapper = customer_wrapper.pop("user", {})
         phone = user_wrapper.get("phone")
-        email = user_wrapper.get("email")
+        # email = user_wrapper.get("email")
+        # contact_email = customer_wrapper.get('contact_email')
+
+        print("CUSTOMER WRAPPER: ", customer_wrapper)
 
         is_active = user_wrapper.get("is_active", None)
         if is_active is not None:
@@ -530,11 +537,11 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
                     {"phone": "A user with this phone number already exists."}
                 )
 
-        if email:
-            if User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists():
-                raise serializers.ValidationError(
-                    {"phone": "A user with this phone number already exists."}
-                )
+        # if email:
+        #     if User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists():
+        #         raise serializers.ValidationError(
+        #             {"phone": "A user with this phone number already exists."}
+        #         )
 
         if profile_wrapper:
             profile = instance.customer_profile
@@ -564,6 +571,12 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
                 decrement_inactive_customer_count(instance.center.pk)
 
         return instance
+
+    def to_representation(self, instance: CustomerCenterAssignment):
+        rep = super().to_representation(instance)
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.customer_profile.get_gender_display()
+        return rep
 
 
 class CustomerRegistrationSerializer(BaseModelSerializer):
