@@ -70,7 +70,7 @@ class ServicesView(BaseListCreateAPIView):
             .annotate(is_locked=Exists(locked_subquery))
             .prefetch_related(prefetch)
             .select_related("created_by")
-            .order_by("-created_by")
+            .order_by("-created_at")
             .distinct()
         )
         return qs
