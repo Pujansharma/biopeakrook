@@ -16,9 +16,7 @@ class ExternalCustomerServiceSerializer(BaseModelSerializer):
         fields = ["id", "name", "centers"]
 
     def get_centers(self, instance):
-        assignments = instance.center_assignments.select_related(
-            "center"
-        ).filter(
+        assignments = instance.center_assignments.select_related("center").filter(
             is_active=True
         )[:10]
         if not assignments:
