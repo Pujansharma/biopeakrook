@@ -7,7 +7,7 @@ from accounts.serializers import BasePasswordCheckSerializer
 from accounts.users.serializers import BaseUserSerializer
 from accounts.users.utils.constants import Gender
 from accounts.utils import get_user_model
-from accounts.utils.db import check_user_exists
+from accounts.utils.db import check_admin_associate_user_exists
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
 
@@ -19,9 +19,7 @@ class BaseAdminUserSerializer(BaseModelSerializer):
 
     id = serializers.UUIDField(source="user.id", read_only=True)
     email = serializers.EmailField(source="user.email", required=False)
-    phone = PhoneNumberSerializerField(
-        source="user.phone", required=False, allow_null=True
-    )
+    contact_phone = PhoneNumberSerializerField(required=False, allow_null=True)
     first_name = serializers.CharField(
         source="user.first_name", required=False, allow_null=True
     )
@@ -46,7 +44,7 @@ class BaseAdminUserSerializer(BaseModelSerializer):
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -73,7 +71,7 @@ class AdminUserSerializer(BaseAdminUserSerializer, BasePasswordCheckSerializer):
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -94,9 +92,8 @@ class AdminUserSerializer(BaseAdminUserSerializer, BasePasswordCheckSerializer):
         password = validated_data.get("password1")
         user_data = validated_data.pop("user", {})
         email = user_data.get("email")
-        phone = user_data.get("phone")
 
-        errors = check_user_exists(email, phone)
+        errors = check_admin_associate_user_exists(email)
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -121,7 +118,7 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -144,6 +141,9 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
         request = self.context.get("request", None)
         user: User | None = getattr(request, "user", None)
 
+        if not user:
+            raise serializers.ValidationError("Invalid user provided")
+
         if user and user.pk == instance.user.id:
             raise PermissionDenied()
 
@@ -151,9 +151,9 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
         validated_data.pop("password2", None)
 
         user_data = validated_data.pop("user", {})
+        user_data.pop("phone", None)
 
         email = user_data.get("email")
-        phone = user_data.get("phone")
 
         errors = {}
         if (
@@ -163,13 +163,7 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
             .exists()
         ):
             errors["email"] = "User with this email already exists."
-        if (
-            phone
-            and User.objects.filter(phone__iexact=phone)
-            .exclude(pk=instance.user.pk)
-            .exists()
-        ):
-            errors["phone"] = "User with this phone already exists."
+
         if errors:
             raise serializers.ValidationError(errors)
 
@@ -188,7 +182,7 @@ class AdminProfileSerializer(BaseAdminUserSerializer):
         fields = [
             "id",
             "email",
-            "phone",
+            "contact_phone",
             "first_name",
             "last_name",
             "gender",
@@ -207,6 +201,7 @@ class AdminProfileSerializer(BaseAdminUserSerializer):
         user_data = validated_data.pop("user", {})
         user_data.pop("email", None)
         user_data.pop("phone", None)
+
         validated_data.pop("is_active", None)
 
         for key, value in user_data.items():
