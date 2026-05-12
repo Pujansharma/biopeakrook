@@ -34,6 +34,29 @@
 - ✅ Serializer updated to call count updates on add/remove
 - ✅ Management command: `python manage.py recompute_external_centers_count`
 
+**COMPLETED:** Email/Phone Field Separation (2026-05-12)
+- ✅ Models: `contact_phone` on Admin/Associate, `contact_email` on Customer
+- ✅ Serializers: Updated to expose contact_phone (not user.phone) for staff, contact_email for customers
+- ✅ All create/update methods enforce field separation:
+  - Admin/Associate creation: phone=None, user.email set
+  - Customer creation: email=None, user.phone set
+- ✅ Explicit validation functions: check_admin_associate_user_exists(), check_customer_user_exists()
+- ✅ All update methods pop unwanted fields (user.phone for staff, user.email for customers)
+- ✅ Django admin updated:
+  - AdminUserAdmin: contact_phone in list_display, search_fields, fieldsets
+  - AssociateAdmin: contact_phone in list_display, search_fields, organized fieldsets
+  - CustomerAdmin: contact_email in list_display, search_fields, fieldsets
+  - CustomerProfileAdmin: contact_email in list_display, better fieldsets organization
+- **Files modified:**
+  - accounts/admins/serializers.py: phone→contact_phone in serializers, prevent phone in updates
+  - accounts/associates/serializers.py: phone→contact_phone in 4 serializers, fix CenterAssociateSerializer data flow
+  - accounts/admins/utils/db.py: explicit phone=None in create_admin_user()
+  - accounts/utils/db.py: new explicit validation functions for account types
+  - accounts/admins/admin.py: contact_phone in display, search, and fieldsets
+  - accounts/associates/admin.py: contact_phone in display, search, and fieldsets
+  - accounts/customers/admin.py: contact_email in display, search, and fieldsets
+- **Changes:** ~150 insertions/80 deletions across 7 files, all syntax validated
+
 ---
 
 ## Conventions Established Through Collaboration
