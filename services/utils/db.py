@@ -18,13 +18,13 @@ def update_service_center_count(service_id: UUID) -> None:
         .annotate(count=Count("center_id"))
         .values("count")
     )
-    Service.objects.filter(pk=service_id).update(centers_count=Coalesce(
-        Subquery(subquery), Value(0)
-    ))
+    Service.objects.filter(pk=service_id).update(
+        centers_count=Coalesce(Subquery(subquery), Value(0))
+    )
 
 
 def redeem_program_service(
-        program_service_id: UUID, center_id: UUID, redeemed_by, quantity: int
+    program_service_id: UUID, center_id: UUID, redeemed_by, quantity: int
 ) -> None:
     with transaction.atomic():
         ProgramService.objects.filter(pk=program_service_id).update(
