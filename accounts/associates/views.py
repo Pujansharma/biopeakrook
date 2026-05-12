@@ -18,7 +18,8 @@ from accounts.associates.serializers import (
     AssociateCenterPermissionSerializer,
     AssociateLinkedProfileSerializer,
     AssociateAvailableProfileSerializer,
-    AssociateProfileLinkSerializer, AdminAssociateDetailSerializer,
+    AssociateProfileLinkSerializer,
+    AdminAssociateDetailSerializer,
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import AssociateAvailableCenterSerializer
@@ -49,16 +50,18 @@ class AssociateView(BaseListCreateAPIView):
     serializer_class = AdminAssociateSerializer
 
     def get_queryset(self):
+        filter_kwargs = {}
         search_query = Q()
         search_params = self.request.query_params.get("search", "").strip()
+        active_param = self.request.query_params.get("active", None)
+        if active_param and active_param in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_param))
         if search_params:
-            search_query |= (
-                    Q(user__email__istartswith=search_params)
-                    | Q(user__phone__istartswith=search_params)
-                    | Q(user__first_name__istartswith=search_params)
-            )
+            search_query |= Q(user__email__istartswith=search_params)
+            search_query |= Q(user__phone__istartswith=search_params)
+            search_query |= Q(user__first_name__istartswith=search_params)
 
-        return Associate.objects.select_related().filter(search_query)
+        return Associate.objects.select_related().filter(search_query, **filter_kwargs)
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -154,12 +157,11 @@ class AssociateAssignedCenters(BaseListAPIView):
         search_query = Q()
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
-            search_query |= (
-                    Q(name__istartswith=search_params)
-                    | Q(code__istartswith=search_params)
-                    | Q(code__icontains=search_params)
-                    | Q(name__icontains=search_params)
-            )
+            search_query |= Q(name__istartswith=search_params)
+            search_query |= Q(code__istartswith=search_params)
+            search_query |= Q(code__icontains=search_params)
+            search_query |= Q(name__icontains=search_params)
+
         is_admin_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate, center=OuterRef("pk")
         ).values("is_admin")
