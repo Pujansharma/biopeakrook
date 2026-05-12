@@ -26,6 +26,9 @@ from accounts.customers.utils.db import (
     increment_centers_count,
     compute_customer_profile_center_counts,
 )
+from accounts.organizations.utils.db import (
+    increment_organization_clients_count,
+)
 from accounts.users.models import User
 from accounts.users.serializers import BaseUserSerializer
 from accounts.users.utils.constants import Gender
@@ -294,6 +297,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             )
             increment_customer_count(center_id)
             increment_centers_count(profile.pk)
+            increment_organization_clients_count()
 
         return assignment
 
@@ -427,6 +431,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             )
             increment_customer_count(center_id)
             increment_centers_count(profile.pk)
+            increment_organization_clients_count()
 
         return assignment
 
@@ -524,8 +529,6 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
         # email = user_wrapper.get("email")
         # contact_email = customer_wrapper.get('contact_email')
 
-        print("CUSTOMER WRAPPER: ", customer_wrapper)
-
         is_active = user_wrapper.get("is_active", None)
         if is_active is not None:
             profile_wrapper["is_active"] = is_active
@@ -547,7 +550,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             profile = instance.customer_profile
             for key, value in profile_wrapper.items():
                 setattr(profile, key, value)
-            profile.save(update_fields=[*list(profile_wrapper.keys()), "updated_at"])
+            profile.save(update_fields=[*profile_wrapper.keys(), "updated_at"])
 
             if profile.is_main:
                 for field in PROFILE_FIELDS:
@@ -559,7 +562,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             user.save(
                 update_fields=[
                     *PROFILE_FIELDS,
-                    *list(user_wrapper.keys()),
+                    *user_wrapper.keys(),
                     "updated_at",
                 ]
             )
@@ -569,7 +572,11 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
                 increment_inactive_customer_count(instance.center.pk)
             if user.is_active:
                 decrement_inactive_customer_count(instance.center.pk)
-
+        for key, value in customer_wrapper.items():
+            setattr(instance.customer_profile.customer, key, value)
+        instance.customer_profile.customer.save(
+            update_fields=[*customer_wrapper.keys(), "updated_at"]
+        )
         return instance
 
     def to_representation(self, instance: CustomerCenterAssignment):
