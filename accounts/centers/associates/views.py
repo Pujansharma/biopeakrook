@@ -11,11 +11,9 @@ class CenterAssociateDetailView(BaseRetrieveUpdateAPIView):
     serializer_class = CenterAssociateDetailSerializer
 
     def get_center(self):
-        center_id = self.request.headers.get('x-center-id')
+        center_id = self.request.headers.get("x-center-id")
         qs = Center.objects.filter()
-        return get_object_or_404(
-            qs, "Invalid center ID provided", pk=center_id
-        )
+        return get_object_or_404(qs, "Invalid center ID provided", pk=center_id)
 
     def get_queryset(self):
         center = self.get_center()
@@ -33,5 +31,5 @@ class CenterAssociateDetailView(BaseRetrieveUpdateAPIView):
     def get_object(self):
         qs = self.get_queryset()
         return get_object_or_404(
-            qs, "No associate found with the given ID", associate__pk=self.kwargs['pk']
+            qs, "No associate found with the given ID", associate__pk=self.kwargs["pk"]
         )
