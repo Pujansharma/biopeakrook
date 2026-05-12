@@ -132,7 +132,9 @@ class ExternalUserProgramServicesListView(BaseListAPIView):
                 Prefetch(
                     "service__center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(
-                        center__redeemable_programs__wellness_program__id=self.kwargs["pk"],
+                        center__redeemable_programs__wellness_program__id=self.kwargs[
+                            "pk"
+                        ],
                         is_active=True,
                     ).select_related("center"),
                 ),
@@ -175,7 +177,9 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
                 Prefetch(
                     "service__center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(
-                        center__redeemable_programs__program_services__pk=self.kwargs["pk"],
+                        center__redeemable_programs__program_services__pk=self.kwargs[
+                            "pk"
+                        ],
                         is_active=True,
                     ).select_related("center"),
                 ),
