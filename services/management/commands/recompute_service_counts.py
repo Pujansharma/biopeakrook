@@ -11,7 +11,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         centers_count_subquery = Coalesce(
             Subquery(
-                CenterServiceAssignment.objects.filter(service_id=OuterRef("pk"), is_active=True)
+                CenterServiceAssignment.objects.filter(
+                    service_id=OuterRef("pk"), is_active=True
+                )
                 .values("service_id")
                 .annotate(count=Count("center_id"))
                 .values("count")
