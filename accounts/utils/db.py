@@ -44,10 +44,30 @@ def validate_password_reset_token(uid: str, token: str) -> tuple[Optional[User],
 
 
 def check_user_exists(email: str = None, phone: str = None) -> dict[str, str]:
-    """Check if the user exists and raises exception if it doesn't"""
+    """Check if the user exists by email and/or phone.
+
+    For admins/associates: only email is checked (phone must be None).
+    For customers: only phone is checked (email must be None).
+    """
     errors = {}
     if email and User.objects.filter(email__iexact=email).exists():
         errors["email"] = "User with this email already exists."
+    if phone and User.objects.filter(phone__iexact=phone).exists():
+        errors["phone"] = "User with this phone already exists."
+    return errors
+
+
+def check_admin_associate_user_exists(email: str) -> dict[str, str]:
+    """Check if admin/associate user exists by email only."""
+    errors = {}
+    if email and User.objects.filter(email__iexact=email).exists():
+        errors["email"] = "User with this email already exists."
+    return errors
+
+
+def check_customer_user_exists(phone: str) -> dict[str, str]:
+    """Check if customer user exists by phone only."""
+    errors = {}
     if phone and User.objects.filter(phone__iexact=phone).exists():
         errors["phone"] = "User with this phone already exists."
     return errors
