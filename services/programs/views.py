@@ -54,13 +54,11 @@ class WellnessProgramServicesListView(BaseListAPIView):
 
     def get_queryset(self):
         subquery_filter_kwargs = {}
-        center_id = self.request.headers.get('x-center-id', None)
+        center_id = self.request.headers.get("x-center-id", None)
         if center_id:
-            subquery_filter_kwargs['center_id'] = center_id
+            subquery_filter_kwargs["center_id"] = center_id
         can_redeem_subquery = CenterServiceAssignment.objects.filter(
-            service_id=OuterRef('service_id'),
-            is_active=True,
-            **subquery_filter_kwargs
+            service_id=OuterRef("service_id"), is_active=True, **subquery_filter_kwargs
         )
         qs = (
             ProgramService.objects.filter(
@@ -70,10 +68,8 @@ class WellnessProgramServicesListView(BaseListAPIView):
                 "cancelled_by",
             )
             .prefetch_related("service", "created_by")
-            .annotate(
-                can_redeem=Exists(can_redeem_subquery)
-            )
-            .order_by('-created_at')
+            .annotate(can_redeem=Exists(can_redeem_subquery))
+            .order_by("-created_at")
         )
 
         return qs
