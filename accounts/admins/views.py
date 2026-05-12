@@ -23,8 +23,8 @@ class AdminUserView(BaseListCreateAPIView):
         search_query = Q()
         filter_kwargs = {}
         search_param = self.request.query_params.get("search", "").strip()
-        active_param = self.request.query_params.get("is_active", None)
-        if active_param is not None:
+        active_param = self.request.query_params.get("active", None)
+        if active_param and active_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_param))
         if search_param:
             search_query |= Q(user__email__istartswith=search_param)
