@@ -72,8 +72,8 @@ class CustomerProfilesListView(BaseListAPIView):
 class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
     """Retrieve/update/delete a customer profile. Accessible by admins and associates."""
 
-    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CenterCustomerProfileDetailSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -221,8 +221,12 @@ class CustomerAvailableCenterView(BaseListAPIView):
         return get_object_or_404(qs, pk=self.kwargs["pk"])
 
     def get_queryset(self):
+        filter_kwargs = {}
         search = Q()
         search_params = self.request.query_params.get("search", "").strip()
+        active_param = self.request.query_params.get("active", None)
+        if active_param and active_param in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_param))
         if search_params:
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
@@ -239,9 +243,7 @@ class CustomerAvailableCenterView(BaseListAPIView):
         return Center.objects.annotate(
             exists=Exists(exists_subquery),
             is_primary=Coalesce(Subquery(is_primary_subquery), Value(False)),
-        ).filter(
-            search, is_primary=False
-        )
+        ).filter(search, is_primary=False, **filter_kwargs)
 
 
 class CustomerCenterLinkView(BaseCreateAPIView):
