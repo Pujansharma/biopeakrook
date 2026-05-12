@@ -433,19 +433,19 @@ class WellnessProgramRedeemSerializer(BaseModelSerializer):
 
         if not wellness_program.is_active:
             raise serializers.ValidationError("This program has been cancelled.")
-
-        if (
-                not Program.objects.filter(pk=wellness_program.program.id)
-                        .exclude(expires_at__lt=timezone.localdate())
-                        .exists()
-        ):
+        program_exists = (
+            Program.objects.filter(pk=wellness_program.program.id)
+            .exclude(expires_at__lt=timezone.localdate())
+            .exists()
+        )
+        if not program_exists:
             raise serializers.ValidationError("This program has expired.")
 
         if not ProgramService.objects.filter(
-                program=wellness_program.program,
-                is_active=True,
-                service__center_assignments__center_id=center_id,
-                service__center_assignments__is_active=True,
+            program=wellness_program.program,
+            is_active=True,
+            service__center_assignments__center_id=center_id,
+            service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}

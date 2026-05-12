@@ -48,7 +48,9 @@ class ServiceSerializer(BaseModelSerializer):
         ]
 
     def get_centers(self, instance: Service):
-        assignments = instance.center_assignments.select_related("center").filter(is_active=True)[:10]
+        assignments = instance.center_assignments.select_related("center").filter(
+            is_active=True
+        )[:10]
         centers = [asg.center for asg in assignments]
         return BaseCenterSerializer(centers, many=True, context=self.context).data
 
@@ -160,9 +162,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             )
 
         if (
-                not Program.objects.filter(pk=program_service.program.pk)
-                        .exclude(expires_at__lt=timezone.localdate())
-                        .exists()
+            not Program.objects.filter(pk=program_service.program.pk)
+            .exclude(expires_at__lt=timezone.localdate())
+            .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."
@@ -173,7 +175,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
         if not CenterServiceAssignment.objects.filter(
-                service=program_service.service, center_id=center_id, is_active=True
+            service=program_service.service, center_id=center_id, is_active=True
         ).exists():
             raise serializers.ValidationError(
                 "This service is not available at the given center."
