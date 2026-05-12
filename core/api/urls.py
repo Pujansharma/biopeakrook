@@ -6,6 +6,8 @@ urlpatterns = [
     path("", HomePageView.as_view()),
     path("auth/", include("accounts.urls")),
     path("users/", include("accounts.users.urls")),
+    # Organizations
+    path("organizations/", include("accounts.organizations.urls")),
     # External
     path("external/", include("external.urls")),
     # Centers

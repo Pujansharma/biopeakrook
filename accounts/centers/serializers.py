@@ -3,6 +3,12 @@ from rest_framework import serializers
 
 from accounts.centers.models import Center, CenterOperatingHour
 from accounts.centers.utils.db import generate_center_code
+from accounts.organizations.utils.db import (
+    increment_organization_centers_count,
+    decrement_organization_centers_count,
+    increment_organization_inactive_centers_count,
+    decrement_organization_inactive_centers_count,
+)
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
@@ -130,7 +136,9 @@ class CenterSerializer(BaseCenterSerializer):
         """Method to create a center along with custom code"""
         code = generate_center_code()
         validated_data.update({"code": code})
-        return super().create(validated_data)
+        center = super().create(validated_data)
+        increment_organization_centers_count()
+        return center
 
 
 class CenterDetailSerializer(BaseCenterSerializer):
@@ -172,6 +180,15 @@ class CenterDetailSerializer(BaseCenterSerializer):
         """Method to update a center"""
         validated_data.pop("code", None)
         validated_data.pop("created_by", None)
+
+        is_active = validated_data.get("is_active")
+        if is_active != instance.is_active and not is_active:
+            decrement_organization_centers_count()
+            increment_organization_inactive_centers_count()
+        if is_active != instance.is_active and is_active:
+            increment_organization_centers_count()
+            decrement_organization_inactive_centers_count()
+
         return super().update(instance, validated_data)
 
 

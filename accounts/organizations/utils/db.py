@@ -1,8 +1,16 @@
-from django.db.models import F, Value, Case, When
+from django.db.models import F, Value, Case, When, Count, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from accounts.organizations.models import Organization
+from accounts.organizations.models import Organization, OrganizationType
 from sequences.utils import get_next_sequence
+
+
+def get_platform_organization():
+    org, _ = Organization.objects.get_or_create(
+        organization_type=OrganizationType.PLATFORM, defaults={"name": "Biopeak Nexus"}
+    )
+    return org
 
 
 def generate_organization_code() -> str:
@@ -11,12 +19,14 @@ def generate_organization_code() -> str:
     return f"ORG-{year}{sequence}"
 
 
-def increment_centers_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(centers_count=F("centers_count") + 1)
+def increment_organization_centers_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(centers_count=F("centers_count") + 1)
 
 
-def decrement_centers_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def decrement_organization_centers_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         centers_count=Case(
             When(centers_count__gt=0, then=F("centers_count") - 1),
             default=Value(0),
@@ -24,14 +34,16 @@ def decrement_centers_count(org_id) -> None:
     )
 
 
-def increment_inactive_centers_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def increment_organization_inactive_centers_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         inactive_centers_count=F("inactive_centers_count") + 1
     )
 
 
-def decrement_inactive_centers_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def decrement_organization_inactive_centers_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         inactive_centers_count=Case(
             When(inactive_centers_count__gt=0, then=F("inactive_centers_count") - 1),
             default=Value(0),
@@ -39,12 +51,14 @@ def decrement_inactive_centers_count(org_id) -> None:
     )
 
 
-def increment_staff_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(staff_count=F("staff_count") + 1)
+def increment_organization_admins_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(staff_count=F("staff_count") + 1)
 
 
-def decrement_staff_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def decrement_organization_admins_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         staff_count=Case(
             When(staff_count__gt=0, then=F("staff_count") - 1),
             default=Value(0),
@@ -52,14 +66,16 @@ def decrement_staff_count(org_id) -> None:
     )
 
 
-def increment_inactive_staff_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def increment_organization_inactive_admins_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         inactive_staff_count=F("inactive_staff_count") + 1
     )
 
 
-def decrement_inactive_staff_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def decrement_organization_inactive_admins_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         inactive_staff_count=Case(
             When(inactive_staff_count__gt=0, then=F("inactive_staff_count") - 1),
             default=Value(0),
@@ -67,14 +83,16 @@ def decrement_inactive_staff_count(org_id) -> None:
     )
 
 
-def increment_customer_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def increment_organization_clients_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         customer_count=F("customer_count") + 1
     )
 
 
-def decrement_customer_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def decrement_organization_clients_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         customer_count=Case(
             When(customer_count__gt=0, then=F("customer_count") - 1),
             default=Value(0),
@@ -82,16 +100,80 @@ def decrement_customer_count(org_id) -> None:
     )
 
 
-def increment_inactive_customer_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def increment_organization_inactive_clients_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         inactive_customer_count=F("inactive_customer_count") + 1
     )
 
 
-def decrement_inactive_customer_count(org_id) -> None:
-    Organization.objects.filter(pk=org_id).update(
+def decrement_organization_inactive_clients_count() -> None:
+    org = get_platform_organization()
+    Organization.objects.filter(pk=org.pk).update(
         inactive_customer_count=Case(
             When(inactive_customer_count__gt=0, then=F("inactive_customer_count") - 1),
             default=Value(0),
         )
+    )
+
+
+def update_organization_admins_count() -> None:
+    from accounts.associates.models import Associate
+
+    org = get_platform_organization()
+
+    active_count_subquery = Coalesce(
+        Subquery(
+            Associate.objects.filter(user__is_active=True)
+            .values()
+            .annotate(count=Count("pk"))
+            .values("count")[:1]
+        ),
+        Value(0),
+    )
+
+    inactive_count_subquery = Coalesce(
+        Subquery(
+            Associate.objects.filter(user__is_active=False)
+            .values()
+            .annotate(count=Count("pk"))
+            .values("count")[:1]
+        ),
+        Value(0),
+    )
+
+    Organization.objects.filter(pk=org.pk).update(
+        staff_count=active_count_subquery,
+        inactive_staff_count=inactive_count_subquery,
+    )
+
+
+def update_organization_clients_count() -> None:
+    from accounts.customers.models import CustomerProfile
+
+    org = get_platform_organization()
+
+    active_count_subquery = Coalesce(
+        Subquery(
+            CustomerProfile.objects.filter(customer__user__is_active=True)
+            .values()
+            .annotate(count=Count("pk", distinct=True))
+            .values("count")[:1]
+        ),
+        Value(0),
+    )
+
+    inactive_count_subquery = Coalesce(
+        Subquery(
+            CustomerProfile.objects.filter(customer__user__is_active=False)
+            .values()
+            .annotate(count=Count("pk", distinct=True))
+            .values("count")[:1]
+        ),
+        Value(0),
+    )
+
+    Organization.objects.filter(pk=org.pk).update(
+        customer_count=active_count_subquery,
+        inactive_customer_count=inactive_count_subquery,
     )

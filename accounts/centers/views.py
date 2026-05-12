@@ -13,6 +13,7 @@ from accounts.centers.serializers import (
 )
 from accounts.customers.models import CustomerCenterAssignment
 from accounts.customers.serializers import CenterCustomerProfileHomeCenterSerializer
+from accounts.organizations.utils.db import decrement_organization_centers_count
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import (
@@ -87,6 +88,7 @@ class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
     def perform_destroy(self, instance):
         try:
             super().perform_destroy(instance)
+            decrement_organization_centers_count()
         except ProtectedError, RestrictedError:
             logger.exception(msg="Error in Center DELETE", exc_info=True)
             self.raise_bad_request(

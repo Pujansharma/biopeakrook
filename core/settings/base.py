@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "sequences",
     "accounts",
+    "accounts.organizations",
     "accounts.verifications",
     "accounts.users",
     "accounts.associates",

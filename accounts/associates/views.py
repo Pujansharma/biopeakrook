@@ -24,6 +24,7 @@ from accounts.associates.serializers import (
 from accounts.centers.models import Center
 from accounts.centers.serializers import AssociateAvailableCenterSerializer
 from accounts.customers.models import CustomerAssociateAssignment, CustomerProfile
+from accounts.organizations.utils.db import decrement_organization_admins_count
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import (
@@ -80,6 +81,7 @@ class AssociateDetailView(BaseRetrieveUpdateDestroyAPIView):
         user = instance.user
         try:
             user.delete()
+            decrement_organization_admins_count()
         except (RestrictedError, ProtectedError) as e:
             restricted_count = len(getattr(e, "restricted_objects", set()))
             protected_count = len(getattr(e, "protected_objects", set()))

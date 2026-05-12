@@ -1,9 +1,9 @@
 from django.core.management.base import BaseCommand
-from django.db.models import Count, OuterRef, Subquery, Value
-from django.db.models.functions import Coalesce
 
 from accounts.centers.models import Center
-from accounts.organizations.models import Organization
+from accounts.customers.models import CustomerProfile
+from accounts.associates.models import Associate
+from accounts.organizations.models import Organization, OrganizationType
 
 
 class Command(BaseCommand):
@@ -12,104 +12,50 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        # Requires Center.organization FK to be present
-        centers_subquery = Coalesce(
-            Subquery(
-                Center.objects.filter(
-                    organization=OuterRef("pk"),
-                )
-                .values("organization")
-                .annotate(c=Count("pk"))
-                .values("c")
-            ),
-            Value(0),
+        org, _ = Organization.objects.get_or_create(
+            organization_type=OrganizationType.PLATFORM,
+            defaults={"name": "Biopeak Nexus"},
         )
 
-        inactive_centers_subquery = Coalesce(
-            Subquery(
-                Center.objects.filter(
-                    organization=OuterRef("pk"),
-                    is_active=False,
-                )
-                .values("organization")
-                .annotate(c=Count("pk"))
-                .values("c")
-            ),
-            Value(0),
+        centers_count = Center.objects.filter(is_active=True).count()
+        inactive_centers_count = Center.objects.filter(is_active=False).count()
+
+        staff_count = (
+            Center.objects.filter(is_active=True)
+            .values("associate_assignments__associate")
+            .distinct()
+            .count()
+        )
+        inactive_staff_count = Associate.objects.filter(user__is_active=False).count()
+
+        customer_count = (
+            CustomerProfile.objects.filter(customer__user__is_active=True)
+            .distinct()
+            .count()
+        )
+        inactive_customer_count = (
+            CustomerProfile.objects.filter(customer__user__is_active=False)
+            .distinct()
+            .count()
         )
 
-        staff_subquery = Coalesce(
-            Subquery(
-                Center.objects.filter(
-                    organization=OuterRef("pk"),
-                )
-                .values("organization")
-                .annotate(c=Count("associate_assignments__associate", distinct=True))
-                .values("c")
-            ),
-            Value(0),
-        )
-
-        inactive_staff_subquery = Coalesce(
-            Subquery(
-                Center.objects.filter(
-                    organization=OuterRef("pk"),
-                )
-                .values("organization")
-                .annotate(
-                    c=Count(
-                        "associate_assignments__associate",
-                        filter=Count(
-                            "associate_assignments__associate__user__is_active"
-                        ),
-                        distinct=True,
-                    )
-                )
-                .values("c")
-            ),
-            Value(0),
-        )
-
-        customer_subquery = Coalesce(
-            Subquery(
-                Center.objects.filter(
-                    organization=OuterRef("pk"),
-                )
-                .values("organization")
-                .annotate(
-                    c=Count("customer_assignments__customer_profile", distinct=True)
-                )
-                .values("c")
-            ),
-            Value(0),
-        )
-
-        inactive_customer_subquery = Coalesce(
-            Subquery(
-                Center.objects.filter(
-                    organization=OuterRef("pk"),
-                )
-                .values("organization")
-                .annotate(
-                    c=Count(
-                        "customer_assignments__customer_profile",
-                        distinct=True,
-                    )
-                )
-                .values("c")
-            ),
-            Value(0),
-        )
-
-        updated = Organization.objects.update(
-            centers_count=centers_subquery,
-            inactive_centers_count=inactive_centers_subquery,
-            staff_count=staff_subquery,
-            inactive_staff_count=inactive_staff_subquery,
-            customer_count=customer_subquery,
-            inactive_customer_count=inactive_customer_subquery,
+        org.centers_count = centers_count
+        org.inactive_centers_count = inactive_centers_count
+        org.staff_count = staff_count
+        org.inactive_staff_count = inactive_staff_count
+        org.customer_count = customer_count
+        org.inactive_customer_count = inactive_customer_count
+        org.save(
+            update_fields=[
+                "centers_count",
+                "inactive_centers_count",
+                "staff_count",
+                "inactive_staff_count",
+                "customer_count",
+                "inactive_customer_count",
+            ]
         )
 
         self.stdout.write(
-            self.style.SUCCESS(f"Recomputed counts for {updated} organization(s).")
+            self.style.SUCCESS(f"Recomputed counts for organization: {org.id}")
         )

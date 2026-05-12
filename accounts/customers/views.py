@@ -5,6 +5,7 @@ from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
 from accounts.centers.models import Center
 from accounts.centers.serializers import CustomerAvailableCenterSerializer
+from accounts.centers.utils.db import decrement_customer_count
 from accounts.customers.models import (
     Customer,
     CustomerAssociateAssignment,
@@ -19,6 +20,9 @@ from accounts.customers.serializers import (
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
     BaseCustomerAssignedCenterSerializer,
+)
+from accounts.organizations.utils.db import (
+    decrement_organization_clients_count,
 )
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
@@ -96,6 +100,11 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
             center_id=center_id,
             customer_profile__id=self.kwargs["pk"],
         )
+
+    def perform_destroy(self, instance: CustomerCenterAssignment):
+        decrement_customer_count(instance.center.pk)
+        decrement_organization_clients_count()
+        super().perform_destroy(instance)
 
 
 class CustomerAvailableAssociateView(BaseListAPIView):
