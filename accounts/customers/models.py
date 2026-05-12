@@ -23,9 +23,17 @@ class Customer(BaseModel):
         on_delete=models.SET_NULL,
         related_name="created_customers",
     )
+    contact_email = models.EmailField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["contact_email", "user"],
+                name="customer_email_idx",
+                condition=models.Q(contact_email__isnull=False),
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"
