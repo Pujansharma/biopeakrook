@@ -1,10 +1,9 @@
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 
 from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.views.main import (
     BaseListCreateAPIView,
-    BaseRetrieveUpdateDestroyAPIView,
 )
 from services.programs.models import WellnessProgram
 from services.programs.serializers import WellnessProgramSerializer
@@ -15,14 +14,33 @@ class CenterProgramsView(BaseListCreateAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
-        center_id = self.kwargs.get("pk")
         filter_kwargs = {}
+        search = Q()
+        center_id = self.kwargs.get("pk")
+        search_query = self.request.query_params.get("search", "").strip()
         active_query_param = self.request.query_params.get("active", None)
         if active_query_param and active_query_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query_param))
+        if search_query:
+            search |= Q(program__customer_profile__first_name__istartswith=search_query)
+            search |= Q(program__customer_profile__first_name__icontains=search_query)
+            search |= Q(program__customer_profile__last_name__istartswith=search_query)
+            search |= Q(program__customer_profile__last_name__icontains=search_query)
+            search |= Q(
+                program__customer_profile__customer__user__phone__istartswith=search_query
+            )
+            search |= Q(
+                program__customer_profile__customer__user__phone__icontains=search_query
+            )
+            search |= Q(
+                program__customer_profile__customer__contact_email__istartswith=search_query
+            )
+            search |= Q(
+                program__customer_profile__customer__contact_email__icontains=search_query
+            )
         qs = (
             WellnessProgram.objects.filter(
-                program__center_id=center_id, **filter_kwargs
+                search, program__center_id=center_id, **filter_kwargs
             )
             .select_related(
                 "program",
@@ -51,7 +69,3 @@ class CenterProgramsView(BaseListCreateAPIView):
             center_id=self.kwargs.get("pk"),
             created_by=self.request.user,
         )
-
-
-class CenterProgramDetails(BaseRetrieveUpdateDestroyAPIView):
-    pass
