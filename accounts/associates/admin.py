@@ -8,6 +8,7 @@ class AssociateAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at"]
     list_display = [
         "user_id",
+        "contact_phone",
         "user__first_name",
         "user__last_name",
         "created_at",
@@ -15,4 +16,4 @@ class AssociateAdmin(admin.ModelAdmin):
     list_per_page = 25
     list_select_related = True
     raw_id_fields = ["user", "created_by"]
-    search_fields = ["user__id"]
+    search_fields = ["user__id", "user__email", "contact_phone"]
