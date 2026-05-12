@@ -13,12 +13,21 @@ class CustomerAdmin(admin.ModelAdmin):
     list_filter = ["is_active"]
     list_display = ["user_id", "user__phone", "contact_email", "created_at"]
     raw_id_fields = ["user"]
+    search_fields = ["user__id", "user__phone", "contact_email"]
     list_per_page = 25
 
 
 @admin.register(CustomerProfile)
 class CustomerProfileAdmin(admin.ModelAdmin):
-    readonly_fields = ["id", "created_at", "updated_at", "is_main", "is_onboarding_complete", "centers_count", "external_centers_count"]
+    readonly_fields = [
+        "id",
+        "created_at",
+        "updated_at",
+        "is_main",
+        "is_onboarding_complete",
+        "centers_count",
+        "external_centers_count",
+    ]
     list_display = [
         "id",
         "first_name",
