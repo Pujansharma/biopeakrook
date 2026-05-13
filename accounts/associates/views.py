@@ -121,10 +121,10 @@ class AssociateAvailableCenterView(BaseListAPIView):
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
             search_query |= (
-                Q(name__istartswith=search_params)
-                | Q(code__istartswith=search_params)
-                | Q(code__icontains=search_params)
-                | Q(name__icontains=search_params)
+                    Q(name__istartswith=search_params)
+                    | Q(code__istartswith=search_params)
+                    | Q(code__icontains=search_params)
+                    | Q(name__icontains=search_params)
             )
         associate = self.get_associate()
         associated_centers_subquery = AssociateCenterAssignment.objects.filter(
@@ -201,9 +201,10 @@ class AssociateProfileView(BaseRetrieveUpdateAPIView):
         return get_object_or_404(qs, "No center found with the given ID", pk=center_id)
 
     def get_queryset(self):
+        center = self.get_center()
         return AssociateCenterAssignment.objects.select_related(
             "associate__user__account", "center", "role"
-        ).filter(associate__user=self.request.user)
+        ).filter(associate__user=self.request.user, center=center)
 
     def get_object(self):
         return self.get_queryset().get()
