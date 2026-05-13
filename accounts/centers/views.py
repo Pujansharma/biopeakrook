@@ -214,6 +214,7 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
         if search_params:
             search_query |= Q(customer_profile__first_name__istartswith=search_params)
             search_query |= Q(customer_profile__first_name__icontains=search_params)
+            search_query |= Q(customer_profile__last_name__icontains=search_params)
             search_query |= Q(customer_profile__customer__user__phone__istartswith=search_params)
             search_query |= Q(customer_profile__customer__contact_email__istartswith=search_params)
             search_query |= Q(customer_profile__customer__contact_email__icontains=search_params)
