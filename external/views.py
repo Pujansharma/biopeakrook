@@ -1,7 +1,6 @@
-from django.db.models import BooleanField, Count, ExpressionWrapper, F, Prefetch, Q, Sum
+from django.db.models import BooleanField, Case, Count, ExpressionWrapper, F, Prefetch, Q, Sum, When
 from django.utils import timezone
 
-from accounts.centers.models import Center
 from accounts.customers.models import Customer, CustomerProfile
 from core.utils.exceptions import get_object_or_404
 from core.utils.formatters import PhoneNumberFormat
@@ -86,6 +85,15 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             ),
             sessions_count=Sum("programs__sessions_count", default=0),
             sessions_used=Sum("programs__sessions_used", default=0),
+            sessions_cancelled=Sum(
+                Case(
+                    When(
+                        programs__program_services__is_active=False,
+                        then=F("programs__program_services__sessions_count") - F("programs__program_services__sessions_used")
+                    ),
+                    default=0
+                ),
+            ),
         )
 
     def get_object(self):
