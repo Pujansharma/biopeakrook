@@ -121,7 +121,9 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
         filter_kwargs = {}
         search_params = self.request.query_params.get("search", "").strip()
         is_admin = self.request.query_params.get("admin", None)
-
+        active_param = self.request.query_params.get("active", None)
+        if active_param and active_param in ["0", "1"]:
+            filter_kwargs["associate__user__is_active"] = bool(int(active_param))
         if search_params:
             search |= Q(associate__user__email__istartswith=search_params)
             search |= Q(associate__user__email__icontains=search_params)
