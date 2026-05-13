@@ -590,7 +590,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
     # is_admin, mode, is_primary come from the model directly
 
     is_active = serializers.BooleanField(
-        source="associate.user.is_active", read_only=True
+        source="associate.user.is_active", required=False
     )
 
     class Meta:
@@ -625,15 +625,17 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
         role_id = validated_data.pop("role_id", None)
 
         user = instance.associate.user
-
+        is_active = user_data.get("is_active", user.is_active)
+        associate_data["is_active"] = is_active
         email = user_data.get("email")
 
         errors = {}
-        if (
-            email
-            and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
-        ):
-            errors["email"] = "User with this email already exists."
+        if email:
+            user_exists = (
+                User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
+            )
+            if user_exists:
+                errors["email"] = "User with this email already exists."
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -666,9 +668,9 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
         if instance.is_primary and "is_active" in user_data:
             is_now_active = user_data["is_active"]
             if not is_now_active and was_active:
-                increment_inactive_staff_count(instance.center)
+                increment_inactive_staff_count(instance.center.pk)
             if is_now_active and not was_active:
-                decrement_inactive_staff_count(instance.center)
+                decrement_inactive_staff_count(instance.center.pk)
 
         return super().update(instance, validated_data)
 
