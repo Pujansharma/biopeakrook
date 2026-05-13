@@ -129,6 +129,7 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
             search |= Q(associate__user__email__icontains=search_params)
             search |= Q(associate__user__first_name__istartswith=search_params)
             search |= Q(associate__user__first_name__icontains=search_params)
+            search |= Q(associate__contact_phone__istartswith=search_params)
 
         if is_admin:
             filter_kwargs["is_admin"] = bool(int(is_admin))
@@ -211,16 +212,11 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
             filter_kwargs["center__in"] = centers
 
         if search_params:
-            search_query |= (
-                Q(customer_profile__first_name__istartswith=search_params)
-                | Q(customer_profile__first_name__icontains=search_params)
-                | Q(customer_profile__customer__user__phone__istartswith=search_params)
-                | Q(customer_profile__customer__user__phone__icontains=search_params)
-                | Q(
-                    customer_profile__customer__contact_email__istartswith=search_params
-                )
-                | Q(customer_profile__customer__contact_email__icontains=search_params)
-            )
+            search_query |= Q(customer_profile__first_name__istartswith=search_params)
+            search_query |= Q(customer_profile__first_name__icontains=search_params)
+            search_query |= Q(customer_profile__customer__user__phone__istartswith=search_params)
+            search_query |= Q(customer_profile__customer__contact_email__istartswith=search_params)
+            search_query |= Q(customer_profile__customer__contact_email__icontains=search_params)
 
         return (
             CustomerCenterAssignment.objects.filter(
