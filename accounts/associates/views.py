@@ -14,7 +14,7 @@ from accounts.associates.serializers import (
     AdminAssociateSerializer,
     AdminAssociateCenterLinkSerializer,
     AssociateCenterSerializer,
-    AssociateProfileSerializer,
+    CenterAssignmentAssociateProfileSerializer,
     AssociateCenterPermissionSerializer,
     AssociateLinkedProfileSerializer,
     AssociateAvailableProfileSerializer,
@@ -55,14 +55,28 @@ class AssociateView(BaseListCreateAPIView):
         search_query = Q()
         search_params = self.request.query_params.get("search", "").strip()
         active_param = self.request.query_params.get("active", None)
+        admin_query = self.request.query_params.get("admin", None)
         if active_param and active_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_param))
+
+        if admin_query and admin_query in ["0", "1"]:
+            admin_mapping = {
+                "0": {"center_assignments__is_admin": False},
+                "1": {"center_assignments__is_admin": True},
+            }
+            filter_kwargs.update(admin_mapping[admin_query])
         if search_params:
             search_query |= Q(user__email__istartswith=search_params)
             search_query |= Q(user__phone__istartswith=search_params)
             search_query |= Q(user__first_name__istartswith=search_params)
 
-        return Associate.objects.select_related().filter(search_query, **filter_kwargs)
+        return (
+            Associate.objects.select_related(
+                "user",
+            )
+            .filter(search_query, **filter_kwargs)
+            .distinct()
+        )
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -179,12 +193,17 @@ class AssociateProfileView(BaseRetrieveUpdateAPIView):
     """View for associates to retrieve & update their own profile"""
 
     permission_classes = [IsAssociateUser]
-    serializer_class = AssociateProfileSerializer
+    serializer_class = CenterAssignmentAssociateProfileSerializer
+
+    def get_center(self):
+        center_id = self.request.headers.get("x-center-id")
+        qs = Center.objects.filter()
+        return get_object_or_404(qs, "No center found with the given ID", pk=center_id)
 
     def get_queryset(self):
-        return Associate.objects.select_related("user__account").filter(
-            user=self.request.user
-        )
+        return AssociateCenterAssignment.objects.select_related(
+            "associate__user__account", "center", "role"
+        ).filter(associate__user=self.request.user)
 
     def get_object(self):
         return self.get_queryset().get()
