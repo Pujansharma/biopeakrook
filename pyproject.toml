@@ -24,6 +24,7 @@ dependencies = [
     "pyotp",
     "qrcode",
     "black",
+    "django-storages[s3]",
 ]
 
 [tool.black]
