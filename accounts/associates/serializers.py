@@ -293,7 +293,9 @@ class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
         with transaction.atomic():
             for key, value in associate_data.items():
                 setattr(instance.associate, key, value)
-            instance.associate.save(update_fields=[*associate_data.keys(), "updated_at"])
+            instance.associate.save(
+                update_fields=[*associate_data.keys(), "updated_at"]
+            )
             for key, value in user_data.items():
                 setattr(user, key, value)
             user.save(update_fields=[*user_data.keys(), "updated_at"])
@@ -688,7 +690,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
+                pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
