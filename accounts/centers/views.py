@@ -162,6 +162,9 @@ class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
         filter_kwargs = {}
         search = Q()
         search_query = self.request.query_params.get("search", "").strip()
+        active_param = self.request.query_params.get("active", None)
+        if active_param and active_param in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_param))
         account_type = get_user_account_type(user)
         if account_type == UserType.ASSOCIATE:
             associate = getattr(self.request.user, "associate", None)
