@@ -45,8 +45,12 @@ class ExternalUserProgramView(BaseListAPIView):
         if complete_query and complete_query in ["0", "1"]:
             filter_kwargs["is_complete"] = bool(int(complete_query))
 
-        if expired_query and expired_query in ["0", "1"]:
-            filter_kwargs["program__expires_at__lt"] = timezone.localdate()
+        expired_filter_map = {
+            "1": {"program__expires_at__lt": timezone.localdate()},
+            "0": {"program__expires_at__gte": timezone.localdate()},
+        }
+        if expired_query and expired_query in expired_filter_map:
+            filter_kwargs.update(expired_filter_map[expired_query])
 
         qs = (
             WellnessProgram.objects.annotate(
