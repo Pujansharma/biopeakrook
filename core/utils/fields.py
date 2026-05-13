@@ -63,7 +63,7 @@ class PhoneNumberSerializerField(serializers.CharField):
                 "unique": _("A user with that phone number already exists."),
             }
         )
-        self.help_text = (_("Phone number with country code."),)
+        self.help_text = _("Phone number with country code.")
 
     def to_internal_value(self, data):
         data = super().to_internal_value(data)
