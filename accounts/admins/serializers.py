@@ -186,6 +186,9 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
 class AdminProfileSerializer(BaseAdminUserSerializer):
     """Serializer for admins to retrieve and update their own profile"""
 
+    is_active = serializers.BooleanField(source="user.is_active", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+
     class Meta:
         model = Admin
         fields = [
