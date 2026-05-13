@@ -1,4 +1,14 @@
-from django.db.models import BooleanField, Case, Count, ExpressionWrapper, F, Prefetch, Q, Sum, When
+from django.db.models import (
+    BooleanField,
+    Case,
+    Count,
+    ExpressionWrapper,
+    F,
+    Prefetch,
+    Q,
+    Sum,
+    When,
+)
 from django.utils import timezone
 
 from accounts.customers.models import Customer, CustomerProfile
@@ -36,7 +46,7 @@ class ExternalUserProgramView(BaseListAPIView):
             filter_kwargs["is_complete"] = bool(int(complete_query))
 
         if expired_query and expired_query in ["0", "1"]:
-            filter_kwargs["expires_at__lt"] = timezone.localdate()
+            filter_kwargs["program__expires_at__lt"] = timezone.localdate()
 
         qs = (
             WellnessProgram.objects.annotate(
@@ -89,9 +99,20 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                 Case(
                     When(
                         programs__program_services__is_active=False,
-                        then=F("programs__program_services__sessions_count") - F("programs__program_services__sessions_used")
+                        then=F("programs__program_services__sessions_count")
+                        - F("programs__program_services__sessions_used"),
                     ),
-                    default=0
+                    default=0,
+                ),
+            ),
+            sessions_expired=Sum(
+                Case(
+                    When(
+                        programs__expires_at__lt=timezone.localdate(),
+                        then=F("programs__sessions_count")
+                        - F("programs__sessions_used"),
+                    ),
+                    default=0,
                 ),
             ),
         )
