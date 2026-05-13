@@ -34,6 +34,42 @@ from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
 
+class BaseAssociateRoleSerializer(BaseModelSerializer):
+    is_active = serializers.BooleanField(default=True, required=False)
+
+    class Meta:
+        model = AssociateRole
+        fields = [
+            "id",
+            "name",
+            # "features",
+            "role_tag",
+            # "is_external",
+            "is_system",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class AssociateRoleSerializer(BaseModelSerializer):
+    is_active = serializers.BooleanField(default=True, required=False)
+    created_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = AssociateRole
+        fields = [
+            "id",
+            "name",
+            "role_tag",
+            "is_system",
+            "created_by",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+
+
 class BaseAssociateSerializer(BaseModelSerializer):
     """Base associate serializer for display"""
 
@@ -188,8 +224,36 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
         return super().update(instance, validated_data)
 
 
-class AssociateProfileSerializer(BaseAssociateSerializer):
+class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
     """Serializer only for associates to update or view their profile"""
+
+    id = serializers.UUIDField(source="associate.user.id", read_only=True)
+    is_active = serializers.BooleanField(
+        source="associate.user.is_active", read_only=True
+    )
+    email = serializers.EmailField(source="associate.user.email", read_only=True)
+    contact_phone = PhoneNumberSerializerField(
+        source="associate.contact_phone", required=False
+    )
+    first_name = serializers.CharField(
+        source="associate.user.first_name", required=False
+    )
+    last_name = serializers.CharField(source="associate.user.last_name", required=False)
+    gender = serializers.ChoiceField(
+        source="associate.user.gender", required=False, choices=Gender.CHOICES
+    )
+    date_of_birth = serializers.DateField(
+        source="associate.user.date_of_birth", required=False
+    )
+    image = serializers.ImageField(source="associate.user.image", required=False)
+    date_joined = serializers.DateTimeField(
+        source="associate.user.date_joined", read_only=True
+    )
+    last_login = serializers.DateTimeField(
+        source="associate.user.last_login", read_only=True
+    )
+    is_admin = serializers.BooleanField(read_only=True)
+    role = BaseAssociateRoleSerializer(read_only=True)
 
     class Meta:
         model = Associate
@@ -202,30 +266,44 @@ class AssociateProfileSerializer(BaseAssociateSerializer):
             "gender",
             "date_of_birth",
             "image",
-            "is_external",
+            "is_admin",
             "is_active",
             "date_joined",
             "last_login",
             "updated_at",
+            "role",
         ]
 
     def create(self, validated_data):
         """Admins will create Associates"""
 
-    def update(self, instance: Associate, validated_data):
+    def update(self, instance: AssociateCenterAssignment, validated_data):
         """Associates can update their profiles"""
-        user_data = validated_data.pop("user", {})
+        associate_data = validated_data.pop("associate", {})
+        user_data = associate_data.pop("user", {})
         user_data.pop("email", None)
         user_data.pop("phone", None)
+
+        user = instance.associate.user
 
         validated_data.pop("is_admin", None)
         validated_data.pop("is_external", None)
         validated_data.pop("is_active", None)
 
-        for key, value in user_data.items():
-            setattr(instance.user, key, value)
-        instance.user.save(update_fields=[*user_data.keys(), "updated_at"])
-        return super().update(instance, validated_data)
+        with transaction.atomic():
+            for key, value in associate_data.items():
+                setattr(instance.associate, key, value)
+            instance.associate.save(update_fields=[*associate_data.keys(), "updated_at"])
+            for key, value in user_data.items():
+                setattr(user, key, value)
+            user.save(update_fields=[*user_data.keys(), "updated_at"])
+            return super().update(instance, validated_data)
+
+    def to_representation(self, instance: AssociateCenterAssignment):
+        rep = super().to_representation(instance)
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.associate.user.get_gender_display()
+        return rep
 
 
 class CenterIDSerializer(BaseSerializer):
@@ -350,42 +428,6 @@ class AssociateCenterSerializer(CenterSerializer):
             "updated_at",
             "is_active",
             "is_admin",
-        ]
-
-
-class BaseAssociateRoleSerializer(BaseModelSerializer):
-    is_active = serializers.BooleanField(default=True, required=False)
-
-    class Meta:
-        model = AssociateRole
-        fields = [
-            "id",
-            "name",
-            # "features",
-            "role_tag",
-            # "is_external",
-            "is_system",
-            "is_active",
-            "created_at",
-            "updated_at",
-        ]
-
-
-class AssociateRoleSerializer(BaseModelSerializer):
-    is_active = serializers.BooleanField(default=True, required=False)
-    created_by = BaseUserSerializer(read_only=True)
-
-    class Meta:
-        model = AssociateRole
-        fields = [
-            "id",
-            "name",
-            "role_tag",
-            "is_system",
-            "created_by",
-            "is_active",
-            "created_at",
-            "updated_at",
         ]
 
 
@@ -646,7 +688,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                pk=role_id, center=instance.center
+                    pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
