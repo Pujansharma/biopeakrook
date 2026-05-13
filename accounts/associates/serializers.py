@@ -531,9 +531,7 @@ class CenterAssociateSerializer(
         validated_data["is_admin"] = is_admin
         with transaction.atomic():
             user = User.objects.create_user(**user_data, password=password1, phone=None)
-            associate = Associate.objects.create(
-                user=user, **associate_data
-            )
+            associate = Associate.objects.create(user=user, **associate_data)
             create_associate_user_account(associate)
 
             assignment = AssociateCenterAssignment.objects.create(
@@ -632,8 +630,8 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
 
         errors = {}
         if (
-                email
-                and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
+            email
+            and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists()
         ):
             errors["email"] = "User with this email already exists."
 
@@ -646,7 +644,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
+                pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}

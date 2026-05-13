@@ -91,6 +91,7 @@ class AdminUserSerializer(BaseAdminUserSerializer, BasePasswordCheckSerializer):
     def create(self, validated_data):
         password = validated_data.get("password1")
         user_data = validated_data.pop("user", {})
+        contact_phone = validated_data.get("contact_phone")
         email = user_data.get("email")
 
         errors = check_admin_associate_user_exists(email)
@@ -102,7 +103,11 @@ class AdminUserSerializer(BaseAdminUserSerializer, BasePasswordCheckSerializer):
                 {"email": "An admin with this email already exists."}
             )
 
-        return create_admin_user(**user_data, password=password)
+        return create_admin_user(
+            **user_data,
+            password=password,
+            contact_phone=contact_phone,
+        )
 
     def update(self, instance: Admin, validated_data):
         """Update not allowed in this serializer"""
@@ -111,6 +116,7 @@ class AdminUserSerializer(BaseAdminUserSerializer, BasePasswordCheckSerializer):
 class AdminUserDetailSerializer(BaseAdminUserSerializer):
     """Serializer for admins to update other admin users"""
 
+    is_active = serializers.BooleanField(source="user.is_active", required=False)
     created_by = BaseUserSerializer(read_only=True)
 
     class Meta:
@@ -152,15 +158,18 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
 
         user_data = validated_data.pop("user", {})
         user_data.pop("phone", None)
+        is_active = user_data.get("is_active")
+        validated_data["is_active"] = is_active
 
         email = user_data.get("email")
 
         errors = {}
+
         if (
-            email
-            and User.objects.filter(email__iexact=email)
-            .exclude(pk=instance.user.pk)
-            .exists()
+                email
+                and User.objects.filter(email__iexact=email)
+                .exclude(pk=instance.user.pk)
+                .exists()
         ):
             errors["email"] = "User with this email already exists."
 

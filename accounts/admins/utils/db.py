@@ -10,13 +10,9 @@ from accounts.utils.constants import UserType
 def create_admin_user(email, password=None, **extra_fields):
     user = User.objects.filter(email__iexact=email).first()
     if not user:
-        user = User.objects.create_user(
-            email=email, password=password, phone=None, **extra_fields
-        )
+        user = User.objects.create_user(email=email, password=password, phone=None)
     account, _ = UserAccount.objects.get_or_create(user=user)
     account.account_type = UserType.ADMIN
     account.save(update_fields=["account_type"])
-    admin, _ = Admin.objects.update_or_create(
-        user=user, defaults={"created_by": extra_fields.get("created_by")}
-    )
+    admin, _ = Admin.objects.update_or_create(user=user, defaults=extra_fields)
     return admin
