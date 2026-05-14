@@ -8,7 +8,7 @@ from django.db.models import (
     Subquery,
     Value,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Concat
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.associates.serializers import (
@@ -70,7 +70,7 @@ class AssociateView(BaseListCreateAPIView):
         if search_params:
             search_query |= Q(user__email__istartswith=search_params)
             search_query |= Q(national_phone__istartswith=search_params)
-            search_query |= Q(user__first_name__istartswith=search_params)
+            search_query |= Q(full_name__istartswith=search_params)
 
         return (
             Associate.objects.select_related(
@@ -78,8 +78,11 @@ class AssociateView(BaseListCreateAPIView):
             )
             .annotate(
                 national_phone=ExtractPartText(
-                    F("user__phone"), Value("-"), Value("-1")
-                )
+                    F("contact_phone"), Value("-"), Value("-1")
+                ),
+                full_name=Concat(
+                    F("user__first_name"), Value(" "), F("user__last_name")
+                ),
             )
             .filter(search_query, **filter_kwargs)
             .order_by("-created_at")
@@ -264,9 +267,14 @@ class AssociateLinkedProfilesView(BaseListAPIView):
         search_param = self.request.query_params.get("search", "").strip()
 
         if search_param:
-            search |= Q(customer_profile__first_name__istartswith=search_param)
-            search |= Q(customer_profile__first_name__icontains=search_param)
-            search |= Q(customer_profile__last_name__icontains=search_param)
+            search |= Q(full_name__istartswith=search_param)
+            search |= Q(national_phone__istartswith=search_param)
+            search |= Q(
+                customer_profile__customer__contact_email__istartswith=search_param
+            )
+            search |= Q(
+                customer_profile__customer__contact_email__icontains=search_param
+            )
 
         if center_id:
             filter_kwargs["center_id"] = center_id
@@ -281,6 +289,18 @@ class AssociateLinkedProfilesView(BaseListAPIView):
         return (
             CustomerAssociateAssignment.objects.select_related(
                 "customer_profile__customer__user",
+            )
+            .annotate(
+                full_name=Concat(
+                    F("customer_profile__first_name"),
+                    Value(" "),
+                    F("customer_profile__last_name"),
+                ),
+                national_phone=ExtractPartText(
+                    F("customer_profile__customer__user__phone"),
+                    Value("-"),
+                    Value("-1"),
+                ),
             )
             .filter(search, associate=associate, **filter_kwargs)
             .order_by("-created_at")
@@ -307,9 +327,7 @@ class AssociateAvailableProfilesView(BaseListAPIView):
         search_param = self.request.query_params.get("search", "").strip()
 
         if search_param:
-            search |= Q(first_name__istartswith=search_param)
-            search |= Q(first_name__icontains=search_param)
-            search |= Q(last_name__icontains=search_param)
+            search |= Q(full_name__istartswith=search_param)
             search |= Q(customer__user__email__istartswith=search_param)
 
         account_type = get_user_account_type(self.request.user)
@@ -330,8 +348,11 @@ class AssociateAvailableProfilesView(BaseListAPIView):
 
         return (
             CustomerProfile.objects.select_related("customer__user")
+            .annotate(
+                full_name=Concat(F("first_name"), Value(" "), F("last_name")),
+                exists=Exists(exists_subquery),
+            )
             .filter(search, **filter_kwargs)
-            .annotate(exists=Exists(exists_subquery))
             .distinct()
             .order_by("-created_at")
         )

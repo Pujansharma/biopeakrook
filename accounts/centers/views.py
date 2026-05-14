@@ -1,4 +1,5 @@
 from django.db.models import F, Prefetch, Q, ProtectedError, RestrictedError, Value
+from django.db.models.functions import Concat
 
 from accounts.associates.models import AssociateCenterAssignment, AssociateRole
 from accounts.associates.serializers import (
@@ -128,15 +129,25 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
         if search_params:
             search |= Q(associate__user__email__istartswith=search_params)
             search |= Q(associate__user__email__icontains=search_params)
-            search |= Q(associate__user__first_name__istartswith=search_params)
-            search |= Q(associate__user__first_name__icontains=search_params)
-            search |= Q(associate__contact_phone__istartswith=search_params)
+            search |= Q(national_phone__istartswith=search_params)
+            search |= Q(full_name__istartswith=search_params)
+            search |= Q(full_name__icontains=search_params)
 
         if is_admin:
             filter_kwargs["is_admin"] = bool(int(is_admin))
 
         return (
-            AssociateCenterAssignment.objects.filter(
+            AssociateCenterAssignment.objects.annotate(
+                national_phone=ExtractPartText(
+                    F("associate__contact_phone"), Value("-"), Value("-1")
+                ),
+                full_name=Concat(
+                    F("associate__user__first_name"),
+                    Value(" "),
+                    F("associate__user__last_name"),
+                ),
+            )
+            .filter(
                 search,
                 center_id=center,
                 **filter_kwargs,
@@ -213,9 +224,7 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
             filter_kwargs["center__in"] = centers
 
         if search_params:
-            search_query |= Q(customer_profile__first_name__istartswith=search_params)
-            search_query |= Q(customer_profile__first_name__icontains=search_params)
-            search_query |= Q(customer_profile__last_name__icontains=search_params)
+            search_query |= Q(full_name__istartswith=search_params)
             search_query |= Q(national_phone__istartswith=search_params)
             search_query |= Q(
                 customer_profile__customer__contact_email__istartswith=search_params
@@ -230,7 +239,12 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
                     F("customer_profile__customer__user__phone"),
                     Value("-"),
                     Value("-1"),
-                )
+                ),
+                full_name=Concat(
+                    F("customer_profile__first_name"),
+                    Value(" "),
+                    F("customer_profile__last_name"),
+                ),
             )
             .filter(search_query, center_id=self.kwargs["pk"], **filter_kwargs)
             .select_related(

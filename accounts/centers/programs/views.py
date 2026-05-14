@@ -1,7 +1,9 @@
-from django.db.models import Prefetch, Q
+from django.db.models import F, Prefetch, Q, Value
+from django.db.models.functions import Concat
 
 from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from core.utils.db.functions import ExtractPartText
 from core.utils.views.main import (
     BaseListCreateAPIView,
 )
@@ -22,16 +24,8 @@ class CenterProgramsView(BaseListCreateAPIView):
         if active_query_param and active_query_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query_param))
         if search_query:
-            search |= Q(program__customer_profile__first_name__istartswith=search_query)
-            search |= Q(program__customer_profile__first_name__icontains=search_query)
-            search |= Q(program__customer_profile__last_name__istartswith=search_query)
-            search |= Q(program__customer_profile__last_name__icontains=search_query)
-            search |= Q(
-                program__customer_profile__customer__user__phone__istartswith=search_query
-            )
-            search |= Q(
-                program__customer_profile__customer__user__phone__icontains=search_query
-            )
+            search |= Q(full_name__istartswith=search_query)
+            search |= Q(national_phone__istartswith=search_query)
             search |= Q(
                 program__customer_profile__customer__contact_email__istartswith=search_query
             )
@@ -39,9 +33,19 @@ class CenterProgramsView(BaseListCreateAPIView):
                 program__customer_profile__customer__contact_email__icontains=search_query
             )
         qs = (
-            WellnessProgram.objects.filter(
-                search, program__center_id=center_id, **filter_kwargs
+            WellnessProgram.objects.annotate(
+                full_name=Concat(
+                    F("program__customer_profile__first_name"),
+                    Value(" "),
+                    F("program__customer_profile__last_name"),
+                ),
+                national_phone=ExtractPartText(
+                    F("program__customer_profile__customer__user__phone"),
+                    Value("-"),
+                    Value("-1"),
+                ),
             )
+            .filter(search, program__center_id=center_id, **filter_kwargs)
             .select_related(
                 "program",
                 "program__center",

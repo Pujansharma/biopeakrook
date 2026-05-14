@@ -1,4 +1,7 @@
-from django.db.models import Q, RestrictedError, ProtectedError
+from django.db.models import F, Q, RestrictedError, ProtectedError, Value
+from django.db.models.functions import Concat
+
+from core.utils.db.functions import ExtractPartText
 
 from accounts.admins.models import Admin
 from accounts.admins.serializers import (
@@ -28,11 +31,20 @@ class AdminUserView(BaseListCreateAPIView):
             filter_kwargs["is_active"] = bool(int(active_param))
         if search_param:
             search_query |= Q(user__email__istartswith=search_param)
-            search_query |= Q(user__phone__istartswith=search_param)
-            search_query |= Q(user__first_name__istartswith=search_param)
+            search_query |= Q(national_phone__istartswith=search_param)
+            search_query |= Q(full_name__istartswith=search_param)
 
-        return Admin.objects.select_related("user").filter(
-            search_query, **filter_kwargs
+        return (
+            Admin.objects.select_related("user")
+            .annotate(
+                national_phone=ExtractPartText(
+                    F("contact_phone"), Value("-"), Value("-1")
+                ),
+                full_name=Concat(
+                    F("user__first_name"), Value(" "), F("user__last_name")
+                ),
+            )
+            .filter(search_query, **filter_kwargs)
         )
 
     def perform_create(self, serializer):

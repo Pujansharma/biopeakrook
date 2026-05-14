@@ -1,5 +1,5 @@
 from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Concat
 
 from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
@@ -123,10 +123,10 @@ class CustomerAvailableAssociateView(BaseListAPIView):
         search_params = self.request.query_params.get("search", "").strip()
 
         if search_params:
-            search |= Q(associate__user__first_name__istartswith=search_params)
-            search |= Q(associate__user__first_name__icontains=search_params)
             search |= Q(associate__user__email__istartswith=search_params)
             search |= Q(associate__user__email__icontains=search_params)
+            search |= Q(full_name__istartswith=search_params)
+            search |= Q(full_name__icontains=search_params)
 
         if center_id:
             filter_kwargs["center_id"] = center_id
@@ -150,6 +150,11 @@ class CustomerAvailableAssociateView(BaseListAPIView):
             .prefetch_related("created_by", "center")
             .annotate(
                 exists=Exists(exists_subquery),
+                full_name=Concat(
+                    F("associate__user__first_name"),
+                    Value(" "),
+                    F("associate__user__last_name"),
+                ),
             )
             .filter(search, **filter_kwargs, is_admin=False)
             .order_by("-created_at")
@@ -183,10 +188,8 @@ class CustomerAssociateListView(BaseListAPIView):
 
         search_param = self.request.query_params.get("search", "").strip()
         if search_param:
-            search |= Q(associate__user__first_name__istartswith=search_param)
-            search |= Q(associate__user__first_name__icontains=search_param)
-            search |= Q(associate__user__user__email__istartswith=search_param)
-            search |= Q(associate__user__user__email__icontains=search_param)
+            search |= Q(associate__user__email__istartswith=search_param)
+            search |= Q(full_name__istartswith=search_param)
 
         account_type = get_user_account_type(user)
         if account_type == UserType.ASSOCIATE:
@@ -197,9 +200,14 @@ class CustomerAssociateListView(BaseListAPIView):
             filter_kwargs["center__in"] = center_ids
 
         qs = (
-            CustomerAssociateAssignment.objects.filter(
-                search, customer_profile_id=self.kwargs["pk"], **filter_kwargs
+            CustomerAssociateAssignment.objects.annotate(
+                full_name=Concat(
+                    F("associate__user__first_name"),
+                    Value(" "),
+                    F("associate__user__last_name"),
+                ),
             )
+            .filter(search, customer_profile_id=self.kwargs["pk"], **filter_kwargs)
             .annotate(
                 role=FilteredRelation(
                     "associate__center_assignments__role",
