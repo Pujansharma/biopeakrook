@@ -89,17 +89,17 @@ class TOTPAuthenticationMixin:
                 self.mfa_error_messages["mfa_permanently_locked"]
             )
         if (
-            totp_instance.lock_expires_at
-            and totp_instance.lock_expires_at > timezone.now()
+                totp_instance.lock_expires_at
+                and totp_instance.lock_expires_at > timezone.now()
         ):
             raise AuthenticationFailed(self.mfa_error_messages["mfa_locked"])
 
     @staticmethod
     def build_login_response(
-        *,
-        totp_enabled=False,
-        totp_token=None,
-        tokens=None,
+            *,
+            totp_enabled=False,
+            totp_token=None,
+            tokens=None,
     ):
         if not tokens:
             tokens = dict()
@@ -187,9 +187,7 @@ class RequestPasswordResetEmailSerializer(BaseSerializer):
         email = attrs.get("email")
         user = self.get_user(email)
         if not user:
-            raise serializers.ValidationError(
-                _("Email not registered, link cannot be sent.")
-            )
+            return attrs
         uid, token = get_password_reset_token_for_user(user)
         relative_link = f"/reset-password?uid={uid}&token={token}"
         total_url = settings.PASSWORD_RESET_URL + relative_link
