@@ -1,4 +1,4 @@
-from django.db.models import Prefetch, Q, ProtectedError, RestrictedError
+from django.db.models import F, Prefetch, Q, ProtectedError, RestrictedError, Value
 
 from accounts.associates.models import AssociateCenterAssignment, AssociateRole
 from accounts.associates.serializers import (
@@ -21,6 +21,7 @@ from accounts.utils.permissions import (
     IsAssociateUser,
     IsCustomerUser,
 )
+from core.utils.db.functions import ExtractPartText
 from core.utils.exceptions import get_object_or_404
 from core.utils.log import logger
 from core.utils.permissions import ReadOnly
@@ -215,14 +216,23 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
             search_query |= Q(customer_profile__first_name__istartswith=search_params)
             search_query |= Q(customer_profile__first_name__icontains=search_params)
             search_query |= Q(customer_profile__last_name__icontains=search_params)
-            search_query |= Q(customer_profile__customer__user__phone__istartswith=search_params)
-            search_query |= Q(customer_profile__customer__contact_email__istartswith=search_params)
-            search_query |= Q(customer_profile__customer__contact_email__icontains=search_params)
+            search_query |= Q(national_phone__istartswith=search_params)
+            search_query |= Q(
+                customer_profile__customer__contact_email__istartswith=search_params
+            )
+            search_query |= Q(
+                customer_profile__customer__contact_email__icontains=search_params
+            )
 
         return (
-            CustomerCenterAssignment.objects.filter(
-                search_query, center_id=self.kwargs["pk"], **filter_kwargs
+            CustomerCenterAssignment.objects.annotate(
+                national_phone=ExtractPartText(
+                    F("customer_profile__customer__user__phone"),
+                    Value("-"),
+                    Value("-1"),
+                )
             )
+            .filter(search_query, center_id=self.kwargs["pk"], **filter_kwargs)
             .select_related(
                 "customer_profile__customer__user",
             )
@@ -237,6 +247,7 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
                     to_attr="primary_center_assignments",
                 ),
             )
+            .order_by("-created_at")
         )
 
     def perform_create(self, serializer):
