@@ -24,7 +24,12 @@ from external.serializers import (
     CustomerServiceDetailSerializer,
 )
 from services.models import CenterServiceAssignment
-from services.programs.models import Program, ProgramService, RedemptionHistory, WellnessProgram
+from services.programs.models import (
+    Program,
+    ProgramService,
+    RedemptionHistory,
+    WellnessProgram,
+)
 from services.programs.serializers import ProgramServiceRedemptionHistorySerializer
 
 
@@ -86,9 +91,9 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
 
     def get_queryset(self):
         customer_profile = self.get_customer_profile()
-        programs_base = Program.objects.filter(
-            customer_profile=OuterRef("pk")
-        ).values("customer_profile")
+        programs_base = Program.objects.filter(customer_profile=OuterRef("pk")).values(
+            "customer_profile"
+        )
         program_services_base = ProgramService.objects.filter(
             program__customer_profile=OuterRef("pk")
         ).values("program__customer_profile")
@@ -116,22 +121,24 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             ),
             sessions_count=Coalesce(
                 Subquery(
-                    programs_base.annotate(total=Sum("sessions_count")).values("total")[:1]
+                    programs_base.annotate(total=Sum("sessions_count")).values("total")[
+                        :1
+                    ]
                 ),
                 0,
             ),
             sessions_used=Coalesce(
                 Subquery(
-                    programs_base.annotate(total=Sum("sessions_used")).values("total")[:1]
+                    programs_base.annotate(total=Sum("sessions_used")).values("total")[
+                        :1
+                    ]
                 ),
                 0,
             ),
             sessions_cancelled=Coalesce(
                 Subquery(
                     program_services_base.filter(is_active=False)
-                    .annotate(
-                        total=Sum(F("sessions_count") - F("sessions_used"))
-                    )
+                    .annotate(total=Sum(F("sessions_count") - F("sessions_used")))
                     .values("total")[:1]
                 ),
                 0,
@@ -139,9 +146,7 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             sessions_expired=Coalesce(
                 Subquery(
                     programs_base.filter(expires_at__lt=timezone.localdate())
-                    .annotate(
-                        total=Sum(F("sessions_count") - F("sessions_used"))
-                    )
+                    .annotate(total=Sum(F("sessions_count") - F("sessions_used")))
                     .values("total")[:1]
                 ),
                 0,
