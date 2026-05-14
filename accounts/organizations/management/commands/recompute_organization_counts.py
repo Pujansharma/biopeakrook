@@ -1,8 +1,9 @@
 from django.core.management.base import BaseCommand
 
+from accounts.admins.models import Admin
+from accounts.associates.models import Associate
 from accounts.centers.models import Center
 from accounts.customers.models import CustomerProfile
-from accounts.associates.models import Associate
 from accounts.organizations.models import Organization, OrganizationType
 
 
@@ -20,13 +21,11 @@ class Command(BaseCommand):
         centers_count = Center.objects.filter(is_active=True).count()
         inactive_centers_count = Center.objects.filter(is_active=False).count()
 
-        staff_count = (
-            Center.objects.filter(is_active=True)
-            .values("associate_assignments__associate")
-            .distinct()
-            .count()
+        staff_count = Associate.objects.count() + Admin.objects.count()
+        inactive_staff_count = (
+            Associate.objects.filter(user__is_active=False).count()
+            + Admin.objects.filter(user__is_active=False).count()
         )
-        inactive_staff_count = Associate.objects.filter(user__is_active=False).count()
 
         customer_count = (
             CustomerProfile.objects.filter(customer__user__is_active=True)

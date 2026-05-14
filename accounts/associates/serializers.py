@@ -22,7 +22,7 @@ from accounts.customers.models import (
 )
 from accounts.organizations.utils.db import (
     increment_organization_admins_count,
-    update_organization_admins_count,
+    update_organization_staff_count,
 )
 from accounts.serializers import BasePasswordCheckOptionalSerializer
 from accounts.users.models import User
@@ -177,7 +177,7 @@ class AdminAssociateSerializer(
         validated_data["is_active"] = is_active
         with transaction.atomic():
             if is_active != instance.is_active:
-                update_organization_admins_count()
+                update_organization_staff_count()
             return super().update(instance, validated_data)
 
     def to_representation(self, instance):
@@ -220,7 +220,7 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
         validated_data["is_active"] = is_active
 
         if is_active != instance.is_active:
-            update_organization_admins_count()
+            update_organization_staff_count()
 
         return super().update(instance, validated_data)
 
@@ -590,6 +590,7 @@ class CenterAssociateSerializer(
             )
 
             increment_staff_count(assignment.center.pk)
+            increment_organization_admins_count()
 
         return assignment
 
@@ -718,6 +719,8 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                 increment_inactive_staff_count(instance.center.pk)
             if is_now_active and not was_active:
                 decrement_inactive_staff_count(instance.center.pk)
+            if is_now_active != was_active:
+                update_organization_staff_count()
 
         return super().update(instance, validated_data)
 

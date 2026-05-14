@@ -3,6 +3,10 @@ from rest_framework.exceptions import PermissionDenied
 
 from accounts.admins.models import Admin
 from accounts.admins.utils.db import create_admin_user
+from accounts.organizations.utils.db import (
+    increment_organization_admins_count,
+    update_organization_staff_count,
+)
 from accounts.serializers import BasePasswordCheckSerializer
 from accounts.users.serializers import BaseUserSerializer
 from accounts.users.utils.constants import Gender
@@ -103,11 +107,13 @@ class AdminUserSerializer(BaseAdminUserSerializer, BasePasswordCheckSerializer):
                 {"email": "An admin with this email already exists."}
             )
 
-        return create_admin_user(
+        admin = create_admin_user(
             **user_data,
             password=password,
             contact_phone=contact_phone,
         )
+        increment_organization_admins_count()
+        return admin
 
     def update(self, instance: Admin, validated_data):
         """Update not allowed in this serializer"""
@@ -176,9 +182,14 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
+        was_active = instance.user.is_active
+
         for key, value in user_data.items():
             setattr(instance.user, key, value)
         instance.user.save(update_fields=[*user_data.keys(), "updated_at"])
+
+        if "is_active" in user_data and is_active != was_active:
+            update_organization_staff_count()
 
         return super().update(instance, validated_data)
 

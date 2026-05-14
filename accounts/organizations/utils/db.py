@@ -1,7 +1,10 @@
-from django.db.models import F, Value, Case, When, Count, OuterRef, Subquery
+from django.db.models import Count, F, Value, Case, When, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from accounts.admins.models import Admin
+from accounts.associates.models import Associate
+from accounts.customers.models import CustomerProfile
 from accounts.organizations.models import Organization, OrganizationType
 from sequences.utils import get_next_sequence
 
@@ -117,22 +120,10 @@ def decrement_organization_inactive_clients_count() -> None:
     )
 
 
-def update_organization_admins_count() -> None:
-    from accounts.associates.models import Associate
-
+def update_organization_staff_count() -> None:
     org = get_platform_organization()
 
-    active_count_subquery = Coalesce(
-        Subquery(
-            Associate.objects.filter(user__is_active=True)
-            .values()
-            .annotate(count=Count("pk"))
-            .values("count")[:1]
-        ),
-        Value(0),
-    )
-
-    inactive_count_subquery = Coalesce(
+    inactive_associate_subquery = Coalesce(
         Subquery(
             Associate.objects.filter(user__is_active=False)
             .values()
@@ -141,16 +132,22 @@ def update_organization_admins_count() -> None:
         ),
         Value(0),
     )
+    inactive_admin_subquery = Coalesce(
+        Subquery(
+            Admin.objects.filter(user__is_active=False)
+            .values()
+            .annotate(count=Count("pk"))
+            .values("count")[:1]
+        ),
+        Value(0),
+    )
 
     Organization.objects.filter(pk=org.pk).update(
-        staff_count=active_count_subquery,
-        inactive_staff_count=inactive_count_subquery,
+        inactive_staff_count=inactive_associate_subquery + inactive_admin_subquery,
     )
 
 
 def update_organization_clients_count() -> None:
-    from accounts.customers.models import CustomerProfile
-
     org = get_platform_organization()
 
     active_count_subquery = Coalesce(
@@ -162,7 +159,6 @@ def update_organization_clients_count() -> None:
         ),
         Value(0),
     )
-
     inactive_count_subquery = Coalesce(
         Subquery(
             CustomerProfile.objects.filter(customer__user__is_active=False)
