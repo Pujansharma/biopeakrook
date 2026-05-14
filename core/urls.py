@@ -13,7 +13,7 @@ urlpatterns = [
     path(
         "admin/password_reset/",
         auth_views.PasswordResetView.as_view(
-            html_email_template_name="registration/html_password_reset_template.html"
+            html_email_template_name="mails/admin_password_reset_email.html"
         ),
         name="admin_password_reset",
     ),
