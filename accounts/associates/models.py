@@ -107,7 +107,12 @@ class Associate(BaseModel):
                 fields=["user", "contact_phone"],
                 name="associate_contact_phone_idx",
                 condition=models.Q(contact_phone__isnull=False),
-            )
+            ),
+            models.Index(
+                fields=["contact_phone"],
+                name="assoc_phone_search_idx",
+                condition=models.Q(contact_phone__isnull=False),
+            ),
         ]
 
     def __str__(self):
