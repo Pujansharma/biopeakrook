@@ -1,4 +1,5 @@
 from django.db.models import (
+    F,
     Q,
     OuterRef,
     Exists,
@@ -33,6 +34,7 @@ from accounts.utils.permissions import (
     AssociateFeaturePermission,
     IsAssociateUser,
 )
+from core.utils.db.functions import ExtractPartText
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListCreateAPIView,
@@ -67,14 +69,20 @@ class AssociateView(BaseListCreateAPIView):
             filter_kwargs.update(admin_mapping[admin_query])
         if search_params:
             search_query |= Q(user__email__istartswith=search_params)
-            search_query |= Q(user__phone__istartswith=search_params)
+            search_query |= Q(national_phone__istartswith=search_params)
             search_query |= Q(user__first_name__istartswith=search_params)
 
         return (
             Associate.objects.select_related(
                 "user",
             )
+            .annotate(
+                national_phone=ExtractPartText(
+                    F("user__phone"), Value("-"), Value("-1")
+                )
+            )
             .filter(search_query, **filter_kwargs)
+            .order_by("-created_at")
             .distinct()
         )
 
