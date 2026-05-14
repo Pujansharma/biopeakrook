@@ -89,17 +89,17 @@ class TOTPAuthenticationMixin:
                 self.mfa_error_messages["mfa_permanently_locked"]
             )
         if (
-                totp_instance.lock_expires_at
-                and totp_instance.lock_expires_at > timezone.now()
+            totp_instance.lock_expires_at
+            and totp_instance.lock_expires_at > timezone.now()
         ):
             raise AuthenticationFailed(self.mfa_error_messages["mfa_locked"])
 
     @staticmethod
     def build_login_response(
-            *,
-            totp_enabled=False,
-            totp_token=None,
-            tokens=None,
+        *,
+        totp_enabled=False,
+        totp_token=None,
+        tokens=None,
     ):
         if not tokens:
             tokens = dict()
