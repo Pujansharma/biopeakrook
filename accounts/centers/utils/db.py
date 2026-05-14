@@ -1,6 +1,9 @@
 import pandas as pd
-from django.db.models import F, Value, Case, When
+from django.db.models import Count, F, Value, Case, When
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Coalesce
 
+from accounts.associates.models import AssociateCenterAssignment
 from accounts.centers.models import Center, CenterOperatingHour
 from sequences.utils import get_next_sequence
 
@@ -48,6 +51,36 @@ def check_overlap(center, day_of_week, start_time, end_time, exclude_id=None):
 
     overlaps_list = overlapping[["open_time", "close_time"]].to_dict("records")
     return True, overlaps_list
+
+
+def refresh_staff_counts(center_ids: list) -> None:
+    staff_subquery = Coalesce(
+        Subquery(
+            AssociateCenterAssignment.objects.filter(center_id=OuterRef("pk"))
+            .order_by()
+            .values("center_id")
+            .annotate(count=Count("id"))
+            .values("count")
+        ),
+        Value(0),
+    )
+    inactive_staff_subquery = Coalesce(
+        Subquery(
+            AssociateCenterAssignment.objects.filter(
+                center_id=OuterRef("pk"),
+                associate__user__is_active=False,
+            )
+            .order_by()
+            .values("center_id")
+            .annotate(count=Count("id"))
+            .values("count")
+        ),
+        Value(0),
+    )
+    Center.objects.filter(pk__in=center_ids).update(
+        staff_count=staff_subquery,
+        inactive_staff_count=inactive_staff_subquery,
+    )
 
 
 def increment_staff_count(center_id) -> None:

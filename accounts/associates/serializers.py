@@ -13,6 +13,7 @@ from accounts.centers.utils.db import (
     increment_staff_count,
     increment_inactive_staff_count,
     decrement_inactive_staff_count,
+    refresh_staff_counts,
 )
 from accounts.customers.models import (
     CustomerAssociateAssignment,
@@ -399,6 +400,9 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
                 unique_fields=["associate", "center"],
             )
 
+        affected_center_ids = [c["id"] for c in add_centers] + list(remove_center_ids)
+        refresh_staff_counts(affected_center_ids)
+
         return associate
 
 
@@ -585,8 +589,7 @@ class CenterAssociateSerializer(
                 **validated_data,
             )
 
-            if not assignment.is_primary:
-                increment_staff_count(assignment.center.pk)
+            increment_staff_count(assignment.center.pk)
 
         return assignment
 
@@ -690,7 +693,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                pk=role_id, center=instance.center
+                    pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
@@ -709,7 +712,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                 setattr(associate, key, value)
             associate.save(update_fields=[*associate_data.keys(), "updated_at"])
 
-        if instance.is_primary and "is_active" in user_data:
+        if "is_active" in user_data:
             is_now_active = user_data["is_active"]
             if not is_now_active and was_active:
                 increment_inactive_staff_count(instance.center.pk)

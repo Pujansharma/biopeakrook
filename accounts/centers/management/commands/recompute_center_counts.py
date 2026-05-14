@@ -15,7 +15,6 @@ class Command(BaseCommand):
             Subquery(
                 AssociateCenterAssignment.objects.filter(
                     center=OuterRef("pk"),
-                    is_primary=True,
                 )
                 .values("center")
                 .annotate(c=Count("pk"))
@@ -28,7 +27,6 @@ class Command(BaseCommand):
             Subquery(
                 AssociateCenterAssignment.objects.filter(
                     center=OuterRef("pk"),
-                    is_primary=True,
                     associate__user__is_active=False,
                 )
                 .values("center")
