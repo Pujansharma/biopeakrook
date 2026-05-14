@@ -158,7 +158,7 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
 
         user_data = validated_data.pop("user", {})
         user_data.pop("phone", None)
-        is_active = user_data.get("is_active")
+        is_active = user_data.get("is_active", user.is_active)
         validated_data["is_active"] = is_active
 
         email = user_data.get("email")
@@ -166,10 +166,10 @@ class AdminUserDetailSerializer(BaseAdminUserSerializer):
         errors = {}
 
         if (
-            email
-            and User.objects.filter(email__iexact=email)
-            .exclude(pk=instance.user.pk)
-            .exists()
+                email
+                and User.objects.filter(email__iexact=email)
+                .exclude(pk=instance.user.pk)
+                .exists()
         ):
             errors["email"] = "User with this email already exists."
 
