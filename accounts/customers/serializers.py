@@ -317,7 +317,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
 
     id = serializers.UUIDField(source="customer_profile.id", read_only=True)
     contact_email = serializers.EmailField(
-        source="customer_profile.customer.contact_email", required=True
+        source="customer_profile.customer.contact_email", required=False
     )
     phone = PhoneNumberSerializerField(
         source="customer_profile.customer.user.phone", required=True
