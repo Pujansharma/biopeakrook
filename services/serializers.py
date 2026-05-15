@@ -138,6 +138,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             "service",
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "created_at",
             "redemption_type",
             "center_id",
@@ -162,9 +163,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             )
 
         if (
-            not Program.objects.filter(pk=program_service.program.pk)
-            .exclude(expires_at__lt=timezone.localdate())
-            .exists()
+                not Program.objects.filter(pk=program_service.program.pk)
+                        .exclude(expires_at__lt=timezone.localdate())
+                        .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."
@@ -175,7 +176,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
         if not CenterServiceAssignment.objects.filter(
-            service=program_service.service, center_id=center_id, is_active=True
+                service=program_service.service, center_id=center_id, is_active=True
         ).exists():
             raise serializers.ValidationError(
                 "This service is not available at the given center."
@@ -211,14 +212,19 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
             raise serializers.ValidationError("Program service is already cancelled.")
         program_service.is_active = False
         program_service.cancelled_by = cancelled_by
-        program_service.program.cancelled_at = timezone.localtime()
+        program_service.cancelled_at = timezone.localtime()
         program_service.cancellation_reason = cancellation_reason
+        sessions_remaining = program_service.sessions_count - program_service.sessions_used
+        program_service.sessions_cancelled = sessions_remaining
         program_service.save(
             update_fields=[
                 "is_active",
+                "sessions_cancelled",
                 "cancelled_by",
                 "cancelled_at",
                 "cancellation_reason",
             ]
         )
+        program_service.program.sessions_cancelled += sessions_remaining
+        program_service.program.save(update_fields=['sessions_cancelled'])
         return program_service

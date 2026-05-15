@@ -73,6 +73,7 @@ class BaseProgramServiceSerializer(BaseModelSerializer):
             "service",
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "redeem_code",
             "created_at",
             "is_active",
@@ -149,6 +150,9 @@ class WellnessProgramDetailSerializer(BaseModelSerializer):
     sessions_used = serializers.IntegerField(
         source="program.sessions_used", read_only=True
     )
+    sessions_cancelled = serializers.IntegerField(
+        source="program.sessions_cancelled", read_only=True
+    )
     services_count = serializers.IntegerField(
         source="program.services_count", read_only=True
     )
@@ -179,6 +183,7 @@ class WellnessProgramDetailSerializer(BaseModelSerializer):
             "expires_at",
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "services_count",
             "redeemable_centers",
             "redeemable_centers_count",
@@ -237,9 +242,13 @@ class WellnessProgramSerializer(BaseModelSerializer):
     sessions_used = serializers.IntegerField(
         source="program.sessions_used", default=0, read_only=True
     )
+    sessions_cancelled = serializers.IntegerField(
+        source="program.sessions_cancelled", default=0, read_only=True
+    )
     services_count = serializers.IntegerField(
         source="program.services_count", default=0, read_only=True
     )
+
     redeemable_centers_count = serializers.IntegerField(
         source="program.redeemable_centers_count", default=0, read_only=True
     )
@@ -267,6 +276,7 @@ class WellnessProgramSerializer(BaseModelSerializer):
             "price",
             "services_count",
             "sessions_count",
+            "sessions_cancelled",
             "sessions_used",
             "redeemable_centers",
             "redeemable_centers_count",
@@ -442,10 +452,10 @@ class WellnessProgramRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError("This program has expired.")
 
         if not ProgramService.objects.filter(
-            program=wellness_program.program,
-            is_active=True,
-            service__center_assignments__center_id=center_id,
-            service__center_assignments__is_active=True,
+                program=wellness_program.program,
+                is_active=True,
+                service__center_assignments__center_id=center_id,
+                service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}
