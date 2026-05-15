@@ -1,4 +1,4 @@
-from django.db.models import Count, F, Value, Case, When, OuterRef, Subquery
+from django.db.models import Count, F, Value, Case, When, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
