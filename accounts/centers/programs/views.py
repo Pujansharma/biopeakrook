@@ -1,5 +1,6 @@
-from django.db.models import F, Prefetch, Q, Value
+from django.db.models import F, Prefetch, Q, Value, ExpressionWrapper, BooleanField
 from django.db.models.functions import Concat
+from django.utils import timezone
 
 from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
@@ -21,8 +22,22 @@ class CenterProgramsView(BaseListCreateAPIView):
         center_id = self.kwargs.get("pk")
         search_query = self.request.query_params.get("search", "").strip()
         active_query_param = self.request.query_params.get("active", None)
+        complete_query = self.request.query_params.get("complete", None)
+        expired_query = self.request.query_params.get("expired", None)
+
         if active_query_param and active_query_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query_param))
+
+        if complete_query and complete_query in ["0", "1"]:
+            filter_kwargs["is_complete"] = bool(int(complete_query))
+
+        expired_filter_map = {
+            "1": {"program__expires_at__lt": timezone.localdate()},
+            "0": {"program__expires_at__gte": timezone.localdate()},
+        }
+        if expired_query and expired_query in expired_filter_map:
+            filter_kwargs.update(expired_filter_map[expired_query])
+
         if search_query:
             search |= Q(full_name__istartswith=search_query)
             search |= Q(national_phone__istartswith=search_query)
@@ -44,6 +59,10 @@ class CenterProgramsView(BaseListCreateAPIView):
                     Value("-"),
                     Value("-1"),
                 ),
+                is_complete=ExpressionWrapper(
+                    Q(program__sessions_count=F("program__sessions_used")),
+                    output_field=BooleanField(),
+                )
             )
             .filter(search, program__center_id=center_id, **filter_kwargs)
             .select_related(
