@@ -23,6 +23,8 @@ class Program(BaseUUIDModel):
     services_count = models.PositiveBigIntegerField(default=0, editable=False)
     sessions_count = models.PositiveBigIntegerField(default=0, editable=False)
     sessions_used = models.PositiveBigIntegerField(default=0, editable=False)
+    sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
+
     redeemable_centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     created_by = models.ForeignKey(
         "users.User",
@@ -57,6 +59,7 @@ class ProgramService(BaseUUIDModel):
     )
     sessions_count = models.PositiveIntegerField(default=0)
     sessions_used = models.PositiveIntegerField(default=0, editable=False)
+    sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
     redeem_code = models.CharField(default=generate_redeemable_code, editable=False)
     created_by = models.ForeignKey(
         "users.User",
