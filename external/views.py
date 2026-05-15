@@ -94,10 +94,6 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
         programs_base = Program.objects.filter(customer_profile=OuterRef("pk")).values(
             "customer_profile"
         )
-        program_services_base = ProgramService.objects.filter(
-            program__customer_profile=OuterRef("pk")
-        ).values("program__customer_profile")
-
         return CustomerProfile.objects.filter(pk=customer_profile.pk).annotate(
             programs_count=Coalesce(
                 Subquery(programs_base.annotate(n=Count("pk")).values("n")[:1]),
@@ -137,9 +133,7 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             ),
             sessions_cancelled=Coalesce(
                 Subquery(
-                    program_services_base.filter(is_active=False)
-                    .annotate(total=Sum(F("sessions_count") - F("sessions_used")))
-                    .values("total")[:1]
+                    programs_base.annotate(total=Sum("sessions_cancelled")).values("total")[:1]
                 ),
                 0,
             ),
