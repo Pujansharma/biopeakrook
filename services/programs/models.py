@@ -1,7 +1,7 @@
 from django.db import models
 
 from core.utils.models import BaseUUIDModel
-from services.programs.utils.constants import ProgramType
+from services.programs.utils.constants import ProgramType, RedemptionType
 from services.utils.helper import generate_redeemable_code
 
 
@@ -21,6 +21,7 @@ class Program(BaseUUIDModel):
         "centers.Center", related_name="redeemable_programs", blank=True
     )
     services_count = models.PositiveBigIntegerField(default=0, editable=False)
+    services_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
     sessions_count = models.PositiveBigIntegerField(default=0, editable=False)
     sessions_used = models.PositiveBigIntegerField(default=0, editable=False)
     sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
@@ -126,6 +127,9 @@ class RedemptionHistory(BaseUUIDModel):
         related_name="redeemed_histories",
     )
     notes = models.TextField(blank=True)
+    redemption_type = models.CharField(
+        choices=RedemptionType, default=RedemptionType.REDEEM, editable=False
+    )
 
     class Meta:
         ordering = ["-created_at"]
