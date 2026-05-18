@@ -61,7 +61,9 @@ class ExternalUserProgramView(BaseListAPIView):
         qs = (
             WellnessProgram.objects.annotate(
                 is_complete=ExpressionWrapper(
-                    Q(program__sessions_count=F("program__sessions_used")),
+                    Q(
+                        program__sessions_count=F("program__sessions_used") + F("program__sessions_cancelled")
+                    ),
                     output_field=BooleanField(),
                 )
             )
