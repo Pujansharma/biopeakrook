@@ -133,7 +133,9 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             ),
             sessions_cancelled=Coalesce(
                 Subquery(
-                    programs_base.annotate(total=Sum("sessions_cancelled")).values("total")[:1]
+                    programs_base.annotate(total=Sum("sessions_cancelled")).values(
+                        "total"
+                    )[:1]
                 ),
                 0,
             ),
@@ -147,7 +149,9 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             ),
             programs_complete=Coalesce(
                 Subquery(
-                    programs_base.filter(sessions_count=F("sessions_used") + F("sessions_cancelled"))
+                    programs_base.filter(
+                        sessions_count=F("sessions_used") + F("sessions_cancelled")
+                    )
                     .annotate(count=Count("pk"))
                     .values("count")[:1]
                 ),
