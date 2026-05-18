@@ -145,6 +145,14 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                 ),
                 0,
             ),
+            programs_complete=Coalesce(
+                Subquery(
+                    programs_base.filter(sessions_count=F("sessions_used") + F("sessions_cancelled"))
+                    .annotate(count=Count("pk"))
+                    .values("count")[:1]
+                ),
+                0,
+            ),
         )
 
     def get_object(self):
