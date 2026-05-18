@@ -17,7 +17,7 @@ class ProgramAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["is_active", "program_type", "is_complimentary"]
-    search_fields = ["id", "customer_profile__customer__user_id"]
+    search_fields = ["id", "customer_profile__customer__user__phone"]
     raw_id_fields = ["customer_profile", "center"]
     filter_horizontal = ["redeemable_centers"]
     list_select_related = True
