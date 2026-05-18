@@ -152,6 +152,7 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             programs_complete=Coalesce(
                 Subquery(
                     programs_base.filter(
+                        is_active=True,
                         sessions_count=F("sessions_used") + F("sessions_cancelled")
                     )
                     .annotate(count=Count("pk"))
