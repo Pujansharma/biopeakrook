@@ -29,3 +29,4 @@ dependencies = [
 
 [tool.black]
 extend-exclude = "migrations/"
+target-version = ['py314']
