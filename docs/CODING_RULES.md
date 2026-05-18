@@ -520,7 +520,29 @@ def process_record(record: Record) -> dict:
 
 ---
 
-## 11. No Raw SQL
+## 11. Django FK Access — Always Use `.pk`, Never `_id` Suffix
+
+### ✅ DO: Access FK primary keys via `.pk`
+
+```python
+# Good
+increment_service_cancelled_count(program_service.program.pk)
+Program.objects.filter(pk=assignment.center.pk)
+```
+
+### ❌ DON'T: Use Django's auto-generated `_id` accessor
+
+```python
+# Bad - uses the implicit FK column accessor
+increment_service_cancelled_count(program_service.program_id)
+Program.objects.filter(pk=assignment.center_id)
+```
+
+### Rule: Always traverse the relation and use `.pk`. Never use the `<field>_id` shortcut.
+
+---
+
+## 12. No Raw SQL
 
 ### ✅ DO: Use the Django ORM
 

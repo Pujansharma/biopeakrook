@@ -67,3 +67,9 @@
 - Examples: `count` not `cnt`, `assignment` not `asg`, `service` not `s`
 - Added to CODING_RULES.md Section 1 with examples
 - Why: Readability, consistency, prevents ambiguity (especially in subquery annotations)
+
+**Django FK Access (2026-05-18)**
+- **NEVER use `<field>_id`** (e.g. `program_service.program_id`)
+- **ALWAYS use `.pk`** via the relation (e.g. `program_service.program.pk`)
+- Added to CODING_RULES.md Section 11
+- Why: Explicit, consistent, avoids implicit Django column accessor confusion
