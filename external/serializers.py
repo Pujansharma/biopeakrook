@@ -188,6 +188,7 @@ class CustomerServiceDetailSerializer(BaseModelSerializer):
 class CustomerProfileSummarySerializer(BaseModelSerializer):
     programs_count = serializers.IntegerField(read_only=True, default=0)
     programs_expired = serializers.IntegerField(read_only=True, default=0)
+    programs_complete = serializers.IntegerField(read_only=True, default=0)
     programs_inactive = serializers.IntegerField(read_only=True, default=0)
     sessions_count = serializers.IntegerField(read_only=True, default=0)
     sessions_used = serializers.IntegerField(read_only=True, default=0)
@@ -205,6 +206,7 @@ class CustomerProfileSummarySerializer(BaseModelSerializer):
             "programs_count",
             "programs_expired",
             "programs_inactive",
+            "programs_complete",
             "sessions_count",
             "sessions_used",
             "sessions_cancelled",
