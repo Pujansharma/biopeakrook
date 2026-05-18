@@ -7,6 +7,7 @@ from accounts.centers.serializers import BaseCenterSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from services.models import Service, CenterServiceAssignment
 from services.programs.models import Program, ProgramService
+from services.programs.utils.db import cancel_program_service
 from services.utils.db import redeem_program_service, update_service_center_count
 
 
@@ -205,26 +206,17 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
         fields = ["cancellation_reason", "cancelled_by"]
 
     def create(self, validated_data):
+        center = validated_data.get('center')
         program_service: ProgramService = validated_data.pop("program_service", None)
         cancelled_by = validated_data.pop("cancelled_by", None)
         cancellation_reason = validated_data.get("cancellation_reason")
         if not program_service.is_active:
             raise serializers.ValidationError("Program service is already cancelled.")
-        program_service.is_active = False
-        program_service.cancelled_by = cancelled_by
-        program_service.cancelled_at = timezone.localtime()
-        program_service.cancellation_reason = cancellation_reason
-        sessions_remaining = program_service.sessions_count - program_service.sessions_used
-        program_service.sessions_cancelled = sessions_remaining
-        program_service.save(
-            update_fields=[
-                "is_active",
-                "sessions_cancelled",
-                "cancelled_by",
-                "cancelled_at",
-                "cancellation_reason",
-            ]
+        cancel_program_service(
+            program_service.pk,
+            program_service.program.pk,
+            center_id=center.pk,
+            cancelled_by=cancelled_by,
+            cancellation_reason=cancellation_reason,
         )
-        program_service.program.sessions_cancelled += sessions_remaining
-        program_service.program.save(update_fields=['sessions_cancelled'])
         return program_service

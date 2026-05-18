@@ -694,7 +694,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
+                pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}

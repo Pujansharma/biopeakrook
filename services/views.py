@@ -4,8 +4,7 @@ from django.db.models import (
     Q,
     Prefetch,
     ProtectedError,
-    RestrictedError,
-)
+    RestrictedError, )
 
 from accounts.centers.models import Center
 from accounts.centers.serializers import ServiceAvailableCenterSerializer
@@ -194,8 +193,15 @@ class ProgramServiceCancelView(BaseCreateAPIView):
         qs = ProgramService.objects.filter()
         return get_object_or_404(qs, "Program service not found", pk=self.kwargs["pk"])
 
+    def get_center(self):
+        center_id = self.request.headers.get('x-center-id')
+        qs = Center.objects.filter()
+        return get_object_or_404(qs, "Invalid center ID provided", pk=center_id)
+
     def perform_create(self, serializer):
+        center = self.get_center()
         serializer.save(
             program_service=self.get_program_service(),
             cancelled_by=self.request.user,
+            center=center,
         )

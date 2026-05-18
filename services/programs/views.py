@@ -1,5 +1,6 @@
 from django.db.models import Prefetch, OuterRef, Exists
 
+from accounts.centers.models import Center
 from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.exceptions import get_object_or_404
@@ -85,10 +86,18 @@ class WellnessProgramCancelView(BaseCreateAPIView):
             qs, "Wellness program not found with this ID", pk=self.kwargs["pk"]
         )
 
+    def get_center(self):
+        center_id = self.request.headers.get('x-center-id')
+        qs = Center.objects.filter()
+        return get_object_or_404(
+            qs, "Invalid center ID provided", pk=center_id
+        )
+
     def perform_create(self, serializer):
         serializer.save(
             wellness_program=self.get_wellness_program(),
             cancelled_by=self.request.user,
+            center=self.get_center(),
         )
 
 

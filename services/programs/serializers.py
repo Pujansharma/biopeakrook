@@ -20,7 +20,7 @@ from services.programs.models import (
 )
 from services.programs.utils.constants import ProgramType
 from services.programs.utils.db import (
-    cancel_program_services,
+    cancel_all_program_services,
     update_program_redeemable_centers_count,
     update_program_services_count,
     update_program_sessions_count,
@@ -403,6 +403,7 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
         fields = ["cancellation_reason", "cancelled_by", "cancelled_at"]
 
     def create(self, validated_data):
+        center = validated_data.pop('center')
         wellness_program = validated_data.pop("wellness_program", None)
         cancelled_by = validated_data.pop("cancelled_by", None)
         program_fields = validated_data.pop("program", {})
@@ -420,8 +421,9 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
         wellness_program.program.save(
             update_fields=["is_active", "cancellation_reason", "cancelled_by"]
         )
-        cancel_program_services(
-            wellness_program.program_id,
+        cancel_all_program_services(
+            wellness_program.program.pk,
+            center_id=center.pk,
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
         )
@@ -480,6 +482,7 @@ class ProgramServiceRedemptionHistorySerializer(BaseModelSerializer):
         model = RedemptionHistory
         fields = [
             "id",
+            'redemption_type',
             "redeem_center",
             "redeemed_at",
             "quantity",

@@ -62,12 +62,16 @@ class CenterProgramsView(BaseListCreateAPIView):
                 is_complete=ExpressionWrapper(
                     Q(program__sessions_count=F("program__sessions_used")),
                     output_field=BooleanField(),
-                )
+                ),
             )
-            .filter(search, Q(
-                Q(program__redeemable_centers=center_id)
-                | Q(program__center_id=center_id)
-            ), **filter_kwargs)
+            .filter(
+                search,
+                Q(
+                    Q(program__redeemable_centers=center_id)
+                    | Q(program__center_id=center_id)
+                ),
+                **filter_kwargs,
+            )
             .select_related(
                 "program",
                 "program__center",
@@ -86,7 +90,8 @@ class CenterProgramsView(BaseListCreateAPIView):
                     ).select_related("center"),
                     to_attr="primary_center_assignments",
                 ),
-            ).distinct()
+            )
+            .distinct()
         )
         return qs
 
