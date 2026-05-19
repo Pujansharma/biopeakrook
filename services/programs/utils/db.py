@@ -61,54 +61,15 @@ def increment_service_cancelled_count(program_id, count: int = 1) -> None:
     )
 
 
-def cancel_program_service(
-    program_service_id, program_id, center_id, cancelled_by=None, cancellation_reason=None
-) -> None:
-    service_data = (
-        ProgramService.objects.filter(pk=program_service_id)
-        .values("sessions_count", "sessions_used")
-        .first()
-    )
-    remaining = service_data["sessions_count"] - service_data["sessions_used"]
-
-    sessions_cancelled_subquery = (
-        ProgramService.objects.filter(program_id=OuterRef("pk"))
-        .values("program_id")
-        .annotate(total=Sum("sessions_cancelled"))
-        .values("total")
-    )
-
-    with transaction.atomic():
-        ProgramService.objects.filter(pk=program_service_id).update(
-            is_active=False,
-            cancelled_by=cancelled_by,
-            cancelled_at=timezone.now(),
-            cancellation_reason=cancellation_reason,
-            sessions_cancelled=F("sessions_count") - F("sessions_used"),
-        )
-        Program.objects.filter(pk=program_id).update(
-            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0))
-        )
-        increment_service_cancelled_count(program_id)
-        RedemptionHistory.objects.create(
-            program_service_id=program_service_id,
-            redeem_center_id=center_id,
-            redeemed_at=timezone.now(),
-            quantity=remaining,
-            redeemed_by=cancelled_by,
-            redemption_type=RedemptionType.CANCEL,
-        )
-
-
 def cancel_all_program_services(
-    program_id, center_id, cancelled_by=None, cancellation_reason=None
+        program_id, center_id, cancelled_by=None, cancellation_reason=None
 ) -> None:
     active_services = list(
         ProgramService.objects.filter(program_id=program_id, is_active=True)
         .values("pk", "sessions_count", "sessions_used")
     )
     if not active_services:
-        return
+        return None
 
     now = timezone.now()
     service_ids = []
@@ -147,3 +108,53 @@ def cancel_all_program_services(
         )
         increment_service_cancelled_count(program_id, count=len(active_services))
         RedemptionHistory.objects.bulk_create(histories)
+    return None
+
+
+def cancel_program_service(
+        program_service_id, program_id, center_id, cancelled_by=None, cancellation_reason=None
+) -> None:
+    has_other_services = (
+        ProgramService.objects.filter(program_id=program_id)
+        .exclude(pk=program_service_id)
+        .exists()
+    )
+    if not has_other_services:
+        cancel_all_program_services(program_id, center_id, cancelled_by, cancellation_reason)
+        return None
+
+    service_data = (
+        ProgramService.objects.filter(pk=program_service_id)
+        .values("sessions_count", "sessions_used")
+        .first()
+    )
+    remaining = service_data["sessions_count"] - service_data["sessions_used"]
+
+    sessions_cancelled_subquery = (
+        ProgramService.objects.filter(program_id=OuterRef("pk"))
+        .values("program_id")
+        .annotate(total=Sum("sessions_cancelled"))
+        .values("total")
+    )
+
+    with transaction.atomic():
+        ProgramService.objects.filter(pk=program_service_id).update(
+            is_active=False,
+            cancelled_by=cancelled_by,
+            cancelled_at=timezone.now(),
+            cancellation_reason=cancellation_reason,
+            sessions_cancelled=F("sessions_count") - F("sessions_used"),
+        )
+        Program.objects.filter(pk=program_id).update(
+            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0))
+        )
+        increment_service_cancelled_count(program_id)
+        RedemptionHistory.objects.create(
+            program_service_id=program_service_id,
+            redeem_center_id=center_id,
+            redeemed_at=timezone.now(),
+            quantity=remaining,
+            redeemed_by=cancelled_by,
+            redemption_type=RedemptionType.CANCEL,
+        )
+    return None
