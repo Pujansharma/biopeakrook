@@ -212,6 +212,11 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
         cancellation_reason = validated_data.get("cancellation_reason")
         if not program_service.is_active:
             raise serializers.ValidationError("Program service is already cancelled.")
+        if (program_service.sessions_used + program_service.sessions_cancelled) >= program_service.sessions_count:
+            raise serializers.ValidationError(
+                "Service cannot be cancelled since it is already used"
+            )
+
         cancel_program_service(
             program_service.pk,
             program_service.program.pk,
