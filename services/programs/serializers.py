@@ -331,6 +331,13 @@ class WellnessProgramSerializer(BaseModelSerializer):
         add_services = validated_data.pop("add_services", [])
         is_complimentary = program_data.get("is_complimentary")
         price = program_data.get("price")
+        expires_at = program_data.get('expires_at')
+
+        if expires_at and expires_at < timezone.localdate():
+            raise serializers.ValidationError({
+                "expires_at": "Expiry date cannot be earlier than today's date"
+            })
+
         if not is_complimentary and not price:
             raise serializers.ValidationError(
                 {"price": "Price is required when program is not complimentary"}
