@@ -78,16 +78,17 @@ def cancel_all_program_services(
     for service in active_services:
         remaining = service["sessions_count"] - service["sessions_used"]
         service_ids.append(service["pk"])
-        histories.append(
-            RedemptionHistory(
-                program_service_id=service["pk"],
-                redeem_center_id=center_id,
-                redeemed_at=now,
-                quantity=remaining,
-                redeemed_by=cancelled_by,
-                redemption_type=RedemptionType.CANCEL,
+        if remaining > 0:
+            histories.append(
+                RedemptionHistory(
+                    program_service_id=service["pk"],
+                    redeem_center_id=center_id,
+                    redeemed_at=now,
+                    quantity=remaining,
+                    redeemed_by=cancelled_by,
+                    redemption_type=RedemptionType.CANCEL,
+                )
             )
-        )
 
     sessions_cancelled_subquery = (
         ProgramService.objects.filter(program_id=OuterRef("pk"))
@@ -99,12 +100,16 @@ def cancel_all_program_services(
     with transaction.atomic():
         ProgramService.objects.filter(pk__in=service_ids).update(
             is_active=False,
+            sessions_cancelled=F("sessions_count") - F("sessions_used"),
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
-            sessions_cancelled=F("sessions_count") - F("sessions_used"),
+            cancelled_at=now,
         )
         Program.objects.filter(pk=program_id).update(
-            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0))
+            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0)),
+            cancelled_by=cancelled_by,
+            cancellation_reason=cancellation_reason,
+            cancelled_at=now,
         )
         increment_service_cancelled_count(program_id, count=len(active_services))
         RedemptionHistory.objects.bulk_create(histories)
@@ -146,7 +151,7 @@ def cancel_program_service(
             sessions_cancelled=F("sessions_count") - F("sessions_used"),
         )
         Program.objects.filter(pk=program_id).update(
-            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0))
+            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0)),
         )
         increment_service_cancelled_count(program_id)
         RedemptionHistory.objects.create(
