@@ -113,11 +113,22 @@ class CustomerAvailableAssociateView(BaseListAPIView):
     serializer_class = BaseCenterAssociateSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
+    def get_customer_profile(self):
+        filter_kwargs = {}
+        center_id = self.request.query_params.get("center_id", None)
+        if center_id:
+            filter_kwargs["center_assignments__center_id"] = center_id
+        qs = CustomerProfile.objects.filter(**filter_kwargs)
+        return get_object_or_404(
+            qs, "Customer profile not found in this center", pk=self.kwargs.get('pk')
+        )
+
     def get_queryset(self):
         search = Q()
         filter_kwargs = {}
         subquery_filter_kwargs = {}
         user = self.request.user
+        customer_profile = self.get_customer_profile()
         center_id = self.request.query_params.get("center_id", None)
         role_id = self.request.query_params.get("role_id", None)
         search_params = self.request.query_params.get("search", "").strip()
@@ -141,7 +152,8 @@ class CustomerAvailableAssociateView(BaseListAPIView):
             # TODO: Implement the associate filtering here or remove this
 
         exists_subquery = CustomerAssociateAssignment.objects.filter(
-            associate=OuterRef("pk"),
+            associate=OuterRef("associate_id"),
+            customer_profile=customer_profile,
             **subquery_filter_kwargs,
         )
 
@@ -157,7 +169,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
                 ),
             )
             .filter(search, **filter_kwargs, is_admin=False)
-            .order_by("-created_at")
+            .order_by("-exists", "-created_at")
         )
 
 
