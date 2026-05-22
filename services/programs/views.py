@@ -87,11 +87,9 @@ class WellnessProgramCancelView(BaseCreateAPIView):
         )
 
     def get_center(self):
-        center_id = self.request.headers.get('x-center-id')
+        center_id = self.request.headers.get("x-center-id")
         qs = Center.objects.filter()
-        return get_object_or_404(
-            qs, "Invalid center ID provided", pk=center_id
-        )
+        return get_object_or_404(qs, "Invalid center ID provided", pk=center_id)
 
     def perform_create(self, serializer):
         serializer.save(

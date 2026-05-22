@@ -120,7 +120,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
             filter_kwargs["center_assignments__center_id"] = center_id
         qs = CustomerProfile.objects.filter(**filter_kwargs)
         return get_object_or_404(
-            qs, "Customer profile not found in this center", pk=self.kwargs.get('pk')
+            qs, "Customer profile not found in this center", pk=self.kwargs.get("pk")
         )
 
     def get_queryset(self):

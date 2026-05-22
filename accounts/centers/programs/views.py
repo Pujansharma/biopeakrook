@@ -60,7 +60,10 @@ class CenterProgramsView(BaseListCreateAPIView):
                     Value("-1"),
                 ),
                 is_complete=ExpressionWrapper(
-                    Q(program__sessions_count=F("program__sessions_used") + F("program__sessions_cancelled")),
+                    Q(
+                        program__sessions_count=F("program__sessions_used")
+                        + F("program__sessions_cancelled")
+                    ),
                     output_field=BooleanField(),
                 ),
             )

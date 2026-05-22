@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db.models import F
 from django.utils import timezone
 
+from accounts.utils.emails import send_password_create_email
 from accounts.verifications.models import (
     PhoneVerification,
     RegistrationCode,
@@ -21,7 +22,6 @@ from accounts.verifications.utils import (
     get_totp_expiry,
 )
 from accounts.verifications.utils.emails import (
-    send_create_password_email,
     send_verification_phone_email,
 )
 from accounts.verifications.utils.sms import send_login_otp_sms
@@ -48,7 +48,8 @@ def set_values_for_phone_verification(instance):
 def perform_otp_generation(phone, code):
     if settings.DEBUG:
         send_verification_phone_email(phone, code)
-        return logger.info(f"OTP FOR {phone} --> {code}")
+        logger.info(f"OTP FOR {phone} --> {code}")
+        return None
 
     send_verification_code_whatsapp(phone, code)
     send_login_otp_sms(phone, code)
@@ -97,7 +98,7 @@ def generate_registration_code_for_user(user):
     return instance
 
 
-def get_registration_code(code):
+def get_registration_code(code) -> RegistrationCode | None:
     return (
         RegistrationCode.objects.select_related("user")
         .filter_active(
@@ -111,7 +112,8 @@ def get_registration_code(code):
 def send_registration_code(user):
     registration_code = generate_registration_code_for_user(user)
     create_password_link = PASSWORD_URL.format(registration_code.code)
-    send_create_password_email(user.email, create_password_link)
+    send_password_create_email(user.email, create_password_link)
+
 
 
 def generate_totp_session(user) -> TOTPSession:

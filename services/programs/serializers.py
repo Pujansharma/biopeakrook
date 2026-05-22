@@ -331,12 +331,12 @@ class WellnessProgramSerializer(BaseModelSerializer):
         add_services = validated_data.pop("add_services", [])
         is_complimentary = program_data.get("is_complimentary")
         price = program_data.get("price")
-        expires_at = program_data.get('expires_at')
+        expires_at = program_data.get("expires_at")
 
         if expires_at and expires_at < timezone.localdate():
-            raise serializers.ValidationError({
-                "expires_at": "Expiry date cannot be earlier than today's date"
-            })
+            raise serializers.ValidationError(
+                {"expires_at": "Expiry date cannot be earlier than today's date"}
+            )
 
         if not is_complimentary and not price:
             raise serializers.ValidationError(
@@ -410,7 +410,7 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
         fields = ["cancellation_reason", "cancelled_by", "cancelled_at"]
 
     def create(self, validated_data):
-        center = validated_data.pop('center')
+        center = validated_data.pop("center")
         wellness_program = validated_data.pop("wellness_program", None)
         cancelled_by = validated_data.pop("cancelled_by", None)
         program_fields = validated_data.pop("program", {})
@@ -461,10 +461,10 @@ class WellnessProgramRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError("This program has expired.")
 
         if not ProgramService.objects.filter(
-                program=wellness_program.program,
-                is_active=True,
-                service__center_assignments__center_id=center_id,
-                service__center_assignments__is_active=True,
+            program=wellness_program.program,
+            is_active=True,
+            service__center_assignments__center_id=center_id,
+            service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}
@@ -489,7 +489,7 @@ class ProgramServiceRedemptionHistorySerializer(BaseModelSerializer):
         model = RedemptionHistory
         fields = [
             "id",
-            'redemption_type',
+            "redemption_type",
             "redeem_center",
             "redeemed_at",
             "quantity",

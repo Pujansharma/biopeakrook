@@ -31,8 +31,72 @@ from accounts.users.utils.constants import Gender
 from accounts.utils.db import (
     check_admin_associate_user_exists,
 )
+from accounts.verifications.utils.helper import send_registration_code
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+
+
+class AssociateValidationMixin:
+    @classmethod
+    def validate_experience(cls, value: float) -> float:
+        if value <= 0:
+            raise serializers.ValidationError("Experience must be greater than 0.")
+        return value
+
+    @classmethod
+    def validate_qualifications(cls, value: list) -> list:
+        if len(value) > 2:
+            raise serializers.ValidationError("Maximum 2 qualifications allowed.")
+        return value
+
+    @classmethod
+    def validate_professions(cls, value: list) -> list:
+        if len(value) > 2:
+            raise serializers.ValidationError("Maximum 2 professions allowed.")
+        return value
+
+
+class AssociateSourceMixinSerializer(AssociateValidationMixin, BaseSerializer):
+    title = serializers.CharField(
+        source="associate.title", required=False, allow_null=True, allow_blank=True
+    )
+    description = serializers.CharField(
+        source="associate.description",
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+    tagline = serializers.CharField(
+        source="associate.tagline",
+        max_length=100,
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+    experience = serializers.FloatField(
+        source="associate.experience", required=False, allow_null=True
+    )
+    qualifications = serializers.ListField(
+        source="associate.qualifications",
+        required=False,
+        max_length=2,
+        child=serializers.CharField(max_length=50),
+    )
+    professions = serializers.ListField(
+        source="associate.professions",
+        required=False,
+        max_length=2,
+        child=serializers.CharField(max_length=50),
+    )
+    has_verified_badge = serializers.BooleanField(
+        source="associate.has_verified_badge", required=False
+    )
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.associate.user.get_gender_display()
+        return rep
 
 
 class BaseAssociateRoleSerializer(BaseModelSerializer):
@@ -71,7 +135,7 @@ class AssociateRoleSerializer(BaseModelSerializer):
         ]
 
 
-class BaseAssociateSerializer(BaseModelSerializer):
+class BaseAssociateSerializer(AssociateValidationMixin, BaseModelSerializer):
     """Base associate serializer for display"""
 
     id = serializers.UUIDField(source="user.id", read_only=True)
@@ -95,6 +159,20 @@ class BaseAssociateSerializer(BaseModelSerializer):
     is_active = serializers.BooleanField(
         source="user.is_active", required=False, default=True
     )
+    title = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    description = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True
+    )
+    tagline = serializers.CharField(
+        max_length=100, required=False, allow_null=True, allow_blank=True
+    )
+    experience = serializers.FloatField(required=False, allow_null=True)
+    qualifications = serializers.ListField(
+        required=False, max_length=2, child=serializers.CharField(max_length=50)
+    )
+    professions = serializers.ListField(
+        required=False, max_length=2, child=serializers.CharField(max_length=50)
+    )
 
     class Meta:
         model = Associate
@@ -112,6 +190,12 @@ class BaseAssociateSerializer(BaseModelSerializer):
             "date_joined",
             "last_login",
             "updated_at",
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
         ]
 
     def to_representation(self, instance):
@@ -142,6 +226,12 @@ class AdminAssociateSerializer(
             "date_joined",
             "last_login",
             "updated_at",
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
             "password1",
             "password2",
         ]
@@ -180,10 +270,6 @@ class AdminAssociateSerializer(
                 update_organization_staff_count()
             return super().update(instance, validated_data)
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        return rep
-
 
 class AdminAssociateDetailSerializer(BaseAssociateSerializer):
     """Serializers for admins to update or create associates"""
@@ -204,6 +290,12 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
             "date_joined",
             "last_login",
             "updated_at",
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
         ]
 
     def create(self, validated_data):
@@ -225,7 +317,9 @@ class AdminAssociateDetailSerializer(BaseAssociateSerializer):
         return super().update(instance, validated_data)
 
 
-class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
+class CenterAssignmentAssociateProfileSerializer(
+    AssociateSourceMixinSerializer, BaseModelSerializer
+):
     """Serializer only for associates to update or view their profile"""
 
     id = serializers.UUIDField(source="associate.user.id", read_only=True)
@@ -254,6 +348,7 @@ class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
         source="associate.user.last_login", read_only=True
     )
     is_admin = serializers.BooleanField(read_only=True)
+    is_care_staff = serializers.BooleanField(read_only=True)
     role = BaseAssociateRoleSerializer(read_only=True)
 
     class Meta:
@@ -268,11 +363,19 @@ class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
             "date_of_birth",
             "image",
             "is_admin",
+            "is_care_staff",
             "is_active",
             "date_joined",
             "last_login",
             "updated_at",
             "role",
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
+            "has_verified_badge",
         ]
 
     def create(self, validated_data):
@@ -288,6 +391,7 @@ class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
         user = instance.associate.user
 
         validated_data.pop("is_admin", None)
+        validated_data.pop("is_care_staff", None)
         validated_data.pop("is_external", None)
         validated_data.pop("is_active", None)
 
@@ -302,16 +406,11 @@ class CenterAssignmentAssociateProfileSerializer(BaseModelSerializer):
             user.save(update_fields=[*user_data.keys(), "updated_at"])
             return super().update(instance, validated_data)
 
-    def to_representation(self, instance: AssociateCenterAssignment):
-        rep = super().to_representation(instance)
-        if "gender" in self.get_fields():
-            rep["gender"] = instance.associate.user.get_gender_display()
-        return rep
-
 
 class CenterIDSerializer(BaseSerializer):
     id = serializers.UUIDField()
-    is_admin = serializers.BooleanField(default=True, required=False)
+    is_admin = serializers.BooleanField(default=False, required=False)
+    is_care_staff = serializers.BooleanField(default=False, required=False)
 
 
 class AdminAssociateCenterLinkSerializer(BaseSerializer):
@@ -389,14 +488,15 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
                 AssociateCenterAssignment(
                     associate=associate,
                     center_id=c["id"],
-                    is_admin=c.get("is_admin", True),
+                    is_admin=c.get("is_admin", False),
+                    is_care_staff=c.get("is_care_staff", False),
                 )
                 for c in add_centers
             ]
             AssociateCenterAssignment.objects.bulk_create(
                 assignments,
                 update_conflicts=True,
-                update_fields=["is_admin"],
+                update_fields=["is_admin", "is_care_staff"],
                 unique_fields=["associate", "center"],
             )
 
@@ -408,6 +508,7 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
 
 class AssociateCenterSerializer(CenterSerializer):
     is_admin = serializers.BooleanField(default=False, read_only=True)
+    is_care_staff = serializers.BooleanField(default=False, read_only=True)
 
     class Meta:
         model = Center
@@ -434,6 +535,7 @@ class AssociateCenterSerializer(CenterSerializer):
             "updated_at",
             "is_active",
             "is_admin",
+            "is_care_staff",
         ]
 
 
@@ -456,6 +558,7 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
         source="associate.user.is_active", read_only=True
     )
     is_admin = serializers.BooleanField(read_only=True)
+    is_care_staff = serializers.BooleanField(read_only=True)
     exists = serializers.BooleanField(read_only=True)
 
     # Nested objects
@@ -474,14 +577,23 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
             "image",
             "is_active",
             "is_admin",
+            "is_care_staff",
             "exists",
             "role",
             "created_by",
         ]
 
+    def to_representation(self, instance: AssociateCenterAssignment):
+        rep = super().to_representation(instance)
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.associate.get_gender_display()
+        return rep
+
 
 class CenterAssociateSerializer(
-    BasePasswordCheckOptionalSerializer, BaseModelSerializer
+    AssociateSourceMixinSerializer,
+    BasePasswordCheckOptionalSerializer,
+    BaseModelSerializer,
 ):
     # Flatten user fields to root
     id = serializers.UUIDField(source="associate.user.id", read_only=True)
@@ -529,15 +641,24 @@ class CenterAssociateSerializer(
             "image",
             # Associate fields (flattened)
             "is_admin",
+            "is_care_staff",
             "is_primary",
             "is_active",
             # Write only fields
             "role_id",
             "password1",
             "password2",
+            'send_password_link',
             "created_at",
             "updated_at",
             "role",
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
+            "has_verified_badge",
             "created_by",
         ]
 
@@ -546,12 +667,14 @@ class CenterAssociateSerializer(
         center = validated_data.pop("center", None)
         if not center:
             raise serializers.ValidationError("Invalid Center ID provided.")
+        send_password_link = validated_data.pop('send_password_link', False)
 
         associate_data = validated_data.pop("associate", {})
         user_data = associate_data.pop("user", {})
         role_id = validated_data.pop("role_id", None)
 
         is_admin = validated_data.pop("is_admin", False)
+        is_care_staff = validated_data.pop("is_care_staff", False)
 
         email = user_data.get("email")
         password1 = None
@@ -574,11 +697,14 @@ class CenterAssociateSerializer(
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
                 )
+        if not send_password_link:
+            password1 = self.get_validated_password(validated_data)
 
-        password1 = self.get_validated_password(validated_data)
         validated_data["is_admin"] = is_admin
+        validated_data["is_care_staff"] = is_care_staff
         with transaction.atomic():
             user = User.objects.create_user(**user_data, password=password1, phone=None)
+
             associate = Associate.objects.create(user=user, **associate_data)
             create_associate_user_account(associate)
 
@@ -591,7 +717,8 @@ class CenterAssociateSerializer(
 
             increment_staff_count(assignment.center.pk)
             increment_organization_admins_count()
-
+            if send_password_link:
+                send_registration_code(user)
         return assignment
 
     def update(self, instance: AssociateCenterAssignment, validated_data):
@@ -605,7 +732,9 @@ class CenterAssociateSerializer(
         return rep
 
 
-class CenterAssociateDetailSerializer(BaseModelSerializer):
+class CenterAssociateDetailSerializer(
+    AssociateSourceMixinSerializer, BaseModelSerializer
+):
     # Flatten user fields to root
     id = serializers.UUIDField(source="associate.user.id", read_only=True)
     email = serializers.EmailField(
@@ -658,11 +787,19 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
             "role_id",
             # Assignment fields (native)
             "is_admin",
-            "mode",
+            "is_care_staff",
             "is_primary",
             "is_active",
             "created_at",
             "updated_at",
+            # Associate profile fields (from mixin)
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
+            "has_verified_badge",
         ]
 
     def update(self, instance: AssociateCenterAssignment, validated_data):
@@ -694,7 +831,7 @@ class CenterAssociateDetailSerializer(BaseModelSerializer):
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                pk=role_id, center=instance.center
+                    pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
@@ -739,6 +876,7 @@ class AssociateCenterPermissionSerializer(BaseModelSerializer):
         fields = [
             "role",
             "is_admin",
+            "is_care_staff",
             "mode",
             "is_primary",
             "is_active",

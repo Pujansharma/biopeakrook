@@ -62,11 +62,12 @@ def increment_service_cancelled_count(program_id, count: int = 1) -> None:
 
 
 def cancel_all_program_services(
-        program_id, center_id, cancelled_by=None, cancellation_reason=None
+    program_id, center_id, cancelled_by=None, cancellation_reason=None
 ) -> None:
     active_services = list(
-        ProgramService.objects.filter(program_id=program_id, is_active=True)
-        .values("pk", "sessions_count", "sessions_used")
+        ProgramService.objects.filter(program_id=program_id, is_active=True).values(
+            "pk", "sessions_count", "sessions_used"
+        )
     )
     if not active_services:
         return None
@@ -106,7 +107,9 @@ def cancel_all_program_services(
             cancelled_at=now,
         )
         Program.objects.filter(pk=program_id).update(
-            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0)),
+            sessions_cancelled=Coalesce(
+                Subquery(sessions_cancelled_subquery), Value(0)
+            ),
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
             cancelled_at=now,
@@ -117,7 +120,11 @@ def cancel_all_program_services(
 
 
 def cancel_program_service(
-        program_service_id, program_id, center_id, cancelled_by=None, cancellation_reason=None
+    program_service_id,
+    program_id,
+    center_id,
+    cancelled_by=None,
+    cancellation_reason=None,
 ) -> None:
     has_other_services = (
         ProgramService.objects.filter(program_id=program_id)
@@ -125,7 +132,9 @@ def cancel_program_service(
         .exists()
     )
     if not has_other_services:
-        cancel_all_program_services(program_id, center_id, cancelled_by, cancellation_reason)
+        cancel_all_program_services(
+            program_id, center_id, cancelled_by, cancellation_reason
+        )
         return None
 
     service_data = (
@@ -151,7 +160,9 @@ def cancel_program_service(
             sessions_cancelled=F("sessions_count") - F("sessions_used"),
         )
         Program.objects.filter(pk=program_id).update(
-            sessions_cancelled=Coalesce(Subquery(sessions_cancelled_subquery), Value(0)),
+            sessions_cancelled=Coalesce(
+                Subquery(sessions_cancelled_subquery), Value(0)
+            ),
         )
         increment_service_cancelled_count(program_id)
         RedemptionHistory.objects.create(

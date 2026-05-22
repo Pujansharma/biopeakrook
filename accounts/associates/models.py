@@ -1,10 +1,12 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from accounts.associates.utils.constants import (
     AssociateRoleFeature,
     AssociateRoleTag,
     AssociateRoleAbility,
+    AssociateTitle,
 )
 from accounts.utils import get_user_model
 from appointments.utils.constants import ScheduleModes
@@ -99,6 +101,20 @@ class Associate(BaseModel):
         related_name="created_associates",
     )
     contact_phone = PhoneNumberField(null=True, blank=True)
+    title = models.CharField(choices=AssociateTitle, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    tagline = models.CharField(max_length=100, null=True, blank=True)
+    experience = models.FloatField(
+        null=True, blank=True, help_text=_("Years of experience")
+    )
+
+    qualifications = ArrayField(
+        base_field=models.CharField(max_length=50), max_length=2, default=list
+    )
+    professions = ArrayField(
+        base_field=models.CharField(max_length=50), max_length=2, default=list
+    )
+    has_verified_badge = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -147,6 +163,7 @@ class AssociateCenterAssignment(BaseUUIDModel):
     # Is this their primary center?
     is_primary = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
+    is_care_staff = models.BooleanField(default=False)
 
     created_by = models.ForeignKey(
         User,
@@ -161,7 +178,11 @@ class AssociateCenterAssignment(BaseUUIDModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["associate", "center"], name="uniq_associate_center"
-            )
+            ),
+            # models.CheckConstraint(
+            #     name="associate_admin_or_staff",
+            #     condition=models.Q(is_admin=True) | models.Q(is_care_staff=True),
+            # )
         ]
         verbose_name = "Associate-Center Assignment"
 

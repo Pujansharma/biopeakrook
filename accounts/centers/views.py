@@ -123,6 +123,7 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
         filter_kwargs = {}
         search_params = self.request.query_params.get("search", "").strip()
         is_admin = self.request.query_params.get("admin", None)
+        is_care_staff = self.request.query_params.get("care_staff", None)
         active_param = self.request.query_params.get("active", None)
         if active_param and active_param in ["0", "1"]:
             filter_kwargs["associate__user__is_active"] = bool(int(active_param))
@@ -133,8 +134,10 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
             search |= Q(full_name__istartswith=search_params)
             search |= Q(full_name__icontains=search_params)
 
-        if is_admin:
+        if is_admin and is_admin in ["0", "1"]:
             filter_kwargs["is_admin"] = bool(int(is_admin))
+        if is_care_staff and is_care_staff in ["0", "1"]:
+            filter_kwargs["is_care_staff"] = bool(int(is_care_staff))
 
         return (
             AssociateCenterAssignment.objects.annotate(

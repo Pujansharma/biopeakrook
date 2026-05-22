@@ -50,3 +50,7 @@ class AssociateRoleAbility:
 class AssociateRoleTag(models.TextChoices):
     CLINICAL = "clinical", "Clinical"
     NON_CLINICAL = "non_clinical", "Non Clinical"
+
+
+class AssociateTitle(models.TextChoices):
+    DOCTOR = "doctor", "Dr."

@@ -164,9 +164,9 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             )
 
         if (
-                not Program.objects.filter(pk=program_service.program.pk)
-                        .exclude(expires_at__lt=timezone.localdate())
-                        .exists()
+            not Program.objects.filter(pk=program_service.program.pk)
+            .exclude(expires_at__lt=timezone.localdate())
+            .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."
@@ -177,7 +177,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
         if not CenterServiceAssignment.objects.filter(
-                service=program_service.service, center_id=center_id, is_active=True
+            service=program_service.service, center_id=center_id, is_active=True
         ).exists():
             raise serializers.ValidationError(
                 "This service is not available at the given center."
@@ -206,7 +206,7 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
         fields = ["cancellation_reason", "cancelled_by"]
 
     def create(self, validated_data):
-        center = validated_data.get('center')
+        center = validated_data.get("center")
         program_service: ProgramService = validated_data.pop("program_service", None)
         cancelled_by = validated_data.pop("cancelled_by", None)
         cancellation_reason = validated_data.get("cancellation_reason")

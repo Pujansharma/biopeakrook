@@ -1,4 +1,7 @@
+from typing import Any
+
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 
 from accounts.serializers import (
@@ -7,7 +10,9 @@ from accounts.serializers import (
     PasswordTokenCheckSerializer,
     RequestPasswordResetEmailSerializer,
     LoginSerializer,
+    PasswordCreateSerializer,
 )
+from core.utils.request import Request
 from core.utils.view_types import PostMethodMixin
 from core.utils.views import BaseGenericAPIView
 
@@ -77,3 +82,21 @@ class ResetPasswordView(BaseGenericAPIView, PostMethodMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return self.send_response(detail="Password reset successful.")
+
+
+class CheckPasswordCodeView(BaseGenericAPIView, PostMethodMixin):
+    serializer_class = ""
+
+    def post(self, request, *args, **kwargs):
+        pass
+
+
+class SetPasswordView(BaseGenericAPIView, PostMethodMixin):
+    """Standard endpoint to set a password using token"""
+
+    serializer_class = PasswordCreateSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return self.send_response(detail="Password set successfully")

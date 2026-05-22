@@ -12,9 +12,12 @@ from accounts.utils.db import (
     validate_password_reset_token,
 )
 from accounts.utils.emails import send_reset_password_email
-from accounts.verifications.models import TOTPCredential, TOTPSession
+from accounts.verifications.models import RegistrationCode, TOTPCredential, TOTPSession
 from accounts.verifications.utils import verify_two_factor_code
-from accounts.verifications.utils.helper import apply_totp_lockout
+from accounts.verifications.utils.helper import (
+    apply_totp_lockout,
+    get_registration_code,
+)
 from core.utils.authentication import perform_login_for_user, get_mfa_token_for_user
 from core.utils.serializers import BaseSerializer
 
@@ -59,6 +62,7 @@ class BasePasswordCheckOptionalSerializer(BaseSerializer):
         required=False,
         write_only=True,
     )
+    send_password_link = serializers.BooleanField(required=False, write_only=True)
 
     @classmethod
     def get_validated_password(cls, attrs):
@@ -89,17 +93,17 @@ class TOTPAuthenticationMixin:
                 self.mfa_error_messages["mfa_permanently_locked"]
             )
         if (
-            totp_instance.lock_expires_at
-            and totp_instance.lock_expires_at > timezone.now()
+                totp_instance.lock_expires_at
+                and totp_instance.lock_expires_at > timezone.now()
         ):
             raise AuthenticationFailed(self.mfa_error_messages["mfa_locked"])
 
     @staticmethod
     def build_login_response(
-        *,
-        totp_enabled=False,
-        totp_token=None,
-        tokens=None,
+            *,
+            totp_enabled=False,
+            totp_token=None,
+            tokens=None,
     ):
         if not tokens:
             tokens = dict()
@@ -285,3 +289,41 @@ class TOTPVerifySerializer(TOTPAuthenticationMixin, BaseSerializer):
         return self.build_login_response(
             totp_enabled=False, tokens=perform_login_for_user(user=totp_session.user)
         )
+
+
+class PasswordCodeCheckSerializer(BaseSerializer):
+    code = serializers.CharField(required=True)
+
+    @staticmethod
+    def _resolve_code_error(code: str) -> str:
+        record = RegistrationCode.objects.filter(code=code).first()
+        if not record:
+            return "This registration link is invalid."
+        if not record.is_active:
+            return "This registration link has already been used."
+        return "This registration link has expired. Please request a new one."
+
+    def validate(self, attrs):
+        code = attrs.get("code")
+        registration_code = get_registration_code(code)
+        if not registration_code:
+            raise serializers.ValidationError({"code": self._resolve_code_error(code)})
+        return attrs
+
+
+class PasswordCreateSerializer(BasePasswordCheckSerializer):
+    code = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        code = attrs.get("code")
+        registration_code = get_registration_code(code)
+        if not registration_code:
+            raise serializers.ValidationError(
+                {"code": "Code is invalid or expired"}
+            )
+        passwords = super().validate(attrs)
+        user = registration_code.user
+        _password = passwords.get("password1")
+        user.set_password(_password)
+        user.save()
+        return user

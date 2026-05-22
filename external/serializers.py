@@ -65,7 +65,7 @@ class CustomerWellnessProgramSerializer(BaseModelSerializer):
         source="program.sessions_used", default=0, read_only=True
     )
     sessions_cancelled = serializers.IntegerField(
-        source='program.sessions_cancelled', default=0, read_only=True
+        source="program.sessions_cancelled", default=0, read_only=True
     )
     services_count = serializers.IntegerField(
         source="program.services_count", default=0, read_only=True

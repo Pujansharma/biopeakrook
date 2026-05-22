@@ -62,7 +62,8 @@ class ExternalUserProgramView(BaseListAPIView):
             WellnessProgram.objects.annotate(
                 is_complete=ExpressionWrapper(
                     Q(
-                        program__sessions_count=F("program__sessions_used") + F("program__sessions_cancelled")
+                        program__sessions_count=F("program__sessions_used")
+                        + F("program__sessions_cancelled")
                     ),
                     output_field=BooleanField(),
                 )
@@ -153,7 +154,7 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                 Subquery(
                     programs_base.filter(
                         is_active=True,
-                        sessions_count=F("sessions_used") + F("sessions_cancelled")
+                        sessions_count=F("sessions_used") + F("sessions_cancelled"),
                     )
                     .annotate(count=Count("pk"))
                     .values("count")[:1]

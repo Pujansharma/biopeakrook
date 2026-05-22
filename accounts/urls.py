@@ -22,6 +22,8 @@ urlpatterns = [
         name="check_password_token",
     ),
     path("reset-password/", views.ResetPasswordView.as_view(), name="reset_password"),
+    # Check create password token
+    path("set-password/", views.SetPasswordView.as_view()),
     # OTP Flow
     path("request-otp/", RequestOTPView.as_view(), name="request_otp"),
     path("login-otp/", LoginOTPView.as_view(), name="login_otp"),
