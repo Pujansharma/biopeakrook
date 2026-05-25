@@ -6,6 +6,7 @@ from accounts.associates.models import (
     AssociateCenterAssignment,
     AssociateRole,
 )
+from accounts.associates.utils.constants import AssociateTitle
 from accounts.associates.utils.db import create_associate_user_account
 from accounts.centers.models import Center
 from accounts.centers.serializers import CenterSerializer
@@ -57,8 +58,9 @@ class AssociateValidationMixin:
 
 
 class AssociateSourceMixinSerializer(AssociateValidationMixin, BaseSerializer):
-    title = serializers.CharField(
-        source="associate.title", required=False, allow_null=True, allow_blank=True
+    title = serializers.ChoiceField(
+        source="associate.title", required=False, allow_null=True, allow_blank=True,
+        choices=[*AssociateTitle.choices]
     )
     description = serializers.CharField(
         source="associate.description",
@@ -96,6 +98,8 @@ class AssociateSourceMixinSerializer(AssociateValidationMixin, BaseSerializer):
         rep = super().to_representation(instance)
         if "gender" in self.get_fields():
             rep["gender"] = instance.associate.user.get_gender_display()
+        if "title" in self.get_fields():
+            rep['title'] = instance.associate.get_title_display()
         return rep
 
 
@@ -154,19 +158,10 @@ class BaseAssociateSerializer(AssociateValidationMixin, BaseModelSerializer):
         source="user.date_of_birth", required=False, allow_null=True
     )
     image = serializers.ImageField(source="user.image", required=False, allow_null=True)
-    date_joined = serializers.DateTimeField(source="user.date_joined", read_only=True)
     last_login = serializers.DateTimeField(source="user.last_login", read_only=True)
     is_active = serializers.BooleanField(
         source="user.is_active", required=False, default=True
     )
-    title = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    description = serializers.CharField(
-        required=False, allow_null=True, allow_blank=True
-    )
-    tagline = serializers.CharField(
-        max_length=100, required=False, allow_null=True, allow_blank=True
-    )
-    experience = serializers.FloatField(required=False, allow_null=True)
     qualifications = serializers.ListField(
         required=False, max_length=2, child=serializers.CharField(max_length=50)
     )
@@ -341,8 +336,8 @@ class CenterAssignmentAssociateProfileSerializer(
         source="associate.user.date_of_birth", required=False
     )
     image = serializers.ImageField(source="associate.user.image", required=False)
-    date_joined = serializers.DateTimeField(
-        source="associate.user.date_joined", read_only=True
+    date_joined = serializers.DateField(
+        source="associate.date_joined", required=False, allow_null=True
     )
     last_login = serializers.DateTimeField(
         source="associate.user.last_login", read_only=True
@@ -544,7 +539,9 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
 
     id = serializers.UUIDField(source="associate.user.id", read_only=True)
     email = serializers.EmailField(source="associate.user.email", read_only=True)
-    phone = PhoneNumberSerializerField(source="associate.user.phone", read_only=True)
+    phone = PhoneNumberSerializerField(
+        source="associate.user.phone", read_only=True, region=None
+    )
     first_name = serializers.CharField(
         source="associate.user.first_name", read_only=True
     )
@@ -556,6 +553,9 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
 
     is_active = serializers.BooleanField(
         source="associate.user.is_active", read_only=True
+    )
+    date_joined = serializers.DateField(
+        source="associate.date_joined", required=False, allow_null=True
     )
     is_admin = serializers.BooleanField(read_only=True)
     is_care_staff = serializers.BooleanField(read_only=True)
@@ -579,6 +579,7 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
             "is_admin",
             "is_care_staff",
             "exists",
+            "date_joined",
             "role",
             "created_by",
         ]
@@ -586,7 +587,7 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
     def to_representation(self, instance: AssociateCenterAssignment):
         rep = super().to_representation(instance)
         if "gender" in self.get_fields():
-            rep["gender"] = instance.associate.get_gender_display()
+            rep["gender"] = instance.associate.user.get_gender_display()
         return rep
 
 
@@ -622,6 +623,9 @@ class CenterAssociateSerializer(
     is_active = serializers.BooleanField(
         source="associate.user.is_active", read_only=True
     )
+    date_joined = serializers.DateField(
+        source="associate.date_joined", required=False, allow_null=True
+    )
     # Keep role as nested object
     role = BaseAssociateRoleSerializer(read_only=True)
     role_id = serializers.UUIDField(required=False, write_only=True)
@@ -644,6 +648,7 @@ class CenterAssociateSerializer(
             "is_care_staff",
             "is_primary",
             "is_active",
+            "date_joined",
             # Write only fields
             "role_id",
             "password1",
@@ -760,7 +765,7 @@ class CenterAssociateDetailSerializer(
     )
 
     # Keep role as nested object
-    role = AssociateRoleSerializer(read_only=True)
+    role = BaseAssociateRoleSerializer(read_only=True)
     role_id = serializers.UUIDField(required=True, write_only=True)
 
     # Assignment fields already at root
@@ -768,6 +773,9 @@ class CenterAssociateDetailSerializer(
 
     is_active = serializers.BooleanField(
         source="associate.user.is_active", required=False
+    )
+    date_joined = serializers.DateField(
+        source="associate.date_joined", required=False, allow_null=True
     )
 
     class Meta:
@@ -790,6 +798,7 @@ class CenterAssociateDetailSerializer(
             "is_care_staff",
             "is_primary",
             "is_active",
+            "date_joined",
             "created_at",
             "updated_at",
             # Associate profile fields (from mixin)
@@ -807,7 +816,7 @@ class CenterAssociateDetailSerializer(
         associate_data = validated_data.pop("associate", {})
         user_data = associate_data.pop("user", {})
         user_data.pop("phone", None)
-        role_id = validated_data.pop("role_id", None)
+        role_id = validated_data.get("role_id", None)
 
         user = instance.associate.user
         is_active = user_data.get("is_active", user.is_active)
@@ -858,7 +867,6 @@ class CenterAssociateDetailSerializer(
                 decrement_inactive_staff_count(instance.center.pk)
             if is_now_active != was_active:
                 update_organization_staff_count()
-
         return super().update(instance, validated_data)
 
     def to_representation(self, instance):
