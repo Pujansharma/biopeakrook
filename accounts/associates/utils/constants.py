@@ -54,3 +54,4 @@ class AssociateRoleTag(models.TextChoices):
 
 class AssociateTitle(models.TextChoices):
     DOCTOR = "doctor", "Dr."
+    PROFESSOR = "prof", "Prof."
