@@ -7,12 +7,12 @@ from django.db.models import (
     Prefetch,
     Q,
     Subquery,
-    Sum,
+    Sum, FilteredRelation, Value,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Concat
 from django.utils import timezone
 
-from accounts.customers.models import Customer, CustomerProfile
+from accounts.customers.models import Customer, CustomerProfile, CustomerAssociateAssignment
 from core.utils.exceptions import get_object_or_404
 from core.utils.formatters import PhoneNumberFormat
 from core.utils.views.main import BaseListAPIView, BaseRetrieveAPIView
@@ -21,7 +21,7 @@ from external.serializers import (
     ExternalProgramServiceSerializer,
     CustomerWellnessProgramSerializer,
     CustomerWellnessProgramDetailSerializer,
-    CustomerServiceDetailSerializer,
+    CustomerServiceDetailSerializer, ExternalCustomerAssociateSerializer,
 )
 from services.models import CenterServiceAssignment
 from services.programs.models import (
@@ -260,5 +260,48 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
                 ),
                 "created_by",
             )
+        )
+        return qs
+
+
+
+class ExternalCustomerAssociateListView(BaseListAPIView):
+    """List associates linked to a external customer profile."""
+
+    serializer_class = ExternalCustomerAssociateSerializer
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        search = Q()
+        phone_query = self.request.query_params.get("phone", None)
+        phone_formatter = PhoneNumberFormat(phone_query)
+        phone_cleaned = phone_formatter.clean(raise_exception=False)
+        qs = (
+            CustomerAssociateAssignment.objects.annotate(
+                full_name=Concat(
+                    F("associate__user__first_name"),
+                    Value(" "),
+                    F("associate__user__last_name"),
+                ),
+            )
+            .filter(
+                search,
+                customer_profile__customer__user__phone=phone_cleaned,
+                **filter_kwargs
+            )
+            .annotate(
+                role=FilteredRelation(
+                    "associate__center_assignments__role",
+                    condition=Q(
+                        associate__center_assignments__center_id=F("center_id")
+                    ),
+                )
+            )
+            .select_related(
+                "associate__user",
+                "role",
+            )
+            .prefetch_related("center", "created_by")
+            .order_by("-created_at")
         )
         return qs
