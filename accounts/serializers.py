@@ -194,7 +194,7 @@ class RequestPasswordResetEmailSerializer(BaseSerializer):
             return attrs
         uid, token = get_password_reset_token_for_user(user)
         relative_link = f"/reset-password?uid={uid}&token={token}"
-        total_url = settings.PASSWORD_RESET_URL + relative_link
+        total_url = settings.PASSWORD_BASE_URL + relative_link
         send_reset_password_email(reset_link=total_url, email=email)
         attrs.update({"email": email, "uid": uid, "token": token, "exists": True})
         return attrs
