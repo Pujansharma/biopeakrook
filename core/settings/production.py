@@ -100,4 +100,4 @@ CORS_ALLOW_HEADERS = [*default_headers, "x-center-id"]
 
 # Other
 
-PASSWORD_RESET_URL = config("PRD_PASSWORD_RESET_URL", "")
+PASSWORD_BASE_URL = config("PRD_PASSWORD_BASE_URL", "")

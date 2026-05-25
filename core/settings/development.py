@@ -54,4 +54,4 @@ DEFAULT_FROM_EMAIL = config("DEV_DEFAULT_FROM_EMAIL", "Local <mail@localhost>")
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = [*default_headers, "x-center-id"]
 
-PASSWORD_RESET_URL = config("DEV_PASSWORD_RESET_URL", "")
+PASSWORD_BASE_URL = config("DEV_PASSWORD_BASE_URL", "")
