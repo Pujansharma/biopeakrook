@@ -1,7 +1,10 @@
 from rest_framework import serializers
 
+from accounts.associates.serializers import BaseAssociateRoleSerializer, AssociateSourceMixinSerializer
 from accounts.centers.serializers import MinimumCenterSerializer
-from accounts.customers.models import CustomerProfile
+from accounts.customers.models import CustomerProfile, CustomerAssociateAssignment
+from accounts.users.utils.constants import Gender
+from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
 from services.models import Service
 from services.programs.models import ProgramService, WellnessProgram
@@ -218,3 +221,61 @@ class CustomerProfileSummarySerializer(BaseModelSerializer):
             "centers_count",
             "external_centers_count",
         ]
+
+
+class ExternalCustomerAssociateSerializer(AssociateSourceMixinSerializer, BaseModelSerializer):
+    id = serializers.UUIDField(source="associate.user.id", read_only=True)
+    email = serializers.EmailField(source="associate.user.email", read_only=True)
+    contact_phone = PhoneNumberSerializerField(
+        source="associate.contact_phone", read_only=True
+    )
+    first_name = serializers.CharField(
+        source="associate.user.first_name", read_only=True
+    )
+    last_name = serializers.CharField(
+        source="associate.user.last_name", read_only=True
+    )
+    gender = serializers.ChoiceField(
+        source="associate.user.gender",
+        choices=Gender.CHOICES,
+        read_only=True
+    )
+
+    image = serializers.ImageField(
+        source="associate.user.image", read_only=True
+    )
+
+    role = BaseAssociateRoleSerializer(read_only=True)
+
+    class Meta:
+        model = CustomerAssociateAssignment
+        fields = [
+            "id",
+            "email",
+            "contact_phone",
+            "first_name",
+            "last_name",
+            "gender",
+            "image",
+            "is_active",
+            "role",
+            "title",
+            "description",
+            "tagline",
+            "experience",
+            "qualifications",
+            "professions",
+            "has_verified_badge",
+        ]
+
+    def create(self, validated_data):
+        pass
+
+    def update(self, instance, validated_data):
+        pass
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if "gender" in self.get_fields():
+            rep["gender"] = instance.associate.user.get_gender_display()
+        return rep
