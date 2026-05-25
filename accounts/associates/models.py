@@ -49,6 +49,7 @@ class AssociateRole(BaseUUIDModel):
     )
 
     summary = models.JSONField(default=dict, editable=False)
+    date_joined = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -101,6 +102,7 @@ class Associate(BaseModel):
         related_name="created_associates",
     )
     contact_phone = PhoneNumberField(null=True, blank=True)
+    date_joined = models.DateField(null=True, blank=True)
     title = models.CharField(choices=AssociateTitle, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     tagline = models.CharField(max_length=100, null=True, blank=True)
