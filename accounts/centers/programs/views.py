@@ -2,9 +2,13 @@ from django.db.models import F, Prefetch, Q, Value, ExpressionWrapper, BooleanFi
 from django.db.models.functions import Concat
 from django.utils import timezone
 
+from accounts.centers.models import Center
 from accounts.customers.models import CustomerCenterAssignment
+from accounts.utils.constants import UserType
+from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.db.functions import ExtractPartText
+from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListCreateAPIView,
 )
@@ -16,10 +20,21 @@ class CenterProgramsView(BaseListCreateAPIView):
     serializer_class = WellnessProgramSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
+    def get_center(self):
+        user = self.request.user
+        center_id = self.kwargs.get("pk")
+        associate_query = Q()
+        if get_user_account_type(user) == UserType.ASSOCIATE:
+            associate = user.associate
+            associate_query = Q(associate_assignments__associate=associate)
+        qs = Center.objects.filter(associate_query)
+        return get_object_or_404(qs, "No valid center found with the given ID", pk=center_id)
+
     def get_queryset(self):
         filter_kwargs = {}
         search = Q()
-        center_id = self.kwargs.get("pk")
+        associate_query = Q()
+        center = self.get_center()
         search_query = self.request.query_params.get("search", "").strip()
         active_query_param = self.request.query_params.get("active", None)
         complete_query = self.request.query_params.get("complete", None)
@@ -62,7 +77,7 @@ class CenterProgramsView(BaseListCreateAPIView):
                 is_complete=ExpressionWrapper(
                     Q(
                         program__sessions_count=F("program__sessions_used")
-                        + F("program__sessions_cancelled")
+                                                + F("program__sessions_cancelled")
                     ),
                     output_field=BooleanField(),
                 ),
@@ -70,9 +85,10 @@ class CenterProgramsView(BaseListCreateAPIView):
             .filter(
                 search,
                 Q(
-                    Q(program__redeemable_centers=center_id)
-                    | Q(program__center_id=center_id)
+                    Q(program__redeemable_centers=center)
+                    | Q(program__center_id=center)
                 ),
+                associate_query,
                 **filter_kwargs,
             )
             .select_related(
