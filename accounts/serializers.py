@@ -261,7 +261,7 @@ class TOTPVerifySerializer(TOTPAuthenticationMixin, BaseSerializer):
         totp_code = attrs.get("totp_code")
 
         totp_session = (
-            TOTPSession.objects.select_related("user__two_factor_code")
+            TOTPSession.objects.select_related("user__totp_credential")
             .filter_active(token=totp_token, expires_at__gte=timezone.now())
             .first()
         )
