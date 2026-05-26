@@ -39,7 +39,9 @@ from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
 class AssociateValidationMixin:
     @classmethod
-    def validate_experience(cls, value: float) -> float:
+    def validate_experience(cls, value: float) -> float | None:
+        if not value:
+            return None
         if value <= 0:
             raise serializers.ValidationError("Experience must be greater than 0.")
         return value
