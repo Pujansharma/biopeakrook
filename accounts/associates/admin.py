@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Associate, AssociateCenterAssignment
+from .models import Associate, AssociateCenterAssignment, AssociateRole
 
 
 @admin.register(Associate)
@@ -18,6 +18,22 @@ class AssociateAdmin(admin.ModelAdmin):
     raw_id_fields = ["user", "created_by"]
     search_fields = ["user__id", "user__email", "contact_phone"]
 
+@admin.register(AssociateRole)
+class AssociateRoleAdmin(admin.ModelAdmin):
+    readonly_fields = ["id", "created_at", "updated_at"]
+    list_display = [
+        "name",
+        "center",
+        "role_tag",
+        "is_external",
+        "is_system",
+        "created_at",
+    ]
+    list_per_page = 25
+    list_select_related = True
+    list_filter = ["role_tag", "is_external", "is_system"]
+    raw_id_fields = ["center", "created_by"]
+    search_fields = ["name", "center__name"]
 
 @admin.register(AssociateCenterAssignment)
 class AssociateCenterAssignmentAdmin(admin.ModelAdmin):
