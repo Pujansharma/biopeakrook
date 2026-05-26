@@ -63,7 +63,7 @@ class ExternalUserProgramView(BaseListAPIView):
                 is_complete=ExpressionWrapper(
                     Q(
                         program__sessions_count=F("program__sessions_used")
-                        + F("program__sessions_cancelled")
+                                                + F("program__sessions_cancelled")
                     ),
                     output_field=BooleanField(),
                 )
@@ -264,7 +264,6 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
         return qs
 
 
-
 class ExternalCustomerAssociateListView(BaseListAPIView):
     """List associates linked to a external customer profile."""
 
@@ -287,6 +286,7 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
             .filter(
                 search,
                 customer_profile__customer__user__phone=phone_cleaned,
+                is_active=True,
                 **filter_kwargs
             )
             .annotate(
