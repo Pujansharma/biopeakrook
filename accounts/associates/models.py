@@ -37,8 +37,21 @@ class AssociateRole(BaseUUIDModel):
         choices=AssociateRoleTag, default=AssociateRoleTag.CLINICAL
     )
 
-    is_external = models.BooleanField(default=False)
-    is_system = models.BooleanField(default=False, editable=False)
+    is_external = models.BooleanField(
+        _("External Role"),
+        default=False,
+        help_text=_(
+            "If enabled, this role can be assigned to external associates (not employed directly by any center)."
+        ),
+    )
+    is_system = models.BooleanField(
+        _("System Role"),
+        default=False,
+        editable=False,
+        help_text=_(
+            "System roles are platform-defined and available across all centers by default. They cannot be edited."
+        ),
+    )
 
     created_by = models.ForeignKey(
         User,
@@ -58,7 +71,7 @@ class AssociateRole(BaseUUIDModel):
                 fields=["features", "is_system"],
                 condition=models.Q(is_system=True),
                 name="uniq_system_role",
-            )
+            ),
         ]
 
     def __str__(self):
