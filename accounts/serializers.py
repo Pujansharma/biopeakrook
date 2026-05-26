@@ -12,7 +12,7 @@ from accounts.utils.db import (
     validate_password_reset_token,
 )
 from accounts.utils.emails import send_reset_password_email
-from accounts.verifications.models import RegistrationCode, TOTPCredential, TOTPSession
+from accounts.verifications.models import TOTPCredential, TOTPSession
 from accounts.verifications.utils import verify_two_factor_code
 from accounts.verifications.utils.helper import (
     apply_totp_lockout,
@@ -294,20 +294,11 @@ class TOTPVerifySerializer(TOTPAuthenticationMixin, BaseSerializer):
 class PasswordCodeCheckSerializer(BaseSerializer):
     code = serializers.CharField(required=True)
 
-    @staticmethod
-    def _resolve_code_error(code: str) -> str:
-        record = RegistrationCode.objects.filter(code=code).first()
-        if not record:
-            return "This registration link is invalid."
-        if not record.is_active:
-            return "This registration link has already been used."
-        return "This registration link has expired. Please request a new one."
-
     def validate(self, attrs):
         code = attrs.get("code")
         registration_code = get_registration_code(code)
         if not registration_code:
-            raise serializers.ValidationError({"code": self._resolve_code_error(code)})
+            raise serializers.ValidationError({"code": "This registration link is invalid."})
         return attrs
 
 
@@ -319,7 +310,7 @@ class PasswordCreateSerializer(BasePasswordCheckSerializer):
         registration_code = get_registration_code(code)
         if not registration_code:
             raise serializers.ValidationError(
-                {"code": "Code is invalid or expired"}
+                {"code": "This registration link is invalid."}
             )
         passwords = super().validate(attrs)
         user = registration_code.user

@@ -1,7 +1,5 @@
-from typing import Any
-
+from pygments.styles import default
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 
 from accounts.serializers import (
@@ -10,9 +8,8 @@ from accounts.serializers import (
     PasswordTokenCheckSerializer,
     RequestPasswordResetEmailSerializer,
     LoginSerializer,
-    PasswordCreateSerializer,
+    PasswordCreateSerializer, PasswordCodeCheckSerializer,
 )
-from core.utils.request import Request
 from core.utils.view_types import PostMethodMixin
 from core.utils.views import BaseGenericAPIView
 
@@ -85,10 +82,12 @@ class ResetPasswordView(BaseGenericAPIView, PostMethodMixin):
 
 
 class CheckPasswordCodeView(BaseGenericAPIView, PostMethodMixin):
-    serializer_class = ""
+    serializer_class = PasswordCodeCheckSerializer
 
     def post(self, request, *args, **kwargs):
-        pass
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return self.send_response(detail="Code is valid")
 
 
 class SetPasswordView(BaseGenericAPIView, PostMethodMixin):
