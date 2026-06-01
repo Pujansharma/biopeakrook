@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "services.programs",
     "inventory",
     "webhooks",
+    "webhooks.bugspeaks",
     "external",
 ]
 
