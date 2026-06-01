@@ -286,7 +286,7 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
             .filter(
                 search,
                 customer_profile__customer__user__phone=phone_cleaned,
-                is_active=True,
+                associate__is_active=True,
                 **filter_kwargs
             )
             .annotate(
