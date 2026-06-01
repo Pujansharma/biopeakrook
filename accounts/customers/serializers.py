@@ -259,14 +259,6 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
                     "phone": f"A user with this phone number already exists as an {account_type} account."
                 }
             )
-        # email_user = User.objects.filter(email__iexact=email).first()
-        # if email_user:
-        #     account_type = get_user_account_type(email_user)
-        #     raise serializers.ValidationError(
-        #         {
-        #             "email": f"A user with this email already exists as an {account_type} account."
-        #         }
-        #     )
 
         profile_data = {
             "first_name": profile_wrapper.get("first_name"),
