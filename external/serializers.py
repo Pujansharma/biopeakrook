@@ -246,7 +246,6 @@ class ExternalCustomerAssociateSerializer(AssociateSourceMixinSerializer, BaseMo
     )
 
     role = BaseAssociateRoleSerializer(read_only=True)
-
     class Meta:
         model = CustomerAssociateAssignment
         fields = [
@@ -257,7 +256,6 @@ class ExternalCustomerAssociateSerializer(AssociateSourceMixinSerializer, BaseMo
             "last_name",
             "gender",
             "image",
-            "is_active",
             "role",
             "title",
             "description",
