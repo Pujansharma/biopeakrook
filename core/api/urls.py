@@ -20,4 +20,5 @@ urlpatterns = [
     # Admin level actions
     path("services/", include("services.urls")),
     path("programs/", include("services.programs.urls")),
+    path("webhooks/", include("webhooks.urls")),
 ]
