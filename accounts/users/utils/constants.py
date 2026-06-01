@@ -11,3 +11,8 @@ class Gender:
         (MALE, _("Male")),
         (FEMALE, _("Female")),
     )
+
+    MAPPING = {
+        MALE: "Male",
+        FEMALE: "Female",
+    }
