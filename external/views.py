@@ -7,12 +7,18 @@ from django.db.models import (
     Prefetch,
     Q,
     Subquery,
-    Sum, FilteredRelation, Value,
+    Sum,
+    FilteredRelation,
+    Value,
 )
 from django.db.models.functions import Coalesce, Concat
 from django.utils import timezone
 
-from accounts.customers.models import Customer, CustomerProfile, CustomerAssociateAssignment
+from accounts.customers.models import (
+    Customer,
+    CustomerProfile,
+    CustomerAssociateAssignment,
+)
 from core.utils.exceptions import get_object_or_404
 from core.utils.formatters import PhoneNumberFormat
 from core.utils.views.main import BaseListAPIView, BaseRetrieveAPIView
@@ -21,7 +27,8 @@ from external.serializers import (
     ExternalProgramServiceSerializer,
     CustomerWellnessProgramSerializer,
     CustomerWellnessProgramDetailSerializer,
-    CustomerServiceDetailSerializer, ExternalCustomerAssociateSerializer,
+    CustomerServiceDetailSerializer,
+    ExternalCustomerAssociateSerializer,
 )
 from services.models import CenterServiceAssignment
 from services.programs.models import (
@@ -63,7 +70,7 @@ class ExternalUserProgramView(BaseListAPIView):
                 is_complete=ExpressionWrapper(
                     Q(
                         program__sessions_count=F("program__sessions_used")
-                                                + F("program__sessions_cancelled")
+                        + F("program__sessions_cancelled")
                     ),
                     output_field=BooleanField(),
                 )
@@ -287,7 +294,7 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
                 search,
                 customer_profile__customer__user__phone=phone_cleaned,
                 associate__is_active=True,
-                **filter_kwargs
+                **filter_kwargs,
             )
             .annotate(
                 role=FilteredRelation(
