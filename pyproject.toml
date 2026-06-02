@@ -25,6 +25,7 @@ dependencies = [
     "qrcode",
     "black",
     "django-storages[s3]",
+    "arrow",
 ]
 
 [tool.black]
