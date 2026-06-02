@@ -8,7 +8,8 @@ from accounts.serializers import (
     PasswordTokenCheckSerializer,
     RequestPasswordResetEmailSerializer,
     LoginSerializer,
-    PasswordCreateSerializer, PasswordCodeCheckSerializer,
+    PasswordCreateSerializer,
+    PasswordCodeCheckSerializer,
 )
 from core.utils.view_types import PostMethodMixin
 from core.utils.views import BaseGenericAPIView
