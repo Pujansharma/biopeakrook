@@ -28,7 +28,9 @@ class CenterProgramsView(BaseListCreateAPIView):
             associate = user.associate
             associate_query = Q(associate_assignments__associate=associate)
         qs = Center.objects.filter(associate_query)
-        return get_object_or_404(qs, "No valid center found with the given ID", pk=center_id)
+        return get_object_or_404(
+            qs, "No valid center found with the given ID", pk=center_id
+        )
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -77,17 +79,14 @@ class CenterProgramsView(BaseListCreateAPIView):
                 is_complete=ExpressionWrapper(
                     Q(
                         program__sessions_count=F("program__sessions_used")
-                                                + F("program__sessions_cancelled")
+                        + F("program__sessions_cancelled")
                     ),
                     output_field=BooleanField(),
                 ),
             )
             .filter(
                 search,
-                Q(
-                    Q(program__redeemable_centers=center)
-                    | Q(program__center_id=center)
-                ),
+                Q(Q(program__redeemable_centers=center) | Q(program__center_id=center)),
                 associate_query,
                 **filter_kwargs,
             )
