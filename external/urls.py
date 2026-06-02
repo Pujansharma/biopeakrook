@@ -18,6 +18,5 @@ urlpatterns = [
         "customer-services/<uuid:pk>/redemption-history/",
         views.ExternalUserProgramServiceRedemptionHistory.as_view(),
     ),
-
     path("customer-associates/", views.ExternalCustomerAssociateListView.as_view()),
 ]
