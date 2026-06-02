@@ -5,10 +5,10 @@ from core.utils.models import BaseUUIDModel
 
 # Create your models here.
 class BugspeaksWebhook(BaseUUIDModel):
-    data = models.JSONField(null=True,blank=True)
+    data = models.JSONField(null=True, blank=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"
