@@ -1,6 +1,9 @@
 from rest_framework import serializers
 
-from accounts.associates.serializers import BaseAssociateRoleSerializer, AssociateSourceMixinSerializer
+from accounts.associates.serializers import (
+    BaseAssociateRoleSerializer,
+    AssociateSourceMixinSerializer,
+)
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import CustomerProfile, CustomerAssociateAssignment
 from accounts.users.utils.constants import Gender
@@ -223,7 +226,9 @@ class CustomerProfileSummarySerializer(BaseModelSerializer):
         ]
 
 
-class ExternalCustomerAssociateSerializer(AssociateSourceMixinSerializer, BaseModelSerializer):
+class ExternalCustomerAssociateSerializer(
+    AssociateSourceMixinSerializer, BaseModelSerializer
+):
     id = serializers.UUIDField(source="associate.user.id", read_only=True)
     email = serializers.EmailField(source="associate.user.email", read_only=True)
     contact_phone = PhoneNumberSerializerField(
@@ -232,20 +237,15 @@ class ExternalCustomerAssociateSerializer(AssociateSourceMixinSerializer, BaseMo
     first_name = serializers.CharField(
         source="associate.user.first_name", read_only=True
     )
-    last_name = serializers.CharField(
-        source="associate.user.last_name", read_only=True
-    )
+    last_name = serializers.CharField(source="associate.user.last_name", read_only=True)
     gender = serializers.ChoiceField(
-        source="associate.user.gender",
-        choices=Gender.CHOICES,
-        read_only=True
+        source="associate.user.gender", choices=Gender.CHOICES, read_only=True
     )
 
-    image = serializers.ImageField(
-        source="associate.user.image", read_only=True
-    )
+    image = serializers.ImageField(source="associate.user.image", read_only=True)
 
     role = BaseAssociateRoleSerializer(read_only=True)
+
     class Meta:
         model = CustomerAssociateAssignment
         fields = [
