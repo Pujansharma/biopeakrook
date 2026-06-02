@@ -18,6 +18,7 @@ class AssociateAdmin(admin.ModelAdmin):
     raw_id_fields = ["user", "created_by"]
     search_fields = ["user__id", "user__email", "contact_phone"]
 
+
 @admin.register(AssociateRole)
 class AssociateRoleAdmin(admin.ModelAdmin):
     readonly_fields = ["id", "created_at", "updated_at"]
@@ -34,6 +35,7 @@ class AssociateRoleAdmin(admin.ModelAdmin):
     list_filter = ["role_tag", "is_external", "is_system"]
     raw_id_fields = ["center", "created_by"]
     search_fields = ["name", "center__name"]
+
 
 @admin.register(AssociateCenterAssignment)
 class AssociateCenterAssignmentAdmin(admin.ModelAdmin):
