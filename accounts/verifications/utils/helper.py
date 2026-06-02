@@ -115,7 +115,6 @@ def send_registration_code(user):
     send_password_create_email(user.email, create_password_link)
 
 
-
 def generate_totp_session(user) -> TOTPSession:
     session, _ = TOTPSession.objects.update_or_create(
         user=user,
