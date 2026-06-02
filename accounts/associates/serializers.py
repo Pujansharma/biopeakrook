@@ -61,8 +61,11 @@ class AssociateValidationMixin:
 
 class AssociateSourceMixinSerializer(AssociateValidationMixin, BaseSerializer):
     title = serializers.ChoiceField(
-        source="associate.title", required=False, allow_null=True, allow_blank=True,
-        choices=[*AssociateTitle.choices]
+        source="associate.title",
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        choices=[*AssociateTitle.choices],
     )
     description = serializers.CharField(
         source="associate.description",
@@ -101,7 +104,7 @@ class AssociateSourceMixinSerializer(AssociateValidationMixin, BaseSerializer):
         if "gender" in self.get_fields():
             rep["gender"] = instance.associate.user.get_gender_display()
         if "title" in self.get_fields():
-            rep['title'] = instance.associate.get_title_display()
+            rep["title"] = instance.associate.get_title_display()
         return rep
 
 
@@ -655,7 +658,7 @@ class CenterAssociateSerializer(
             "role_id",
             "password1",
             "password2",
-            'send_password_link',
+            "send_password_link",
             "created_at",
             "updated_at",
             "role",
@@ -674,7 +677,7 @@ class CenterAssociateSerializer(
         center = validated_data.pop("center", None)
         if not center:
             raise serializers.ValidationError("Invalid Center ID provided.")
-        send_password_link = validated_data.pop('send_password_link', False)
+        send_password_link = validated_data.pop("send_password_link", False)
 
         associate_data = validated_data.pop("associate", {})
         user_data = associate_data.pop("user", {})
@@ -842,7 +845,7 @@ class CenterAssociateDetailSerializer(
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
+                pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
