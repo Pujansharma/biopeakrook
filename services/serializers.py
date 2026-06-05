@@ -202,7 +202,9 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
     cancellation_reason = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
-    cancelled_date = serializers.DateField(default=timezone.localdate())
+    cancelled_date = serializers.DateField(
+        default=timezone.localdate(), required=False
+    )
 
     class Meta:
         model = ProgramService
