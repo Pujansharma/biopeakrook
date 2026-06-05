@@ -50,7 +50,7 @@ class ServiceSerializer(BaseModelSerializer):
 
     def get_centers(self, instance: Service):
         assignments = instance.center_assignments.select_related("center").filter(
-            is_active=True
+            is_active=True,
         )[:10]
         centers = [asg.center for asg in assignments]
         return BaseCenterSerializer(centers, many=True, context=self.context).data
@@ -131,6 +131,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
         write_only=True,
     )
     center_id = serializers.UUIDField(write_only=True)
+    redeemed_date = serializers.DateField(required=False, default=timezone.localdate())
 
     class Meta:
         model = ProgramService
@@ -143,6 +144,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             "created_at",
             "redemption_type",
             "center_id",
+            'redeemed_date',
         ]
         read_only_fields = [
             "id",
@@ -157,16 +159,16 @@ class ServiceRedeemSerializer(BaseModelSerializer):
         redeemed_by = validated_data.pop("redeemed_by")
         redemption_type = validated_data["redemption_type"]
         center_id = validated_data["center_id"]
-
+        redeemed_date = validated_data['redeemed_date']
         if not program_service.is_active:
             raise serializers.ValidationError(
                 "This service has been cancelled and cannot be redeemed."
             )
 
         if (
-            not Program.objects.filter(pk=program_service.program.pk)
-            .exclude(expires_at__lt=timezone.localdate())
-            .exists()
+                not Program.objects.filter(pk=program_service.program.pk)
+                        .exclude(expires_at__lt=timezone.localdate())
+                        .exists()
         ):
             raise serializers.ValidationError(
                 "The program has expired, cannot redeem any services."
@@ -177,7 +179,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError({"center_id": "Invalid center ID."})
 
         if not CenterServiceAssignment.objects.filter(
-            service=program_service.service, center_id=center_id, is_active=True
+                service=program_service.service, center_id=center_id, is_active=True
         ).exists():
             raise serializers.ValidationError(
                 "This service is not available at the given center."
@@ -189,7 +191,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
 
         quantity_map = {self.SINGLE: 1, self.ALL: remaining}
         redeem_program_service(
-            program_service.pk, center_id, redeemed_by, quantity_map[redemption_type]
+            program_service.pk, center_id, redeemed_by, quantity_map[redemption_type], redeemed_date
         )
 
         program_service.refresh_from_db(fields=["sessions_used"])
@@ -200,16 +202,18 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
     cancellation_reason = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
+    cancelled_date = serializers.DateField(default=timezone.localdate())
 
     class Meta:
         model = ProgramService
-        fields = ["cancellation_reason", "cancelled_by"]
+        fields = ["cancellation_reason", "cancelled_by", 'cancelled_date']
 
     def create(self, validated_data):
         center = validated_data.get("center")
         program_service: ProgramService = validated_data.pop("program_service", None)
         cancelled_by = validated_data.pop("cancelled_by", None)
         cancellation_reason = validated_data.get("cancellation_reason")
+        cancelled_date = validated_data.get("cancelled_date")
         if not program_service.is_active:
             raise serializers.ValidationError("Program service is already cancelled.")
         if program_service.sessions_used >= program_service.sessions_count:
@@ -223,5 +227,6 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
             center_id=center.pk,
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
+            cancelled_date=cancelled_date,
         )
         return program_service
