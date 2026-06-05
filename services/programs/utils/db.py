@@ -62,7 +62,8 @@ def increment_service_cancelled_count(program_id, count: int = 1) -> None:
 
 
 def cancel_all_program_services(
-    program_id, center_id, cancelled_by=None, cancellation_reason=None
+        program_id, center_id, cancelled_by=None, cancellation_reason=None,
+        cancelled_date=timezone.localdate(),
 ) -> None:
     active_services = list(
         ProgramService.objects.filter(program_id=program_id, is_active=True).values(
@@ -88,6 +89,7 @@ def cancel_all_program_services(
                     quantity=remaining,
                     redeemed_by=cancelled_by,
                     redemption_type=RedemptionType.CANCEL,
+                    redeemded_date=cancelled_date
                 )
             )
 
@@ -105,6 +107,7 @@ def cancel_all_program_services(
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
             cancelled_at=now,
+            cancelled_date=cancelled_date,
         )
         Program.objects.filter(pk=program_id).update(
             sessions_cancelled=Coalesce(
@@ -113,6 +116,7 @@ def cancel_all_program_services(
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
             cancelled_at=now,
+            cancelled_date=cancelled_date,
         )
         increment_service_cancelled_count(program_id, count=len(active_services))
         RedemptionHistory.objects.bulk_create(histories)
@@ -120,11 +124,12 @@ def cancel_all_program_services(
 
 
 def cancel_program_service(
-    program_service_id,
-    program_id,
-    center_id,
-    cancelled_by=None,
-    cancellation_reason=None,
+        program_service_id,
+        program_id,
+        center_id,
+        cancelled_by=None,
+        cancellation_reason=None,
+        cancelled_date=timezone.localdate(),
 ) -> None:
     has_other_services = (
         ProgramService.objects.filter(program_id=program_id)
@@ -133,7 +138,7 @@ def cancel_program_service(
     )
     if not has_other_services:
         cancel_all_program_services(
-            program_id, center_id, cancelled_by, cancellation_reason
+            program_id, center_id, cancelled_by, cancellation_reason, cancelled_date
         )
         return None
 
@@ -158,6 +163,7 @@ def cancel_program_service(
             cancelled_at=timezone.now(),
             cancellation_reason=cancellation_reason,
             sessions_cancelled=F("sessions_count") - F("sessions_used"),
+            cancelled_date=cancelled_date
         )
         Program.objects.filter(pk=program_id).update(
             sessions_cancelled=Coalesce(
@@ -172,5 +178,6 @@ def cancel_program_service(
             quantity=remaining,
             redeemed_by=cancelled_by,
             redemption_type=RedemptionType.CANCEL,
+            redeemed_date=cancelled_date,
         )
     return None
