@@ -44,6 +44,8 @@ class Program(BaseUUIDModel):
         related_name="cancelled_programs",
     )
     cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
+    created_date = models.DateField(default=timezone.localdate)
+    cancelled_date = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -83,7 +85,7 @@ class ProgramService(BaseUUIDModel):
     cancelled_at = models.DateTimeField(editable=False, null=True, blank=True)
 
     created_date = models.DateField(default=timezone.localdate)
-    cancelled_date = models.DateField(default=timezone.localdate)
+    cancelled_date = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
