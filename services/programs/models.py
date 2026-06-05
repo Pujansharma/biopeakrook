@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from core.utils.models import BaseUUIDModel
 from services.programs.utils.constants import ProgramType, RedemptionType
@@ -81,6 +82,9 @@ class ProgramService(BaseUUIDModel):
     )
     cancelled_at = models.DateTimeField(editable=False, null=True, blank=True)
 
+    created_date = models.DateField(default=timezone.localdate)
+    cancelled_date = models.DateField(default=timezone.localdate)
+
     class Meta:
         ordering = ["-created_at"]
         constraints = [
@@ -118,6 +122,7 @@ class RedemptionHistory(BaseUUIDModel):
         "centers.Center", on_delete=models.PROTECT, related_name="redemptions"
     )
     redeemed_at = models.DateTimeField(editable=False)
+    redeemed_date = models.DateField(default=timezone.localdate)
     quantity = models.PositiveIntegerField(default=0)
     redeemed_by = models.ForeignKey(
         "users.User",
