@@ -113,11 +113,13 @@ class ProgramServiceSerializer(BaseModelSerializer):
             "sessions_count",
             "sessions_used",
             "redeem_code",
+            "created_date",
             "created_at",
             "is_active",
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
+            "cancelled_date"
         ]
 
 
@@ -170,6 +172,10 @@ class WellnessProgramDetailSerializer(BaseModelSerializer):
     cancelled_at = serializers.DateTimeField(
         source="program.cancelled_at", read_only=True
     )
+    cancelled_date = serializers.DateField(source="program.cancelled_date")
+    created_date = serializers.DateField(source="program.created_date")
+
+    # cancelled_date =
 
     class Meta:
         model = WellnessProgram
@@ -195,6 +201,8 @@ class WellnessProgramDetailSerializer(BaseModelSerializer):
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
+            "created_date",
+            "cancelled_date"
         ]
 
     def get_redeemable_centers(self, instance: WellnessProgram):
@@ -404,10 +412,13 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
     cancelled_at = serializers.DateTimeField(
         source="program.cancelled_at", read_only=True
     )
+    cancelled_date = serializers.DateField(
+        source='program.cancelled_date', required=False, default=timezone.localdate()
+    )
 
     class Meta:
         model = WellnessProgram
-        fields = ["cancellation_reason", "cancelled_by", "cancelled_at"]
+        fields = ["cancellation_reason", "cancelled_by", 'cancelled_date', "cancelled_at"]
 
     def create(self, validated_data):
         center = validated_data.pop("center")
@@ -415,6 +426,7 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
         cancelled_by = validated_data.pop("cancelled_by", None)
         program_fields = validated_data.pop("program", {})
         cancellation_reason = program_fields.get("cancellation_reason")
+        cancelled_date = program_fields.get("cancelled_date")
         if not wellness_program:
             raise serializers.ValidationError("Not valid wellness program provided")
         if not wellness_program.is_active:
@@ -423,16 +435,17 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
         wellness_program.program.is_active = False
         wellness_program.program.cancellation_reason = cancellation_reason
         wellness_program.program.cancelled_by = cancelled_by
-
+        wellness_program.program.cancelled_date = cancelled_date
         wellness_program.save(update_fields=["is_active"])
         wellness_program.program.save(
-            update_fields=["is_active", "cancellation_reason", "cancelled_by"]
+            update_fields=["is_active", "cancellation_reason", "cancelled_by", 'cancelled_date']
         )
         cancel_all_program_services(
             wellness_program.program.pk,
             center_id=center.pk,
             cancelled_by=cancelled_by,
             cancellation_reason=cancellation_reason,
+            cancelled_date=cancelled_date,
         )
 
         return wellness_program
@@ -440,16 +453,17 @@ class WellnessProgramCancelSerializer(BaseModelSerializer):
 
 class WellnessProgramRedeemSerializer(BaseModelSerializer):
     center_id = serializers.UUIDField(write_only=True)
+    redeemed_date = serializers.DateField(required=False, default=timezone.localdate())
 
     class Meta:
         model = WellnessProgram
-        fields = ["center_id"]
+        fields = ["center_id", 'redeemed_date']
 
     def create(self, validated_data):
         wellness_program: WellnessProgram = validated_data.pop("wellness_program")
         redeemed_by = validated_data.pop("redeemed_by")
         center_id = validated_data["center_id"]
-
+        redeemed_date = validated_data['redeemed_date']
         if not wellness_program.is_active:
             raise serializers.ValidationError("This program has been cancelled.")
         program_exists = (
@@ -461,17 +475,17 @@ class WellnessProgramRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError("This program has expired.")
 
         if not ProgramService.objects.filter(
-            program=wellness_program.program,
-            is_active=True,
-            service__center_assignments__center_id=center_id,
-            service__center_assignments__is_active=True,
+                program=wellness_program.program,
+                is_active=True,
+                service__center_assignments__center_id=center_id,
+                service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}
             )
 
         redeemed = redeem_all_program_services(
-            wellness_program.program.id, center_id, redeemed_by
+            wellness_program.program.id, center_id, redeemed_by, redeemed_date
         )
         if redeemed == 0:
             raise serializers.ValidationError(
