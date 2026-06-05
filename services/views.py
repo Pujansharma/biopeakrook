@@ -19,7 +19,7 @@ from core.utils.views.main import (
     BaseListAPIView,
 )
 from services.models import Service, CenterServiceAssignment
-from services.programs.models import ProgramService, RedemptionHistory
+from services.programs.models import ProgramService, RedemptionHistory, Program
 from services.programs.serializers import (
     ProgramServiceRedemptionHistorySerializer,
     ProgramServiceSerializer,
@@ -52,16 +52,25 @@ class ServicesView(BaseListCreateAPIView):
             search |= Q(name__icontains=search_params)
 
         locked_subquery = ProgramService.objects.filter(service=OuterRef("pk"))
-
+        # Check: does a program exist that:
+        # 1. Uses this service (via ProgramService)
+        # 2. Has this center as redeemable (M2M)
+        program_redeems_center = Program.objects.filter(
+            program_services__service_id=OuterRef("service_id"),  # Link to service
+            redeemable_centers=OuterRef("center_id"),  # Link to center via M2M
+        ).values("pk")[:1]
         prefetch = Prefetch(
             "center_assignments",
-            queryset=CenterServiceAssignment.objects.select_related("center"),
+            queryset=CenterServiceAssignment.objects.filter(
+                Exists(program_redeems_center)
+            ).select_related("center"),
         )
+
         if center_ids:
             prefetch = Prefetch(
                 "center_assignments",
                 queryset=CenterServiceAssignment.objects.filter(
-                    center_id__in=center_ids
+                    Exists(program_redeems_center), center_id__in=center_ids
                 ).select_related("center"),
             )
 
@@ -94,6 +103,12 @@ class ServiceDetailView(BaseRetrieveUpdateDestroyAPIView):
             )
             .select_related("created_by")
         )
+        # qs = (
+        #     Service.objects.filter()
+        #     .prefetch_related(prefetch)
+        #     .select_related("created_by")
+        # )
+
         return qs
 
     def perform_destroy(self, instance):
