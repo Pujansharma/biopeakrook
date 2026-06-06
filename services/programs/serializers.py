@@ -175,8 +175,6 @@ class WellnessProgramDetailSerializer(BaseModelSerializer):
     cancelled_date = serializers.DateField(source="program.cancelled_date")
     created_date = serializers.DateField(source="program.created_date")
 
-    # cancelled_date =
-
     class Meta:
         model = WellnessProgram
         fields = [
@@ -207,7 +205,7 @@ class WellnessProgramDetailSerializer(BaseModelSerializer):
 
     def get_redeemable_centers(self, instance: WellnessProgram):
         qs = instance.program.redeemable_centers.all()[:3]
-        return BaseCenterSerializer(qs, many=True, context=self.context).data
+        return MinimumCenterSerializer(qs, many=True, context=self.context).data
 
     def create(self, validated_data):
         raise serializers.ValidationError("Create not allowed.")
@@ -505,6 +503,7 @@ class ProgramServiceRedemptionHistorySerializer(BaseModelSerializer):
             "id",
             "redemption_type",
             "redeem_center",
+            "redeemed_date",
             "redeemed_at",
             "quantity",
             "redeemed_by",
