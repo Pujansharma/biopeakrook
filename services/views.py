@@ -19,7 +19,7 @@ from core.utils.views.main import (
     BaseListAPIView,
 )
 from services.models import Service, CenterServiceAssignment
-from services.programs.models import ProgramService, RedemptionHistory, Program
+from services.programs.models import ProgramService, RedemptionHistory
 from services.programs.serializers import (
     ProgramServiceRedemptionHistorySerializer,
     ProgramServiceSerializer,
