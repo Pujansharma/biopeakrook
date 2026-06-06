@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.centers.models import Center
-from accounts.centers.serializers import BaseCenterSerializer
+from accounts.centers.serializers import MinimumCenterSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from services.models import Service, CenterServiceAssignment
 from services.programs.models import Program, ProgramService
@@ -49,11 +49,10 @@ class ServiceSerializer(BaseModelSerializer):
         ]
 
     def get_centers(self, instance: Service):
-        assignments = instance.center_assignments.select_related("center").filter(
-            is_active=True,
-        )[:10]
+        center_assignments = getattr(instance, 'center_assignments')
+        assignments = center_assignments.all()[:10]
         centers = [asg.center for asg in assignments]
-        return BaseCenterSerializer(centers, many=True, context=self.context).data
+        return MinimumCenterSerializer(centers, many=True, context=self.context).data
 
     @classmethod
     def get_invalid_centers(cls, center_ids):
