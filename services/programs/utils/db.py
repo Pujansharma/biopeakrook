@@ -89,7 +89,7 @@ def cancel_all_program_services(
                     quantity=remaining,
                     redeemed_by=cancelled_by,
                     redemption_type=RedemptionType.CANCEL,
-                    redeemded_date=cancelled_date
+                    redeemed_date=cancelled_date
                 )
             )
 
