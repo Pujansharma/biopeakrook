@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "debug_toolbar",
     "corsheaders",
     "sequences",
+    "external",
     "accounts",
     "accounts.organizations",
     "accounts.verifications",
@@ -41,7 +42,7 @@ INSTALLED_APPS = [
     "inventory",
     "webhooks",
     "webhooks.bugspeaks",
-    "external",
+    "webhooks.strand_genomics",
 ]
 
 AUTH_USER_MODEL = "users.User"
