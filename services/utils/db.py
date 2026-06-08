@@ -24,7 +24,11 @@ def update_service_center_count(service_id: UUID) -> None:
 
 
 def redeem_program_service(
-        program_service_id: UUID, center_id: UUID, redeemed_by, quantity: int, redeemed_date=timezone.localdate()
+    program_service_id: UUID,
+    center_id: UUID,
+    redeemed_by,
+    quantity: int,
+    redeemed_date=timezone.localdate(),
 ) -> None:
     with transaction.atomic():
         ProgramService.objects.filter(pk=program_service_id).update(
@@ -39,12 +43,12 @@ def redeem_program_service(
             redeemed_at=timezone.now(),
             quantity=quantity,
             redeemed_by=redeemed_by,
-            redeemed_date=redeemed_date
+            redeemed_date=redeemed_date,
         )
 
 
 def redeem_all_program_services(
-        program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
+    program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
 ) -> int:
     services = list(
         ProgramService.objects.filter(program_id=program_id, is_active=True)
