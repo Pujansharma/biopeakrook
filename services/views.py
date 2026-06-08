@@ -63,8 +63,7 @@ class ServicesView(BaseListCreateAPIView):
             prefetch = Prefetch(
                 "center_assignments",
                 queryset=CenterServiceAssignment.objects.filter(
-                    center__is_active=True,
-                    center_id__in=center_ids
+                    center__is_active=True, center_id__in=center_ids
                 ).select_related("center"),
             )
 
