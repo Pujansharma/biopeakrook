@@ -68,7 +68,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arrow", specifier = ">=1.4.0" },
+    { name = "arrow" },
     { name = "black" },
     { name = "django" },
     { name = "django-cors-headers" },
