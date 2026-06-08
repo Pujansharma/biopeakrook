@@ -1,4 +1,4 @@
-from core.utils.views.main import BaseCreateAPIView
+from core.utils.views import BaseCreateAPIView
 from webhooks.bugspeaks.models import BugspeaksWebhook
 
 
