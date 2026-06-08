@@ -49,7 +49,7 @@ class ServiceSerializer(BaseModelSerializer):
         ]
 
     def get_centers(self, instance: Service):
-        center_assignments = getattr(instance, 'center_assignments')
+        center_assignments = getattr(instance, "center_assignments")
         assignments = center_assignments.all()[:10]
         centers = [asg.center for asg in assignments]
         return MinimumCenterSerializer(centers, many=True, context=self.context).data
@@ -143,7 +143,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
             "created_at",
             "redemption_type",
             "center_id",
-            'redeemed_date',
+            "redeemed_date",
         ]
         read_only_fields = [
             "id",
@@ -158,7 +158,7 @@ class ServiceRedeemSerializer(BaseModelSerializer):
         redeemed_by = validated_data.pop("redeemed_by")
         redemption_type = validated_data["redemption_type"]
         center_id = validated_data["center_id"]
-        redeemed_date = validated_data['redeemed_date']
+        redeemed_date = validated_data["redeemed_date"]
         if not program_service.is_active:
             raise serializers.ValidationError(
                 "This service has been cancelled and cannot be redeemed."
@@ -190,7 +190,11 @@ class ServiceRedeemSerializer(BaseModelSerializer):
 
         quantity_map = {self.SINGLE: 1, self.ALL: remaining}
         redeem_program_service(
-            program_service.pk, center_id, redeemed_by, quantity_map[redemption_type], redeemed_date
+            program_service.pk,
+            center_id,
+            redeemed_by,
+            quantity_map[redemption_type],
+            redeemed_date,
         )
 
         program_service.refresh_from_db(fields=["sessions_used"])
@@ -201,13 +205,11 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
     cancellation_reason = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
-    cancelled_date = serializers.DateField(
-        default=timezone.localdate(), required=False
-    )
+    cancelled_date = serializers.DateField(default=timezone.localdate(), required=False)
 
     class Meta:
         model = ProgramService
-        fields = ["cancellation_reason", "cancelled_by", 'cancelled_date']
+        fields = ["cancellation_reason", "cancelled_by", "cancelled_date"]
 
     def create(self, validated_data):
         center = validated_data.get("center")
