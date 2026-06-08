@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "appointments",
     "services",
     "services.programs",
+    "products",
     "inventory",
     "webhooks",
     "webhooks.bugspeaks",
