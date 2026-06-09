@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, F, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 
-from programs import Program, ProgramService
+from programs.models import Program, ProgramService
 
 
 class Command(BaseCommand):
