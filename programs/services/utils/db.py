@@ -5,8 +5,8 @@ from django.db.models import Count, F, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from services.models import Service, CenterServiceAssignment
-from services.programs.models import Program, ProgramService, RedemptionHistory
+from programs.models import Program, ProgramService, RedemptionHistory
+from programs.services.models import Service, CenterServiceAssignment
 
 
 def update_service_center_count(service_id: UUID) -> None:
@@ -24,11 +24,11 @@ def update_service_center_count(service_id: UUID) -> None:
 
 
 def redeem_program_service(
-    program_service_id: UUID,
-    center_id: UUID,
-    redeemed_by,
-    quantity: int,
-    redeemed_date=timezone.localdate(),
+        program_service_id: UUID,
+        center_id: UUID,
+        redeemed_by,
+        quantity: int,
+        redeemed_date=timezone.localdate(),
 ) -> None:
     with transaction.atomic():
         ProgramService.objects.filter(pk=program_service_id).update(
@@ -48,7 +48,7 @@ def redeem_program_service(
 
 
 def redeem_all_program_services(
-    program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
+        program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
 ) -> int:
     services = list(
         ProgramService.objects.filter(program_id=program_id, is_active=True)

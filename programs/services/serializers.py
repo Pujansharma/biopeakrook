@@ -5,10 +5,10 @@ from rest_framework import serializers
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from services.models import Service, CenterServiceAssignment
-from services.programs.models import Program, ProgramService
-from services.programs.utils.db import cancel_program_service
-from services.utils.db import redeem_program_service, update_service_center_count
+from programs.models import Program, ProgramService
+from programs.services.models import Service, CenterServiceAssignment
+from programs.services.utils.db import redeem_program_service, update_service_center_count
+from programs.utils.db import cancel_program_service
 
 
 class CenterIDSerializer(BaseSerializer):

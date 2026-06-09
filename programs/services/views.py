@@ -18,13 +18,13 @@ from core.utils.views.main import (
     BaseRetrieveUpdateDestroyAPIView,
     BaseListAPIView,
 )
-from services.models import Service, CenterServiceAssignment
-from services.programs.models import ProgramService, RedemptionHistory
-from services.programs.serializers import (
+from programs.services.models import Service, CenterServiceAssignment
+from programs.models import ProgramService, RedemptionHistory
+from programs.serializers import (
     ProgramServiceRedemptionHistorySerializer,
     ProgramServiceSerializer,
 )
-from services.serializers import (
+from programs.services.serializers import (
     ProgramServiceCancelSerializer,
     ServiceRedeemSerializer,
     ServiceSerializer,

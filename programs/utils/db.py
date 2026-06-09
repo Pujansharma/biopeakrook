@@ -6,8 +6,8 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from accounts.centers.models import Center
-from services.programs.models import Program, ProgramService, RedemptionHistory
-from services.programs.utils.constants import RedemptionType
+from programs.models import Program, ProgramService, RedemptionHistory
+from programs.utils.constants import RedemptionType
 
 
 def increment_program_service_sessions_used(program_service_id) -> None:

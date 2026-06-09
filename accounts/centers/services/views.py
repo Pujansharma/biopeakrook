@@ -1,7 +1,7 @@
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.views.main import BaseListAPIView
-from services.models import Service
-from services.serializers import ServiceSerializer
+from programs.services.models import Service
+from programs.services.serializers import ServiceSerializer
 
 
 class CenterAssignedServiceView(BaseListAPIView):

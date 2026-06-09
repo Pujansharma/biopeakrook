@@ -12,8 +12,8 @@ from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListCreateAPIView,
 )
-from services.programs.models import WellnessProgram
-from services.programs.serializers import WellnessProgramSerializer
+from programs.models import WellnessProgram
+from programs.serializers import WellnessProgramSerializer
 
 
 class CenterProgramsView(BaseListCreateAPIView):

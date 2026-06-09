@@ -30,14 +30,14 @@ from external.serializers import (
     CustomerServiceDetailSerializer,
     ExternalCustomerAssociateSerializer,
 )
-from services.models import CenterServiceAssignment
-from services.programs.models import (
+from programs.models import (
     Program,
     ProgramService,
     RedemptionHistory,
     WellnessProgram,
 )
-from services.programs.serializers import ProgramServiceRedemptionHistorySerializer
+from programs.serializers import ProgramServiceRedemptionHistorySerializer
+from programs.services.models import CenterServiceAssignment
 
 
 class ExternalUserProgramView(BaseListAPIView):
@@ -70,7 +70,7 @@ class ExternalUserProgramView(BaseListAPIView):
                 is_complete=ExpressionWrapper(
                     Q(
                         program__sessions_count=F("program__sessions_used")
-                        + F("program__sessions_cancelled")
+                                                + F("program__sessions_cancelled")
                     ),
                     output_field=BooleanField(),
                 )
@@ -272,7 +272,7 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
 
 
 class ExternalCustomerAssociateListView(BaseListAPIView):
-    """List associates linked to a external customer profile."""
+    """List associates linked to an external customer profile."""
 
     serializer_class = ExternalCustomerAssociateSerializer
 

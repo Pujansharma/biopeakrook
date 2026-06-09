@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from services.programs.models import Program, ProgramService, WellnessProgram
+from programs.models import Program, ProgramService, WellnessProgram
 
 
 @admin.register(Program)

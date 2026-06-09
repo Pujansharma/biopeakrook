@@ -243,8 +243,9 @@ def get_queryset(self):
 ```
 
 **Add import:**
+
 ```python
-from services.models import Service, CenterServiceAssignment
+from programs.services import Service, CenterServiceAssignment
 ```
 
 ---
@@ -287,6 +288,7 @@ def add_centers_action(self, service: Service, add_centers: list) -> None:
 ```
 
 **New:**
+
 ```python
 def add_centers_action(self, service: Service, add_centers: list) -> None:
     if not add_centers:
@@ -299,9 +301,9 @@ def add_centers_action(self, service: Service, add_centers: list) -> None:
                 "add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
             }
         )
-    
-    from services.models import CenterServiceAssignment
-    
+
+    from programs.services import CenterServiceAssignment
+
     assignments = [
         CenterServiceAssignment(service=service, center_id=cid, is_active=True)
         for cid in center_ids
@@ -328,6 +330,7 @@ def remove_centers_action(self, service: Service, remove_centers: list) -> None:
 ```
 
 **New:**
+
 ```python
 def remove_centers_action(self, service: Service, remove_centers: list) -> None:
     if not remove_centers:
@@ -340,9 +343,9 @@ def remove_centers_action(self, service: Service, remove_centers: list) -> None:
                 "remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
             }
         )
-    
-    from services.models import CenterServiceAssignment
-    
+
+    from programs.services import CenterServiceAssignment
+
     CenterServiceAssignment.objects.filter(
         service=service, center_id__in=center_ids
     ).delete()
@@ -359,11 +362,12 @@ if not program_service.service.centers.filter(pk=center_id).exists():
 ```
 
 **New:**
+
 ```python
-from services.models import CenterServiceAssignment
+from programs.services import CenterServiceAssignment
 
 if not CenterServiceAssignment.objects.filter(
-    service=program_service.service, center_id=center_id, is_active=True
+        service=program_service.service, center_id=center_id, is_active=True
 ).exists():
     raise serializers.ValidationError(
         {"center_id": "This service is not available at the given center."}
@@ -371,8 +375,9 @@ if not CenterServiceAssignment.objects.filter(
 ```
 
 **Add import at top:**
+
 ```python
-from services.models import Service, CenterServiceAssignment
+from programs.services import Service, CenterServiceAssignment
 ```
 
 ---
@@ -394,10 +399,11 @@ def update_service_center_count(service_id: UUID) -> None:
 ```
 
 **New:**
+
 ```python
 def update_service_center_count(service_id: UUID) -> None:
-    from services.models import CenterServiceAssignment
-    
+    from programs.services import CenterServiceAssignment
+
     subquery = (
         CenterServiceAssignment.objects.filter(service_id=OuterRef("pk"), is_active=True)
         .values("service_id")
@@ -425,9 +431,10 @@ class ServiceAdmin(admin.ModelAdmin):
 ```
 
 **New:**
+
 ```python
 from django.contrib import admin
-from services.models import Service, CenterServiceAssignment
+from programs.services import Service, CenterServiceAssignment
 
 
 class CenterServiceAssignmentInline(admin.TabularInline):

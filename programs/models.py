@@ -2,8 +2,8 @@ from django.db import models
 from django.utils import timezone
 
 from core.utils.models import BaseUUIDModel
-from services.programs.utils.constants import ProgramType, RedemptionType
-from services.utils.helper import generate_redeemable_code
+from programs.utils.constants import ProgramType, RedemptionType
+from programs.utils.helper import generate_redeemable_code
 
 
 class Program(BaseUUIDModel):

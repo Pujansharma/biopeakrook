@@ -2,7 +2,7 @@ from django.db import models
 
 from accounts.utils import get_user_model
 from core.utils.models import BaseUUIDModel
-from services.models import Service
+from programs.services.models import Service
 
 User = get_user_model()
 

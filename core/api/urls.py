@@ -18,8 +18,8 @@ urlpatterns = [
     # Customer-profiles
     path("profiles/", include("accounts.customers.urls")),
     # Admin level actions
-    path("services/", include("services.urls")),
     path("products/", include("products.urls")),
-    path("programs/", include("services.programs.urls")),
+    path("programs/", include("programs.urls")),
+    path("services/", include("programs.services.urls")),
     path("webhooks/", include("webhooks.urls")),
 ]

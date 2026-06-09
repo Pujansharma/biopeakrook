@@ -9,9 +9,9 @@ from accounts.customers.models import CustomerProfile, CustomerAssociateAssignme
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
-from services.models import Service
-from services.programs.models import ProgramService, WellnessProgram
-from services.programs.utils.constants import ProgramType
+from programs.models import ProgramService, WellnessProgram
+from programs.services.models import Service
+from programs.utils.constants import ProgramType
 
 
 class ExternalCustomerServiceSerializer(BaseModelSerializer):

@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 
-from services.models import Service, CenterServiceAssignment
+from programs.services.models import Service, CenterServiceAssignment
 
 
 class Command(BaseCommand):

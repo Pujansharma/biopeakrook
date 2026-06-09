@@ -9,9 +9,9 @@ from core.utils.views.main import (
     BaseRetrieveUpdateAPIView,
     BaseCreateAPIView,
 )
-from services.models import CenterServiceAssignment
-from services.programs.models import ProgramService, WellnessProgram
-from services.programs.serializers import (
+from programs.services.models import CenterServiceAssignment
+from programs.models import ProgramService, WellnessProgram
+from programs.serializers import (
     BaseProgramServiceSerializer,
     WellnessProgramDetailSerializer,
     WellnessProgramCancelSerializer,

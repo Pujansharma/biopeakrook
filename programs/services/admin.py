@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from services.models import Service, CenterServiceAssignment
+from programs.services.models import Service, CenterServiceAssignment
 
 
 class CenterServiceAssignmentInline(admin.TabularInline):

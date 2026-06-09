@@ -11,22 +11,22 @@ from accounts.customers.serializers import (
 )
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from services.models import Service
-from services.programs.models import (
+from programs.services.models import Service
+from programs.models import (
     Program,
     WellnessProgram,
     ProgramService,
     RedemptionHistory,
 )
-from services.programs.utils.constants import ProgramType
-from services.programs.utils.db import (
+from programs.utils.constants import ProgramType
+from programs.utils.db import (
     cancel_all_program_services,
     update_program_redeemable_centers_count,
     update_program_services_count,
     update_program_sessions_count,
 )
-from services.serializers import BaseServiceSerializer
-from services.utils.db import redeem_all_program_services
+from programs.services.serializers import BaseServiceSerializer
+from programs.services.utils.db import redeem_all_program_services
 
 
 class BaseProgramSerializer(BaseModelSerializer):
