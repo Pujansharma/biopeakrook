@@ -112,9 +112,8 @@ class ProviderAPISerializer(BaseModelSerializer):
                     "Provider does not have required fields, cannot update API."
                 )
 
-            _data = instance.data or validated_data.get("data") or {}
+            _data = validated_data.get("data", instance.data) or {}
             validated_data["data"] = self.validate_required_fields(required_fields, _data)
-
         with transaction.atomic():
             for key, value in provider_data.items():
                 setattr(instance.provider, key, value)
