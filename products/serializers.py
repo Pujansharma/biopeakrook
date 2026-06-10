@@ -52,8 +52,14 @@ class ProviderSerializer(BaseModelSerializer):
     def update(self, instance: Provider, validated_data: dict) -> Provider:
         validated_data.pop("code", None)
         required_fields = validated_data.get("required_fields") or []
-        if not required_fields and instance.is_api_enabled:
-            validated_data["is_api_enabled"] = False
+        if instance.is_api_enabled:
+            api_instance = getattr(instance, 'api', None)
+            _data: dict = getattr(api_instance, 'data', {}) or {}
+            is_configured = bool(required_fields) and all(map(_data.get, required_fields))
+            validated_data["is_api_enabled"] = is_configured and validated_data.get(
+                "is_api_enabled", instance.is_api_enabled
+            )
+
         return super().update(instance, validated_data)
 
 
@@ -98,13 +104,23 @@ class ProviderAPISerializer(BaseModelSerializer):
 
     def update(self, instance: ProviderAPI, validated_data: dict) -> ProviderAPI:
         required_fields = instance.provider.required_fields
-        if not required_fields:
-            raise serializers.ValidationError(
-                "Provider does not have required fields, cannot update API."
-            )
-        _data = validated_data.get("data") or {}
-        validated_data["data"] = self.validate_required_fields(required_fields, _data)
-        return super().update(instance, validated_data)
+        provider_data = validated_data.pop("provider", {})
+        is_api_enabled = provider_data.get('is_api_enabled', instance.provider.is_api_enabled)
+        if is_api_enabled:
+            if not required_fields:
+                raise serializers.ValidationError(
+                    "Provider does not have required fields, cannot update API."
+                )
+
+            _data = instance.data or validated_data.get("data") or {}
+            validated_data["data"] = self.validate_required_fields(required_fields, _data)
+
+        with transaction.atomic():
+            for key, value in provider_data.items():
+                setattr(instance.provider, key, value)
+            instance.provider.save(update_fields=[*provider_data.keys(), "updated_at"])
+            instance = super().update(instance, validated_data)
+        return instance
 
 
 class BaseProductSerializer(BaseModelSerializer):
