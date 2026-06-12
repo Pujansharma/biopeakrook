@@ -7,7 +7,7 @@ def generate_provider_code():
     return f"{name}-{sequence}"
 
 
-def generate_product_code(provider):
+def generate_product_code():
     name = "PC"
-    sequence = get_next_sequence(name=f"products_{provider}", fill_length=4)
+    sequence = get_next_sequence(name=f"products", fill_length=4)
     return f"{name}-{sequence}"
