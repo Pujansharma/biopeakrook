@@ -1,18 +1,7 @@
-from django.urls import path
-
-from . import views
+from django.urls import path, include
 
 urlpatterns = [
-    path("wellness-programs/<uuid:pk>/", views.WellnessProgramDetailView.as_view()),
-    path(
-        "wellness-programs/<uuid:pk>/services/",
-        views.WellnessProgramServicesListView.as_view(),
-    ),
-    path(
-        "wellness-programs/<uuid:pk>/cancel/",
-        views.WellnessProgramCancelView.as_view(),
-    ),
-    path(
-        "wellness-programs/<uuid:pk>/redeem/", views.WellnessProgramRedeemView.as_view()
-    ),
+    path("therapy-programs/", include("programs.therapy.urls")),
+    path("assessment-programs/", include("programs.assessment.urls")),
+    path("consultation-programs/", include("programs.consultation.urls")),
 ]
