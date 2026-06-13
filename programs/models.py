@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
-from core.utils.models import BaseUUIDModel
+from core.utils.models import BaseUUIDModel, BaseModel
 from programs.utils.constants import ProgramType, RedemptionType
 from programs.utils.helper import generate_redeemable_code
 
@@ -23,9 +23,6 @@ class Program(BaseUUIDModel):
     )
     services_count = models.PositiveBigIntegerField(default=0, editable=False)
     services_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
-    sessions_count = models.PositiveBigIntegerField(default=0, editable=False)
-    sessions_used = models.PositiveBigIntegerField(default=0, editable=False)
-    sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
 
     redeemable_centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     created_by = models.ForeignKey(
@@ -35,6 +32,7 @@ class Program(BaseUUIDModel):
         on_delete=models.SET_NULL,
         related_name="created_programs",
     )
+
     cancellation_reason = models.TextField(null=True, blank=True)
     cancelled_by = models.ForeignKey(
         "users.User",
@@ -61,10 +59,6 @@ class ProgramService(BaseUUIDModel):
     service = models.ForeignKey(
         "services.Service", related_name="program_services", on_delete=models.PROTECT
     )
-    sessions_count = models.PositiveIntegerField(default=0)
-    sessions_used = models.PositiveIntegerField(default=0, editable=False)
-    sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
-    redeem_code = models.CharField(default=generate_redeemable_code, editable=False)
     created_by = models.ForeignKey(
         "users.User",
         null=True,
@@ -94,20 +88,22 @@ class ProgramService(BaseUUIDModel):
                 fields=["program", "service"], name="unique_program_service"
             )
         ]
-        indexes = [
-            models.Index(
-                fields=["redeem_code", "service", "program"], name="redeem_code_idx"
-            )
-        ]
 
     def __str__(self):
         return f"{self.pk}"
 
 
-class WellnessProgram(BaseUUIDModel):
+class TherapyProgram(BaseModel):
     program = models.OneToOneField(
-        Program, on_delete=models.CASCADE, related_name="wellness_program"
+        Program,
+        on_delete=models.CASCADE,
+        related_name="therapy_program",
+        primary_key=True,
+        db_index=True,
     )
+    sessions_count = models.PositiveBigIntegerField(default=0, editable=False)
+    sessions_used = models.PositiveBigIntegerField(default=0, editable=False)
+    sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -116,9 +112,36 @@ class WellnessProgram(BaseUUIDModel):
         return f"{self.pk}"
 
 
+class TherapyProgramService(BaseModel):
+    program_service = models.OneToOneField(
+        ProgramService,
+        related_name="therapy_service",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_index=True,
+    )
+    sessions_count = models.PositiveIntegerField(default=0)
+    sessions_used = models.PositiveIntegerField(default=0, editable=False)
+    sessions_cancelled = models.PositiveBigIntegerField(default=0, editable=False)
+    redeem_code = models.CharField(
+        max_length=10, default=generate_redeemable_code, editable=False
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["redeem_code", "program_service"], name="therapy_redeem_idx"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class RedemptionHistory(BaseUUIDModel):
-    program_service = models.ForeignKey(
-        ProgramService, on_delete=models.PROTECT, related_name="redemptions"
+    therapy_program_service = models.ForeignKey(
+        TherapyProgramService, on_delete=models.PROTECT, related_name="redemptions"
     )
     redeem_center = models.ForeignKey(
         "centers.Center", on_delete=models.PROTECT, related_name="redemptions"
