@@ -9,23 +9,44 @@ from core.utils.views.main import (
     BaseRetrieveUpdateAPIView,
     BaseCreateAPIView,
 )
-from programs.services.models import CenterServiceAssignment
-from programs.models import ProgramService, WellnessProgram
+from programs.models import ProgramService, TherapyProgram, TherapyProgramService
 from programs.serializers import (
     BaseProgramServiceSerializer,
-    WellnessProgramDetailSerializer,
-    WellnessProgramCancelSerializer,
-    WellnessProgramRedeemSerializer,
+)
+from programs.services.models import CenterServiceAssignment
+from programs.therapy.serializers import (
+    TherapyProgramDetailSerializer,
+    TherapyProgramCancelSerializer,
+    TherapyProgramRedeemSerializer,
+    TherapyProgramServiceSerializer,
 )
 
 
-class WellnessProgramDetailView(BaseRetrieveUpdateAPIView):
-    serializer_class = WellnessProgramDetailSerializer
+class TherapyProgramServicesView(BaseListAPIView):
+    serializer_class = TherapyProgramServiceSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        code_query_param = self.request.query_params.get("code", None)
+        qs = TherapyProgramService.objects.filter(
+            redeem_code__iexact=code_query_param
+        ).select_related(
+            "program_service",
+            "program_service__cancelled_by",
+            "program_service__created_by",
+            "program_service__program__customer_profile",
+            "program_service__service",
+        )
+        return qs
+
+
+class TherapyProgramDetailView(BaseRetrieveUpdateAPIView):
+    serializer_class = TherapyProgramDetailSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
         qs = (
-            WellnessProgram.objects.filter()
+            TherapyProgram.objects.filter()
             .select_related(
                 "program",
                 "program__center",
@@ -33,9 +54,12 @@ class WellnessProgramDetailView(BaseRetrieveUpdateAPIView):
                 "program__customer_profile__customer__user",
             )
             .prefetch_related(
-                "program__program_services",
-                "program__program_services__service",
-                "program__program_services__created_by",
+                Prefetch(
+                    "program__program_services",
+                    queryset=ProgramService.objects.select_related(
+                        "service", "created_by", "therapy_service"
+                    ),
+                ),
                 "program__redeemable_centers",
                 Prefetch(
                     "program__customer_profile__center_assignments",
@@ -49,7 +73,7 @@ class WellnessProgramDetailView(BaseRetrieveUpdateAPIView):
         return qs
 
 
-class WellnessProgramServicesListView(BaseListAPIView):
+class TherapyProgramServicesListView(BaseListAPIView):
     serializer_class = BaseProgramServiceSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
@@ -59,16 +83,18 @@ class WellnessProgramServicesListView(BaseListAPIView):
         if center_id:
             subquery_filter_kwargs["center_id"] = center_id
         can_redeem_subquery = CenterServiceAssignment.objects.filter(
-            service_id=OuterRef("service_id"), is_active=True, **subquery_filter_kwargs
+            service=OuterRef("service"), is_active=True, **subquery_filter_kwargs
         )
         qs = (
             ProgramService.objects.filter(
-                program__wellness_program__id=self.kwargs["pk"]
+                program__therapy_program__pk=self.kwargs["pk"]
             )
             .select_related(
                 "cancelled_by",
+                "created_by",
+                "service",
+                "therapy_service",
             )
-            .prefetch_related("service", "created_by")
             .annotate(can_redeem=Exists(can_redeem_subquery))
             .order_by("-created_at")
         )
@@ -76,14 +102,20 @@ class WellnessProgramServicesListView(BaseListAPIView):
         return qs
 
 
-class WellnessProgramCancelView(BaseCreateAPIView):
-    serializer_class = WellnessProgramCancelSerializer
+class TherapyProgramCancelView(BaseCreateAPIView):
+    serializer_class = TherapyProgramCancelSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
-    def get_wellness_program(self):
-        qs = WellnessProgram.objects.select_related().prefetch_related().filter()
+    def get_therapy_program(self):
+        # filter_kwargs = {}
+        # user = self.request.user
+        # account_type = get_user_account_type(user)
+        # if account_type == UserType.ASSOCIATE:
+        #     associate = getattr(user, 'associate')
+        #
+        qs = TherapyProgram.objects.select_related().prefetch_related().filter()
         return get_object_or_404(
-            qs, "Wellness program not found with this ID", pk=self.kwargs["pk"]
+            qs, "Therapy program not found with this ID", pk=self.kwargs["pk"]
         )
 
     def get_center(self):
@@ -93,24 +125,24 @@ class WellnessProgramCancelView(BaseCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(
-            wellness_program=self.get_wellness_program(),
+            therapy_program=self.get_therapy_program(),
             cancelled_by=self.request.user,
             center=self.get_center(),
         )
 
 
-class WellnessProgramRedeemView(BaseCreateAPIView):
-    serializer_class = WellnessProgramRedeemSerializer
+class TherapyProgramRedeemView(BaseCreateAPIView):
+    serializer_class = TherapyProgramRedeemSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
-    def get_wellness_program(self):
-        qs = WellnessProgram.objects.select_related("program").filter()
+    def get_therapy_program(self):
+        qs = TherapyProgram.objects.select_related("program").filter()
         return get_object_or_404(
-            qs, "Wellness program not found with this ID", pk=self.kwargs["pk"]
+            qs, "Therapy program not found with this ID", pk=self.kwargs["pk"]
         )
 
     def perform_create(self, serializer):
         serializer.save(
-            wellness_program=self.get_wellness_program(),
+            therapy_program=self.get_therapy_program(),
             redeemed_by=self.request.user,
         )
