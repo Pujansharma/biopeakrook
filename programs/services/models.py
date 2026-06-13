@@ -1,6 +1,8 @@
 from django.db import models
 
 from core.utils.models import BaseUUIDModel
+from products.models import Product
+from programs.services.utils.constants import ServiceCategory
 
 
 class Service(BaseUUIDModel):
@@ -13,6 +15,9 @@ class Service(BaseUUIDModel):
         related_name="created_services",
     )
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
+    service_category = models.CharField(choices=ServiceCategory)
+    image = models.FileField(upload_to="products/services/", null=True, blank=True)
+    is_global = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -38,6 +43,26 @@ class CenterServiceAssignment(BaseUUIDModel):
         ]
         indexes = [
             models.Index(fields=["service", "center"], name="service_center_idx")
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ServiceProductAssignment(BaseUUIDModel):
+    service = models.ForeignKey(
+        Service, on_delete=models.PROTECT, related_name="product_assignments"
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name="service_assignments"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service", "product"], name="unique_service_product"
+            )
         ]
 
     def __str__(self):
