@@ -14,5 +14,8 @@ urlpatterns = [
         "<uuid:pk>/customer-profiles/", views.CenterUUIDCustomerProfilesView.as_view()
     ),
     path("<uuid:pk>/services/", include("accounts.centers.services.urls")),
-    path("<uuid:pk>/programs/", include("accounts.centers.programs.urls")),
+    path(
+        "<uuid:pk>/therapy-programs/", include("accounts.centers.programs.therapy.urls")
+    ),
+
 ]
