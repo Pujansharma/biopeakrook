@@ -17,5 +17,4 @@ urlpatterns = [
     path(
         "<uuid:pk>/therapy-programs/", include("accounts.centers.programs.therapy.urls")
     ),
-
 ]
