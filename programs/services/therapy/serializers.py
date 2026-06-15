@@ -219,6 +219,7 @@ class TherapyProgramServiceCancelSerializer(BaseModelSerializer):
         required=False, allow_blank=True, allow_null=True
     )
     cancelled_date = serializers.DateField(default=timezone.localdate(), required=False)
+    cancelled_by = BaseUserSerializer(source='program_service.cancelled_by', read_only=True)
 
     class Meta:
         model = TherapyProgramService
