@@ -127,7 +127,7 @@ class ServiceAvailableCenters(BaseListAPIView):
         qs = (
             Center.objects.filter(search, is_active=True)
             .annotate(exists=Exists(exists_subquery))
-            .order_by("-created_at")
+            .order_by("-exists", "-created_at")
         )
         return qs
 
