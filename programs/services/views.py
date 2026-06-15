@@ -16,8 +16,14 @@ from core.utils.views.main import (
     BaseRetrieveUpdateDestroyAPIView,
     BaseListAPIView,
 )
+from products.models import Product
+from products.serializers import ServiceAvailableProductSerializer
 from programs.models import ProgramService
-from programs.services.models import Service, CenterServiceAssignment
+from programs.services.models import (
+    Service,
+    CenterServiceAssignment,
+    ServiceProductAssignment,
+)
 from programs.services.serializers import (
     ServiceSerializer,
 )
@@ -122,5 +128,29 @@ class ServiceAvailableCenters(BaseListAPIView):
             Center.objects.filter(search, is_active=True)
             .annotate(exists=Exists(exists_subquery))
             .order_by("-created_at")
+        )
+        return qs
+
+
+class ServiceAvailableProducts(BaseListAPIView):
+    serializer_class = ServiceAvailableProductSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        search = Q()
+        search_params = self.request.query_params.get("search", "").strip()
+        if search_params:
+            search |= Q(name__istartswith=search_params)
+            search |= Q(name__icontains=search_params)
+
+        subquery = ServiceProductAssignment.objects.filter(
+            product_id=OuterRef("pk"),
+            service_id=self.kwargs["pk"],
+        )
+
+        qs = (
+            Product.objects.filter(search)
+            .annotate(exists=Exists(subquery))
+            .order_by("exists", "-created_at")
         )
         return qs
