@@ -25,8 +25,8 @@ from core.utils.views.main import BaseListAPIView, BaseRetrieveAPIView
 from external.serializers import (
     CustomerProfileSummarySerializer,
     ExternalProgramServiceSerializer,
-    CustomerWellnessProgramSerializer,
-    CustomerWellnessProgramDetailSerializer,
+    CustomerTherapyProgramSerializer,
+    CustomerTherapyProgramDetailSerializer,
     CustomerServiceDetailSerializer,
     ExternalCustomerAssociateSerializer,
 )
@@ -34,14 +34,14 @@ from programs.models import (
     Program,
     ProgramService,
     RedemptionHistory,
-    WellnessProgram,
+    TherapyProgram,
 )
 from programs.serializers import ProgramServiceRedemptionHistorySerializer
 from programs.services.models import CenterServiceAssignment
 
 
 class ExternalUserProgramView(BaseListAPIView):
-    serializer_class = CustomerWellnessProgramSerializer
+    serializer_class = CustomerTherapyProgramSerializer
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -66,12 +66,9 @@ class ExternalUserProgramView(BaseListAPIView):
             filter_kwargs.update(expired_filter_map[expired_query])
 
         qs = (
-            WellnessProgram.objects.annotate(
+            TherapyProgram.objects.annotate(
                 is_complete=ExpressionWrapper(
-                    Q(
-                        program__sessions_count=F("program__sessions_used")
-                                                + F("program__sessions_cancelled")
-                    ),
+                    Q(sessions_count=F("sessions_used") + F("sessions_cancelled")),
                     output_field=BooleanField(),
                 )
             )
@@ -127,32 +124,37 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
             ),
             sessions_count=Coalesce(
                 Subquery(
-                    programs_base.annotate(total=Sum("sessions_count")).values("total")[
-                        :1
-                    ]
+                    programs_base.annotate(
+                        total=Sum("therapy_program__sessions_count")
+                    ).values("total")[:1]
                 ),
                 0,
             ),
             sessions_used=Coalesce(
                 Subquery(
-                    programs_base.annotate(total=Sum("sessions_used")).values("total")[
-                        :1
-                    ]
+                    programs_base.annotate(
+                        total=Sum("therapy_program__sessions_used")
+                    ).values("total")[:1]
                 ),
                 0,
             ),
             sessions_cancelled=Coalesce(
                 Subquery(
-                    programs_base.annotate(total=Sum("sessions_cancelled")).values(
-                        "total"
-                    )[:1]
+                    programs_base.annotate(
+                        total=Sum("therapy_program__sessions_cancelled")
+                    ).values("total")[:1]
                 ),
                 0,
             ),
             sessions_expired=Coalesce(
                 Subquery(
                     programs_base.filter(expires_at__lt=timezone.localdate())
-                    .annotate(total=Sum(F("sessions_count") - F("sessions_used")))
+                    .annotate(
+                        total=Sum(
+                            F("therapy_program__sessions_count")
+                            - F("therapy_program__sessions_used")
+                        )
+                    )
                     .values("total")[:1]
                 ),
                 0,
@@ -161,7 +163,10 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                 Subquery(
                     programs_base.filter(
                         is_active=True,
-                        sessions_count=F("sessions_used") + F("sessions_cancelled"),
+                        therapy_program__sessions_count=F(
+                            "therapy_program__sessions_used"
+                        )
+                        + F("therapy_program__sessions_cancelled"),
                     )
                     .annotate(count=Count("pk"))
                     .values("count")[:1]
@@ -175,7 +180,7 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
 
 
 class ExternalUserProgramDetailView(BaseRetrieveAPIView):
-    serializer_class = CustomerWellnessProgramDetailSerializer
+    serializer_class = CustomerTherapyProgramDetailSerializer
 
     def get_queryset(self):
         phone_query = self.request.query_params.get("phone", None)
@@ -184,15 +189,19 @@ class ExternalUserProgramDetailView(BaseRetrieveAPIView):
         phone_cleaned = phone_formatter.clean(raise_exception=False)
 
         return (
-            WellnessProgram.objects.filter(
+            TherapyProgram.objects.filter(
                 program__customer_profile__customer__user__phone=phone_cleaned,
             )
             .select_related(
                 "program",
             )
             .prefetch_related(
-                "program__program_services",
-                "program__program_services__service",
+                Prefetch(
+                    "program__program_services",
+                    queryset=ProgramService.objects.select_related(
+                        "service", "therapy_service"
+                    ),
+                ),
             )
         )
 
@@ -206,21 +215,20 @@ class ExternalUserProgramServicesListView(BaseListAPIView):
         phone_cleaned = phone_formatter.clean(raise_exception=False)
         return (
             ProgramService.objects.filter(
-                program__wellness_program__id=self.kwargs["pk"],
+                program__therapy_program__pk=self.kwargs["pk"],
                 program__customer_profile__customer__user__phone=phone_cleaned,
             )
-            .select_related("cancelled_by")
+            .select_related("cancelled_by", "created_by", "service", "therapy_service")
             .prefetch_related(
                 Prefetch(
                     "service__center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(
-                        center__redeemable_programs__wellness_program__id=self.kwargs[
+                        center__redeemable_programs__therapy_program__pk=self.kwargs[
                             "pk"
                         ],
                         is_active=True,
                     ).select_related("center"),
                 ),
-                "created_by",
             )
         )
 
@@ -233,13 +241,13 @@ class ExternalUserProgramServiceRedemptionHistory(BaseListAPIView):
         phone_cleaned = PhoneNumberFormat(phone_query).clean(raise_exception=False)
         qs = ProgramService.objects.filter(
             program__customer_profile__customer__user__phone=phone_cleaned,
-        ).select_related("program__customer_profile__customer__user")
+        ).select_related("program__customer_profile__customer__user", "therapy_service")
         return get_object_or_404(qs, "Program service not found", pk=self.kwargs["pk"])
 
     def get_queryset(self):
         program_service = self.get_program_service()
         return RedemptionHistory.objects.filter(
-            program_service=program_service
+            therapy_program_service=program_service.therapy_service
         ).select_related("redeemed_by", "redeem_center")
 
 
@@ -254,7 +262,7 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
             ProgramService.objects.filter(
                 program__customer_profile__customer__user__phone=phone_cleaned,
             )
-            .select_related("cancelled_by")
+            .select_related("cancelled_by", "created_by", "service", "therapy_service")
             .prefetch_related(
                 Prefetch(
                     "service__center_assignments",
@@ -265,7 +273,6 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
                         is_active=True,
                     ).select_related("center"),
                 ),
-                "created_by",
             )
         )
         return qs
