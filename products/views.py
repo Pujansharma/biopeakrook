@@ -18,12 +18,17 @@ class ProductsView(BaseListCreateAPIView):
         filter_kwargs = {}
         search_params = self.request.query_params.get("search", "").strip()
         active_query_param = self.request.query_params.get("active", None)
+        provider_ids = self.request.query_params.getlist("provider", [])
         if active_query_param and active_query_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query_param))
         if search_params:
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
-        qs = Product.objects.select_related("created_by").filter(search, **filter_kwargs)
+        if provider_ids:
+            filter_kwargs["provider__in"] = provider_ids
+        qs = Product.objects.select_related("created_by").filter(
+            search, **filter_kwargs
+        )
         return qs
 
     def perform_create(self, serializer: ProductSerializer):
