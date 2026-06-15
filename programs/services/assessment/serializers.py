@@ -111,6 +111,7 @@ class AssessmentServiceSerializer(AssessmentServiceSerializerMeta, BaseModelSeri
             "add_products",
             "remove_products",
             "products",
+            "products_count",
         ]
         read_only_fields = ["service_category"]
 
@@ -184,6 +185,7 @@ class AssessmentServiceDetailSerializer(
             "add_products",
             "remove_products",
             "products",
+            "products_count",
         ]
         read_only_fields = ["service_category"]
 
