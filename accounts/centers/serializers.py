@@ -29,7 +29,6 @@ class BaseCenterSerializer(BaseModelSerializer):
     phone = PhoneNumberSerializerField(
         required=False, allow_null=True, allow_blank=True
     )
-    status_code = serializers.CharField(source="status", read_only=True)
 
     class Meta:
         model = Center
@@ -45,12 +44,6 @@ class BaseCenterSerializer(BaseModelSerializer):
             "state",
             "country",
             "pincode",
-            "phone",
-            "email",
-            "contact_person",
-            "modes",
-            "status",
-            "status_code",
             "staff_count",
             "inactive_staff_count",
             "customer_count",
@@ -78,12 +71,6 @@ class ServiceAvailableCenterSerializer(BaseCenterSerializer):
             "state",
             "country",
             "pincode",
-            "phone",
-            "email",
-            "contact_person",
-            "modes",
-            "status",
-            "status_code",
             "staff_count",
             "inactive_staff_count",
             "customer_count",
@@ -115,12 +102,6 @@ class CenterSerializer(BaseCenterSerializer):
             "country",
             "state",
             "pincode",
-            "phone",
-            "email",
-            "contact_person",
-            "modes",
-            "status",
-            "status_code",
             "staff_count",
             "inactive_staff_count",
             "customer_count",
@@ -163,9 +144,6 @@ class CenterDetailSerializer(BaseCenterSerializer):
             "phone",
             "email",
             "contact_person",
-            "modes",
-            "status",
-            "status_code",
             "staff_count",
             "inactive_staff_count",
             "customer_count",
@@ -176,7 +154,7 @@ class CenterDetailSerializer(BaseCenterSerializer):
             "created_by",
         ]
 
-    def update(self, instance, validated_data):
+    def update(self, instance: Center, validated_data):
         """Method to update a center"""
         validated_data.pop("code", None)
         validated_data.pop("created_by", None)
