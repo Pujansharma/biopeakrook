@@ -5,8 +5,17 @@ from django.db.models import Count, F, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from programs.models import Program, ProgramService, RedemptionHistory
-from programs.services.models import Service, CenterServiceAssignment
+from accounts.centers.models import Center
+from programs.models import (
+    RedemptionHistory,
+    TherapyProgram,
+    TherapyProgramService,
+)
+from programs.services.models import (
+    Service,
+    CenterServiceAssignment,
+    ServiceProductAssignment,
+)
 
 
 def update_service_center_count(service_id: UUID) -> None:
@@ -23,6 +32,21 @@ def update_service_center_count(service_id: UUID) -> None:
     )
 
 
+def update_service_product_count(service_id: UUID) -> None:
+    subquery = (
+        ServiceProductAssignment.objects.filter(
+            service=OuterRef("pk"),
+            is_active=True,
+        )
+        .values("service")
+        .annotate(count=Count("product"))
+        .values("count")
+    )
+    Service.objects.filter(pk=service_id).update(
+        products_count=Coalesce(Subquery(subquery), Value(0))
+    )
+
+
 def redeem_program_service(
         program_service_id: UUID,
         center_id: UUID,
@@ -30,16 +54,20 @@ def redeem_program_service(
         quantity: int,
         redeemed_date=timezone.localdate(),
 ) -> None:
+    center = Center.objects.filter(pk=center_id).first()
+    therapy_program_service = TherapyProgramService.objects.filter(
+        program_service__pk=program_service_id
+    ).first()
     with transaction.atomic():
-        ProgramService.objects.filter(pk=program_service_id).update(
-            sessions_used=F("sessions_used") + quantity
-        )
-        Program.objects.filter(program_services__pk=program_service_id).update(
-            sessions_used=F("sessions_used") + quantity
-        )
+        TherapyProgramService.objects.filter(
+            program_service__pk=program_service_id
+        ).update(sessions_used=F("sessions_used") + quantity)
+        TherapyProgram.objects.filter(
+            program__program_services__pk=program_service_id
+        ).update(sessions_used=F("sessions_used") + quantity)
         RedemptionHistory.objects.create(
-            program_service_id=program_service_id,
-            redeem_center_id=center_id,
+            therapy_program_service=therapy_program_service,
+            redeem_center=center,
             redeemed_at=timezone.now(),
             quantity=quantity,
             redeemed_by=redeemed_by,
@@ -51,26 +79,31 @@ def redeem_all_program_services(
         program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
 ) -> int:
     services = list(
-        ProgramService.objects.filter(program_id=program_id, is_active=True)
+        TherapyProgramService.objects.filter(
+            program_service__program=program_id,
+            program_service__is_active=True,
+        )
         .exclude(sessions_used=F("sessions_count"))
-        .values("pk", "sessions_count", "sessions_used")
+        .select_related("program_service")
     )
     if not services:
         return 0
 
     now = timezone.now()
+    center = Center.objects.filter(pk=center_id).first()
     total_quantity = 0
-    service_ids = []
     histories = []
 
-    for service in services:
-        remaining = service["sessions_count"] - service["sessions_used"]
+    for therapy_program_service in services:
+        remaining = (
+                therapy_program_service.sessions_count
+                - therapy_program_service.sessions_used
+        )
         total_quantity += remaining
-        service_ids.append(service["pk"])
         histories.append(
             RedemptionHistory(
-                program_service_id=service["pk"],
-                redeem_center_id=center_id,
+                therapy_program_service=therapy_program_service,
+                redeem_center=center,
                 redeemed_at=now,
                 quantity=remaining,
                 redeemed_by=redeemed_by,
@@ -79,10 +112,13 @@ def redeem_all_program_services(
         )
 
     with transaction.atomic():
-        ProgramService.objects.filter(pk__in=service_ids).update(
+        therapy_program_service_ids = [
+            therapy_program_service.pk for therapy_program_service in services
+        ]
+        TherapyProgramService.objects.filter(pk__in=therapy_program_service_ids).update(
             sessions_used=F("sessions_count")
         )
-        Program.objects.filter(pk=program_id).update(
+        TherapyProgram.objects.filter(program=program_id).update(
             sessions_used=F("sessions_used") + total_quantity
         )
         RedemptionHistory.objects.bulk_create(histories)
