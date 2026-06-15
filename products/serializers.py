@@ -2,16 +2,35 @@ from django.db import transaction
 from rest_framework import serializers
 
 from accounts.users.serializers import BaseUserSerializer
-from core.utils.serializers import BaseModelSerializer
+from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from products.models import Product, Provider, ProviderAPI
 from products.utils.constants import PROVIDER_PRODUCT_CALLBACK_MAP
 from products.utils.db import generate_product_code, generate_provider_code
+
+
+class ProductIDSerializer(BaseSerializer):
+    id = serializers.UUIDField(required=True)
 
 
 class BaseProviderSerializer(BaseModelSerializer):
     class Meta:
         model = Provider
         fields = ["id", "name", "code"]
+
+
+class MinimumProviderSerializer(BaseModelSerializer):
+    class Meta:
+        model = Provider
+        fields = [
+            "id",
+            "name",
+            "code",
+            "image",
+            "is_active",
+            "is_api_enabled",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class ProviderSerializer(BaseModelSerializer):
@@ -53,9 +72,12 @@ class ProviderSerializer(BaseModelSerializer):
         validated_data.pop("code", None)
         required_fields = validated_data.get("required_fields") or []
         if instance.is_api_enabled:
-            api_instance = getattr(instance, 'api', None)
-            _data: dict = getattr(api_instance, 'data', {}) or {}
-            is_configured = bool(required_fields) and all(map(_data.get, required_fields))
+            api_instance = getattr(instance, "api", None)
+            _data: dict = getattr(api_instance, "data", {}) or {}
+
+            is_configured = bool(required_fields) and all(
+                [_data.get(x) for x in required_fields]
+            )
             validated_data["is_api_enabled"] = is_configured and validated_data.get(
                 "is_api_enabled", instance.is_api_enabled
             )
@@ -105,7 +127,9 @@ class ProviderAPISerializer(BaseModelSerializer):
     def update(self, instance: ProviderAPI, validated_data: dict) -> ProviderAPI:
         required_fields = instance.provider.required_fields
         provider_data = validated_data.pop("provider", {})
-        is_api_enabled = provider_data.get('is_api_enabled', instance.provider.is_api_enabled)
+        is_api_enabled = provider_data.get(
+            "is_api_enabled", instance.provider.is_api_enabled
+        )
         if is_api_enabled:
             if not required_fields:
                 raise serializers.ValidationError(
@@ -113,7 +137,9 @@ class ProviderAPISerializer(BaseModelSerializer):
                 )
 
             _data = validated_data.get("data", instance.data) or {}
-            validated_data["data"] = self.validate_required_fields(required_fields, _data)
+            validated_data["data"] = self.validate_required_fields(
+                required_fields, _data
+            )
         with transaction.atomic():
             for key, value in provider_data.items():
                 setattr(instance.provider, key, value)
@@ -167,7 +193,7 @@ class ProductSerializer(BaseModelSerializer):
                 {"callback": "Invalid callback selected for the given provider"}
             )
 
-        validated_data["code"] = generate_product_code(provider.code)
+        validated_data["code"] = generate_product_code()
         return super().create(validated_data)
 
     def update(self, instance: Product, validated_data: dict) -> Product:
@@ -175,3 +201,18 @@ class ProductSerializer(BaseModelSerializer):
         validated_data.pop("provider_id", None)
         validated_data.pop("callback", None)
         return super().update(instance, validated_data)
+
+
+class ServiceAvailableProductSerializer(BaseModelSerializer):
+    exists = serializers.BooleanField(default=False)
+    provider = BaseProviderSerializer(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "image",
+            "name",
+            "provider",
+            "exists",
+        ]
