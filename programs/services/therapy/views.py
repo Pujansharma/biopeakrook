@@ -1,24 +1,30 @@
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, ProtectedError, RestrictedError
 
 from accounts.centers.models import Center
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.exceptions import get_object_or_404
+from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
     BaseCreateAPIView,
     BaseListAPIView,
     BaseListCreateAPIView,
+    BaseRetrieveUpdateDestroyAPIView,
 )
 from programs.models import RedemptionHistory, TherapyProgramService
 from programs.serializers import (
     ProgramServiceRedemptionHistorySerializer,
 )
 from programs.services.models import CenterServiceAssignment, Service
+from programs.services.therapy.serializers import (
+    TherapyServiceSerializer,
+    TherapyServiceRedeemSerializer,
+    TherapyProgramServiceCancelSerializer,
+    TherapyServiceDetailSerializer,
+)
 from programs.services.utils.constants import ServiceCategory
 from programs.therapy.serializers import (
     TherapyProgramServiceSerializer,
 )
-from programs.services.therapy.serializers import TherapyServiceSerializer, TherapyServiceRedeemSerializer, \
-    TherapyProgramServiceCancelSerializer
 
 
 class TherapyProgramServicesListView(BaseListAPIView):
@@ -69,6 +75,29 @@ class TherapyServicesListView(BaseListCreateAPIView):
         serializer.save(
             created_by=self.request.user, service_category=ServiceCategory.THERAPY
         )
+
+
+class TherapyServicesDetailView(BaseRetrieveUpdateDestroyAPIView):
+    serializer_class = TherapyServiceDetailSerializer
+    permission_classes = [IsAdminUser | (IsAssociateUser & ReadOnly)]
+
+    def get_queryset(self):
+        qs = (
+            Service.objects.filter(
+                service_category=ServiceCategory.THERAPY,
+            )
+            .prefetch_related(
+                "center_assignments__center", "center_assignments__center__created_by"
+            )
+            .select_related("created_by")
+        )
+        return qs
+
+    def perform_destroy(self, instance):
+        try:
+            super().perform_destroy(instance)
+        except ProtectedError, RestrictedError:
+            self.raise_bad_request("This service cannot be deleted")
 
 
 class TherapyServiceRedeemView(BaseCreateAPIView):
