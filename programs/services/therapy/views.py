@@ -13,15 +13,12 @@ from programs.serializers import (
     ProgramServiceRedemptionHistorySerializer,
 )
 from programs.services.models import CenterServiceAssignment, Service
-from programs.services.serializers import (
-    TherapyProgramServiceCancelSerializer,
-    TherapyServiceRedeemSerializer,
-)
 from programs.services.utils.constants import ServiceCategory
 from programs.therapy.serializers import (
-    TherapyServiceSerializer,
     TherapyProgramServiceSerializer,
 )
+from programs.services.therapy.serializers import TherapyServiceSerializer, TherapyServiceRedeemSerializer, \
+    TherapyProgramServiceCancelSerializer
 
 
 class TherapyProgramServicesListView(BaseListAPIView):
@@ -57,8 +54,14 @@ class TherapyServicesListView(BaseListCreateAPIView):
         if active_query and active_query in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query))
 
-        qs = Service.objects.filter(
-            search, service_category=ServiceCategory.THERAPY, **filter_kwargs
+        qs = (
+            Service.objects.filter(
+                search, service_category=ServiceCategory.THERAPY, **filter_kwargs
+            )
+            .prefetch_related(
+                "center_assignments__center", "center_assignments__center__created_by"
+            )
+            .select_related("created_by")
         )
         return qs
 
