@@ -10,7 +10,6 @@ from accounts.organizations.utils.db import (
     decrement_organization_inactive_centers_count,
 )
 from accounts.users.serializers import BaseUserSerializer
-from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
 
 
@@ -26,9 +25,6 @@ class MinimumCenterSerializer(BaseModelSerializer):
 
 class BaseCenterSerializer(BaseModelSerializer):
     code = serializers.CharField(read_only=True)
-    phone = PhoneNumberSerializerField(
-        required=False, allow_null=True, allow_blank=True
-    )
 
     class Meta:
         model = Center
