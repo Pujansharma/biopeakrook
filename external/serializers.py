@@ -9,7 +9,7 @@ from accounts.customers.models import CustomerProfile, CustomerAssociateAssignme
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
-from programs.models import ProgramService, WellnessProgram
+from programs.models import ProgramService, TherapyProgram
 from programs.services.models import Service
 from programs.utils.constants import ProgramType
 
@@ -33,6 +33,15 @@ class ExternalCustomerServiceSerializer(BaseModelSerializer):
 
 class ExternalProgramServiceSerializer(BaseModelSerializer):
     service = ExternalCustomerServiceSerializer(read_only=True)
+    sessions_count = serializers.IntegerField(
+        source="therapy_service.sessions_count", read_only=True
+    )
+    sessions_used = serializers.IntegerField(
+        source="therapy_service.sessions_used", read_only=True
+    )
+    redeem_code = serializers.CharField(
+        source="therapy_service.redeem_code", read_only=True
+    )
 
     class Meta:
         model = ProgramService
@@ -48,9 +57,10 @@ class ExternalProgramServiceSerializer(BaseModelSerializer):
         ]
 
 
-class CustomerWellnessProgramSerializer(BaseModelSerializer):
+class CustomerTherapyProgramSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="pk", read_only=True)
     program_type = serializers.ChoiceField(
-        source="program.program_type", choices=ProgramType, default=ProgramType.WELLNESS
+        source="program.program_type", choices=ProgramType, default=ProgramType.THERAPY
     )
 
     expires_at = serializers.DateField(source="program.expires_at", required=True)
@@ -64,15 +74,6 @@ class CustomerWellnessProgramSerializer(BaseModelSerializer):
     #     max_digits=10,
     #     decimal_places=2,
     # )
-    sessions_count = serializers.IntegerField(
-        source="program.sessions_count", default=0, read_only=True
-    )
-    sessions_used = serializers.IntegerField(
-        source="program.sessions_used", default=0, read_only=True
-    )
-    sessions_cancelled = serializers.IntegerField(
-        source="program.sessions_cancelled", default=0, read_only=True
-    )
     services_count = serializers.IntegerField(
         source="program.services_count", default=0, read_only=True
     )
@@ -82,7 +83,7 @@ class CustomerWellnessProgramSerializer(BaseModelSerializer):
     # )
 
     class Meta:
-        model = WellnessProgram
+        model = TherapyProgram
         fields = [
             "id",
             "program_type",
@@ -106,7 +107,8 @@ class CustomerWellnessProgramSerializer(BaseModelSerializer):
         return rep
 
 
-class CustomerWellnessProgramDetailSerializer(BaseModelSerializer):
+class CustomerTherapyProgramDetailSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="pk", read_only=True)
     program_type = serializers.ChoiceField(
         source="program.program_type", choices=ProgramType, read_only=True
     )
@@ -124,12 +126,6 @@ class CustomerWellnessProgramDetailSerializer(BaseModelSerializer):
     expires_at = serializers.DateField(
         source="program.expires_at", required=False, allow_null=True
     )
-    sessions_count = serializers.IntegerField(
-        source="program.sessions_count", read_only=True
-    )
-    sessions_used = serializers.IntegerField(
-        source="program.sessions_used", read_only=True
-    )
     services_count = serializers.IntegerField(
         source="program.services_count", read_only=True
     )
@@ -143,7 +139,7 @@ class CustomerWellnessProgramDetailSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        model = WellnessProgram
+        model = TherapyProgram
         fields = [
             "id",
             "program_type",
@@ -164,7 +160,7 @@ class CustomerWellnessProgramDetailSerializer(BaseModelSerializer):
     def create(self, validated_data):
         raise serializers.ValidationError("Create not allowed.")
 
-    def update(self, instance: WellnessProgram, validated_data):
+    def update(self, instance: TherapyProgram, validated_data):
         """Not allowed"""
 
     def to_representation(self, instance):
@@ -175,10 +171,19 @@ class CustomerWellnessProgramDetailSerializer(BaseModelSerializer):
 
 
 class CustomerServiceDetailSerializer(BaseModelSerializer):
-    program = CustomerWellnessProgramDetailSerializer(
-        source="program.wellness_program", read_only=True
+    program = CustomerTherapyProgramDetailSerializer(
+        source="program.therapy_program", read_only=True
     )
     service = ExternalCustomerServiceSerializer(read_only=True)
+    sessions_count = serializers.IntegerField(
+        source="therapy_service.sessions_count", read_only=True
+    )
+    sessions_used = serializers.IntegerField(
+        source="therapy_service.sessions_used", read_only=True
+    )
+    redeem_code = serializers.CharField(
+        source="therapy_service.redeem_code", read_only=True
+    )
 
     class Meta:
         model = ProgramService
