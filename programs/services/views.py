@@ -152,6 +152,6 @@ class ServiceAvailableProducts(BaseListAPIView):
             Product.objects.filter(search)
             .annotate(exists=Exists(subquery))
             .prefetch_related('provider')
-            .order_by("exists", "-created_at")
+            .order_by("-exists", "-created_at")
         )
         return qs
