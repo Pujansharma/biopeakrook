@@ -2,7 +2,8 @@ from django.db import models
 
 
 class ProgramType(models.TextChoices):
-    WELLNESS = "wellness", "Wellness Programme"
+    THERAPY = "therapy", "Therapy Program"
+    ASSESSMENT = "assessment", "Assessment Program"
 
 
 class RedemptionType(models.TextChoices):
