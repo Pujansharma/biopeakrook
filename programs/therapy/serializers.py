@@ -224,6 +224,10 @@ class TherapyProgramSerializer(BaseModelSerializer):
     add_redeemable_centers = RedeemableCenterField(many=True, write_only=True)
     add_services = ServiceField(many=True, required=True, write_only=True)
 
+    # Dates
+    created_date = serializers.DateField(source='program.created_date', required=False)
+    cancelled_date = serializers.DateField(source='program.cancelled_date', required=False)
+
     # Read only
     created_by = BaseUserSerializer(source="program.created_by", read_only=True)
 
@@ -248,6 +252,8 @@ class TherapyProgramSerializer(BaseModelSerializer):
             # "services",
             "add_redeemable_centers",
             "add_services",
+            "created_date",
+            "cancelled_date",
             "created_at",
             "updated_at",
             "is_active",
