@@ -351,7 +351,7 @@ def remove_centers_action(self, service: Service, remove_centers: list) -> None:
     ).delete()
 ```
 
-#### 4.4: Update `ServiceRedeemSerializer.create()`
+#### 4.4: Update `TherapyServiceRedeemSerializer.create()`
 
 **Current (Line ~166):**
 ```python

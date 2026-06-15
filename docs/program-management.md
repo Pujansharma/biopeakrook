@@ -3,11 +3,11 @@
 ## Overview
 
 A **Program** is a composable container of services assigned to a customer. It represents a structured
-engagement — e.g., a wellness plan — with a defined set of services the customer can redeem across
+engagement, such as a therapy plan, with a defined set of services the customer can redeem across
 one or more centers.
 
 Programs are issued at a single center (`center` FK) but can be redeemed at multiple centers
-(`redeemable_centers` M2M). Each program has a type (e.g., `wellness`), and the type-specific
+(`redeemable_centers` M2M). Each program has a type (for example, `therapy`), and the type-specific
 model carries a `OneToOneField` back to `Program`.
 
 ---
@@ -18,7 +18,7 @@ model carries a `OneToOneField` back to `Program`.
 services/
 ├── models.py                        # Service (global catalog, center-assigned via M2M)
 └── programs/
-    ├── models.py                    # Program, ProgramService, WellnessProgram
+    ├── models.py                    # Program, ProgramService, TherapyProgram
     └── utils/
         └── constants.py            # ProgramType
 ```
@@ -69,16 +69,16 @@ customer's chosen redemption center.
 
 Constraint: `unique_together: (program, service)`
 
-### WellnessProgram
+### TherapyProgram
 
-Type-specific extension for wellness programs. One-to-one with `Program`
+Type-specific extension for therapy programs. One-to-one with `Program`
 (enforced by `OneToOneField`). A program cannot have more than one type object.
 
 | Field | Type | Purpose |
 |---|---|---|
 | `program` | OneToOneField(Program) | Parent program |
 
-Add wellness-specific fields here as the domain grows.
+Add therapy-specific fields here as the domain grows.
 
 ---
 
@@ -86,11 +86,11 @@ Add wellness-specific fields here as the domain grows.
 
 ### ProgramType
 
-Defined in `services/programs/utils/constants.py`.
+Defined in `programs/utils/constants.py`.
 
 | Constant | Value | Description |
 |---|---|---|
-| `WELLNESS` | `wellness` | Wellness program |
+| `THERAPY` | `therapy` | Therapy program |
 
 Add new types here as the platform expands. Each new type requires a corresponding
 type-specific model with a `OneToOneField` back to `Program`.
@@ -102,11 +102,11 @@ type-specific model with a `OneToOneField` back to `Program`.
 Each `program_type` value corresponds to exactly one type-specific model:
 
 ```
-Program (program_type='wellness')
-  └── WellnessProgram (OneToOne → Program)
-        └── wellness-specific fields
+Program (program_type='therapy')
+  └── TherapyProgram (OneToOne -> Program)
+        └── therapy-specific fields
 
-Program (program_type='consultation')        ← future
+Program (program_type='consultation')        <- future
   └── ConsultationProgram (OneToOne → Program)
 ```
 

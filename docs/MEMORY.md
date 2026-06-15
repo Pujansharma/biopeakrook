@@ -17,6 +17,8 @@
 | Center-scoped data isolation via `X-Center-ID` header | Multi-tenant design requirement |
 | `uv` as the sole package manager | Faster, reproducible, replaces pip entirely |
 | All docs in `docs/` folder | Enforced by `CODING_RULES.md` |
+| Program/service/provider/composite ERD direction (2026-06-11) | User confirmed the ERD reflects newer business requirements and should keep the domain name `Client` rather than implementation naming. `Service` will be extended with type and products. Composite models are not yet defined and should be created from the ERD. Service definitions stay reusable, center availability uses `CenterServiceAssignment`, assigned quantities live on `ProgramService`, and assessment behavior comes from provider/product callbacks. |
+| Program subtype/service subtype split (2026-06-12) | `ProgramService` is the common assigned service line. `TherapyProgram.program` is the primary key, and `TherapyProgramService.program_service` is the primary key. Therapy-only session/redemption fields live on `TherapyProgramService`, and `RedemptionHistory` points to `TherapyProgramService`. `wellness_*` names are compatibility properties/API aliases only. User will discard old data and generate fresh migrations manually; do not create migration files for this change. |
 
 ---
 
