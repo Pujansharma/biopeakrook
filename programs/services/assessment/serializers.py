@@ -119,7 +119,7 @@ class AssessmentServiceSerializer(AssessmentServiceSerializerMeta, BaseModelSeri
         is_global = validated_data.get("is_global", False)
         add_centers = validated_data.pop("add_centers", [])
         remove_centers = validated_data.pop("remove_centers", [])
-        if not add_centers and not remove_centers:
+        if not is_global and not add_centers and not remove_centers:
             raise serializers.ValidationError("Center IDs must be provided")
         validated_data["service_category"] = ServiceCategory.ASSESSMENT
         if not is_global and not add_centers:
