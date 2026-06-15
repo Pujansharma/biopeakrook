@@ -35,7 +35,7 @@ class BaseServiceSerializerMeta(BaseSerializer):
 
     def get_centers(self, instance: Service):
         center_assignments = getattr(instance, "center_assignments")
-        assignments = center_assignments.all()[:10]
+        assignments = center_assignments.all()[:3]
         centers = [asg.center for asg in assignments]
         return MinimumCenterSerializer(centers, many=True, context=self.context).data
 
