@@ -14,10 +14,11 @@ class Service(BaseUUIDModel):
         blank=True,
         related_name="created_services",
     )
-    centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     service_category = models.CharField(choices=ServiceCategory)
     image = models.FileField(upload_to="products/services/", null=True, blank=True)
     is_global = models.BooleanField(default=False)
+    centers_count = models.PositiveBigIntegerField(default=0, editable=False)
+    products_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
