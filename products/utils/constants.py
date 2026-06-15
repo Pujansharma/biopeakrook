@@ -7,6 +7,7 @@ class ProviderCallbackFunction(models.TextChoices):
     BIOPEAK = "biopeak", "Biopeak"
     METSIGHTS = "metsights", "MetSights"
     HEALTHIANS = "healthians", "Healthians"
+    ORANGE_LABS = "orange_labs", "Orange Labs"
 
 
 class ProductCallbackFunction(models.TextChoices):
@@ -23,6 +24,7 @@ PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
         ProductCallbackFunction.BLOOD,
     ],
     ProviderCallbackFunction.METSIGHTS: [],
+    ProviderCallbackFunction.ORANGE_LABS: [ProductCallbackFunction.BLOOD],
 }
 
 
@@ -35,7 +37,7 @@ def _serialize_callback(callback: ProductCallbackFunction) -> dict:
 
 
 def _serialize_provider_entry(
-        item: tuple[str, list[ProductCallbackFunction]],
+    item: tuple[str, list[ProductCallbackFunction]],
 ) -> tuple[str, list[dict]]:
     provider, callbacks = item
     return provider, list(map(_serialize_callback, callbacks))
