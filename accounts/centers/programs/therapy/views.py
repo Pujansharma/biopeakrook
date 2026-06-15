@@ -12,12 +12,12 @@ from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListCreateAPIView,
 )
-from programs.models import WellnessProgram
-from programs.serializers import WellnessProgramSerializer
+from programs.models import ProgramService, TherapyProgram
+from programs.therapy.serializers import TherapyProgramSerializer
 
 
-class CenterProgramsView(BaseListCreateAPIView):
-    serializer_class = WellnessProgramSerializer
+class CenterTherapyProgramsView(BaseListCreateAPIView):
+    serializer_class = TherapyProgramSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_center(self):
@@ -65,7 +65,7 @@ class CenterProgramsView(BaseListCreateAPIView):
                 program__customer_profile__customer__contact_email__icontains=search_query
             )
         qs = (
-            WellnessProgram.objects.annotate(
+            TherapyProgram.objects.annotate(
                 full_name=Concat(
                     F("program__customer_profile__first_name"),
                     Value(" "),
@@ -77,16 +77,13 @@ class CenterProgramsView(BaseListCreateAPIView):
                     Value("-1"),
                 ),
                 is_complete=ExpressionWrapper(
-                    Q(
-                        program__sessions_count=F("program__sessions_used")
-                        + F("program__sessions_cancelled")
-                    ),
+                    Q(sessions_count=F("sessions_used") + F("sessions_cancelled")),
                     output_field=BooleanField(),
                 ),
             )
             .filter(
                 search,
-                Q(Q(program__redeemable_centers=center) | Q(program__center_id=center)),
+                Q(Q(program__redeemable_centers=center) | Q(program__center=center)),
                 associate_query,
                 **filter_kwargs,
             )
@@ -97,9 +94,12 @@ class CenterProgramsView(BaseListCreateAPIView):
                 "program__customer_profile__customer__user",
             )
             .prefetch_related(
-                "program__program_services",
-                "program__program_services__service",
-                "program__program_services__created_by",
+                Prefetch(
+                    "program__program_services",
+                    queryset=ProgramService.objects.select_related(
+                        "service", "created_by", "therapy_service"
+                    ),
+                ),
                 "program__redeemable_centers",
                 Prefetch(
                     "program__customer_profile__center_assignments",
