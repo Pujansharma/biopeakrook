@@ -7,7 +7,6 @@ urlpatterns = [
     path("<uuid:pk>/", views.ServiceDetailView.as_view()),
     path("<uuid:pk>/available-centers/", views.ServiceAvailableCenters.as_view()),
     path("<uuid:pk>/available-products/", views.ServiceAvailableProducts.as_view()),
-
     # Different services
     path("therapy-services/", include("programs.services.therapy.urls")),
     path("assessment-services/", include("programs.services.assessment.urls")),
