@@ -9,7 +9,7 @@ from accounts.customers.models import CustomerProfile, CustomerAssociateAssignme
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
-from programs.models import ProgramService, TherapyProgram
+from programs.models import TherapyProgram, TherapyProgramService
 from programs.services.models import Service
 from programs.utils.constants import ProgramType
 
@@ -24,36 +24,44 @@ class ExternalCustomerServiceSerializer(BaseModelSerializer):
     def get_centers(self, instance):
         assignments = instance.center_assignments.select_related("center").filter(
             is_active=True
-        )[:10]
+        )[:3]
         if not assignments:
             return None
-        centers = [asg.center for asg in assignments]
+        centers = [assignment.center for assignment in assignments]
         return MinimumCenterSerializer(centers, many=True, context=self.context).data
 
 
 class ExternalProgramServiceSerializer(BaseModelSerializer):
-    service = ExternalCustomerServiceSerializer(read_only=True)
-    sessions_count = serializers.IntegerField(
-        source="therapy_service.sessions_count", read_only=True
+    id = serializers.UUIDField(source="program_service.pk", read_only=True)
+    service = ExternalCustomerServiceSerializer(
+        source="program_service.service", read_only=True
     )
-    sessions_used = serializers.IntegerField(
-        source="therapy_service.sessions_used", read_only=True
+    created_date = serializers.DateField(
+        source="program_service.created_date", read_only=True
     )
-    redeem_code = serializers.CharField(
-        source="therapy_service.redeem_code", read_only=True
+    is_active = serializers.BooleanField(
+        source="program_service.is_active", read_only=True
+    )
+    cancelled_at = serializers.DateTimeField(
+        source="program_service.cancelled_at", read_only=True
+    )
+    cancelled_date = serializers.DateField(
+        source="program_service.cancelled_date", read_only=True
     )
 
     class Meta:
-        model = ProgramService
+        model = TherapyProgramService
         fields = [
             "id",
             "service",
             "sessions_count",
             "sessions_used",
             "redeem_code",
+            "created_date",
             "created_at",
             "is_active",
             "cancelled_at",
+            "cancelled_date",
         ]
 
 
@@ -64,23 +72,14 @@ class CustomerTherapyProgramSerializer(BaseModelSerializer):
     )
 
     expires_at = serializers.DateField(source="program.expires_at", required=True)
-    # is_complimentary = serializers.BooleanField(
-    #     source="program.is_complimentary", default=True
-    # )
-    # price = serializers.DecimalField(
-    #     source="program.price",
-    #     allow_null=True,
-    #     required=False,
-    #     max_digits=10,
-    #     decimal_places=2,
-    # )
+    created_date = serializers.DateField(source="program.created_date", read_only=True)
+    cancelled_date = serializers.DateField(
+        source="program.cancelled_date", read_only=True
+    )
+
     services_count = serializers.IntegerField(
         source="program.services_count", default=0, read_only=True
     )
-
-    # redeemable_centers_count = serializers.IntegerField(
-    #     source="program.redeemable_centers_count", default=0, read_only=True
-    # )
 
     class Meta:
         model = TherapyProgram
@@ -92,6 +91,8 @@ class CustomerTherapyProgramSerializer(BaseModelSerializer):
             "sessions_count",
             "sessions_used",
             "sessions_cancelled",
+            "created_date",
+            "cancelled_date",
             "created_at",
             "updated_at",
             "is_active",
@@ -137,6 +138,10 @@ class CustomerTherapyProgramDetailSerializer(BaseModelSerializer):
     cancelled_at = serializers.DateTimeField(
         source="program.cancelled_at", read_only=True
     )
+    cancelled_date = serializers.DateField(
+        source="program.cancelled_date", read_only=True
+    )
+    created_date = serializers.DateField(source="program.created_date", read_only=True)
 
     class Meta:
         model = TherapyProgram
@@ -149,12 +154,14 @@ class CustomerTherapyProgramDetailSerializer(BaseModelSerializer):
             "sessions_count",
             "sessions_used",
             "services_count",
+            "created_date",
             "created_at",
             "updated_at",
             "is_active",
             # Cancellation
             "cancellation_reason",
             "cancelled_at",
+            "cancelled_date",
         ]
 
     def create(self, validated_data):
@@ -172,31 +179,41 @@ class CustomerTherapyProgramDetailSerializer(BaseModelSerializer):
 
 class CustomerServiceDetailSerializer(BaseModelSerializer):
     program = CustomerTherapyProgramDetailSerializer(
-        source="program.therapy_program", read_only=True
+        source="program_service.program.therapy_program", read_only=True
     )
-    service = ExternalCustomerServiceSerializer(read_only=True)
-    sessions_count = serializers.IntegerField(
-        source="therapy_service.sessions_count", read_only=True
+    service = ExternalCustomerServiceSerializer(
+        source="program_service.service", read_only=True
     )
-    sessions_used = serializers.IntegerField(
-        source="therapy_service.sessions_used", read_only=True
+    created_date = serializers.DateField(
+        source="program_service.created_date", read_only=True
     )
-    redeem_code = serializers.CharField(
-        source="therapy_service.redeem_code", read_only=True
+    is_active = serializers.BooleanField(
+        source="program_service.is_active", read_only=True
+    )
+    cancellation_reason = serializers.CharField(
+        source="program_service.cancellation_reason", read_only=True
+    )
+    cancelled_at = serializers.DateTimeField(
+        source="program_service.cancelled_at", read_only=True
+    )
+    cancelled_date = serializers.DateField(
+        source="program_service.cancelled_date", read_only=True
     )
 
     class Meta:
-        model = ProgramService
+        model = TherapyProgramService
         fields = [
             "program",
             "service",
             "sessions_count",
             "sessions_used",
             "redeem_code",
+            "created_date",
             "created_at",
             "is_active",
             "cancellation_reason",
             "cancelled_at",
+            "cancelled_date",
         ]
 
 
