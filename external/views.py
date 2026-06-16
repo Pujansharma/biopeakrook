@@ -32,9 +32,9 @@ from external.serializers import (
 )
 from programs.models import (
     Program,
-    ProgramService,
     RedemptionHistory,
     TherapyProgram,
+    TherapyProgramService,
 )
 from programs.serializers import ProgramServiceRedemptionHistorySerializer
 from programs.services.models import CenterServiceAssignment
@@ -163,10 +163,10 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                 Subquery(
                     programs_base.filter(
                         is_active=True,
-                        therapy_program__sessions_count=F(
-                            "therapy_program__sessions_used"
+                        therapy_program__sessions_count=(
+                                F("therapy_program__sessions_used") +
+                                F("therapy_program__sessions_cancelled")
                         )
-                        + F("therapy_program__sessions_cancelled"),
                     )
                     .annotate(count=Count("pk"))
                     .values("count")[:1]
@@ -195,14 +195,7 @@ class ExternalUserProgramDetailView(BaseRetrieveAPIView):
             .select_related(
                 "program",
             )
-            .prefetch_related(
-                Prefetch(
-                    "program__program_services",
-                    queryset=ProgramService.objects.select_related(
-                        "service", "therapy_service"
-                    ),
-                ),
-            )
+            .prefetch_related()
         )
 
 
@@ -213,15 +206,20 @@ class ExternalUserProgramServicesListView(BaseListAPIView):
         phone_query = self.request.query_params.get("phone", None)
         phone_formatter = PhoneNumberFormat(phone_query)
         phone_cleaned = phone_formatter.clean(raise_exception=False)
-        return (
-            ProgramService.objects.filter(
-                program__therapy_program__pk=self.kwargs["pk"],
-                program__customer_profile__customer__user__phone=phone_cleaned,
+        qs = (
+            TherapyProgramService.objects.filter(
+                program_service__program__therapy_program__pk=self.kwargs["pk"],
+                program_service__program__customer_profile__customer__user__phone=phone_cleaned,
             )
-            .select_related("cancelled_by", "created_by", "service", "therapy_service")
+            .select_related(
+                "program_service",
+                "program_service__cancelled_by",
+                "program_service__created_by",
+                "program_service__service",
+            )
             .prefetch_related(
                 Prefetch(
-                    "service__center_assignments",
+                    "program_service__service__center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(
                         center__redeemable_programs__therapy_program__pk=self.kwargs[
                             "pk"
@@ -231,23 +229,26 @@ class ExternalUserProgramServicesListView(BaseListAPIView):
                 ),
             )
         )
+        return qs
 
 
 class ExternalUserProgramServiceRedemptionHistory(BaseListAPIView):
     serializer_class = ProgramServiceRedemptionHistorySerializer
 
-    def get_program_service(self):
+    def get_therapy_program_service(self):
         phone_query = self.request.query_params.get("phone", None)
         phone_cleaned = PhoneNumberFormat(phone_query).clean(raise_exception=False)
-        qs = ProgramService.objects.filter(
-            program__customer_profile__customer__user__phone=phone_cleaned,
-        ).select_related("program__customer_profile__customer__user", "therapy_service")
-        return get_object_or_404(qs, "Program service not found", pk=self.kwargs["pk"])
+        queryset = TherapyProgramService.objects.filter(
+            program_service__program__customer_profile__customer__user__phone=phone_cleaned,
+        ).select_related("program_service__program__customer_profile__customer__user")
+        return get_object_or_404(
+            queryset, "Therapy program service not found", pk=self.kwargs["pk"]
+        )
 
     def get_queryset(self):
-        program_service = self.get_program_service()
+        therapy_program_service = self.get_therapy_program_service()
         return RedemptionHistory.objects.filter(
-            therapy_program_service=program_service.therapy_service
+            therapy_program_service=therapy_program_service
         ).select_related("redeemed_by", "redeem_center")
 
 
@@ -258,16 +259,23 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
         phone_query = self.request.query_params.get("phone", None)
         phone_formatter = PhoneNumberFormat(phone_query)
         phone_cleaned = phone_formatter.clean(raise_exception=False)
-        qs = (
-            ProgramService.objects.filter(
-                program__customer_profile__customer__user__phone=phone_cleaned,
+        queryset = (
+            TherapyProgramService.objects.filter(
+                program_service__program__customer_profile__customer__user__phone=phone_cleaned,
             )
-            .select_related("cancelled_by", "created_by", "service", "therapy_service")
+            .select_related(
+                "program_service",
+                "program_service__cancelled_by",
+                "program_service__created_by",
+                "program_service__program",
+                "program_service__program__therapy_program",
+                "program_service__service",
+            )
             .prefetch_related(
                 Prefetch(
-                    "service__center_assignments",
+                    "program_service__service__center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(
-                        center__redeemable_programs__program_services__pk=self.kwargs[
+                        center__redeemable_programs__program_services__therapy_service__pk=self.kwargs[
                             "pk"
                         ],
                         is_active=True,
@@ -275,7 +283,7 @@ class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):
                 ),
             )
         )
-        return qs
+        return queryset
 
 
 class ExternalCustomerAssociateListView(BaseListAPIView):
