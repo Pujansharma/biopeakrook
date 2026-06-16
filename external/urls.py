@@ -3,19 +3,25 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("customer-programs/", views.ExternalUserProgramView.as_view()),
-    path("customer-programs/summary/", views.ExternalUserProgramSummaryView.as_view()),
-    path("customer-programs/<uuid:pk>/", views.ExternalUserProgramDetailView.as_view()),
+    path("customer-therapy-programs/", views.ExternalUserProgramView.as_view()),
     path(
-        "customer-programs/<uuid:pk>/services/",
+        "customer-therapy-programs/summary/",
+        views.ExternalUserProgramSummaryView.as_view(),
+    ),
+    path(
+        "customer-therapy-programs/<uuid:pk>/",
+        views.ExternalUserProgramDetailView.as_view(),
+    ),
+    path(
+        "customer-therapy-programs/<uuid:pk>/services/",
         views.ExternalUserProgramServicesListView.as_view(),
     ),
     path(
-        "customer-services/<uuid:pk>/",
+        "customer-therapy-services/<uuid:pk>/",
         views.ExternalUserProgramServiceDetailView.as_view(),
     ),
     path(
-        "customer-services/<uuid:pk>/redemption-history/",
+        "customer-therapy-services/<uuid:pk>/redemption-history/",
         views.ExternalUserProgramServiceRedemptionHistory.as_view(),
     ),
     path("customer-associates/", views.ExternalCustomerAssociateListView.as_view()),
