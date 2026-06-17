@@ -225,8 +225,10 @@ class TherapyProgramSerializer(BaseModelSerializer):
     add_services = ServiceField(many=True, required=True, write_only=True)
 
     # Dates
-    created_date = serializers.DateField(source='program.created_date', required=False)
-    cancelled_date = serializers.DateField(source='program.cancelled_date', required=False)
+    created_date = serializers.DateField(source="program.created_date", required=False)
+    cancelled_date = serializers.DateField(
+        source="program.cancelled_date", required=False
+    )
 
     # Read only
     created_by = BaseUserSerializer(source="program.created_by", read_only=True)
@@ -480,10 +482,10 @@ class TherapyProgramRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError("This program has expired.")
 
         if not ProgramService.objects.filter(
-                program=therapy_program.program,
-                is_active=True,
-                service__center_assignments__center_id=center_id,
-                service__center_assignments__is_active=True,
+            program=therapy_program.program,
+            is_active=True,
+            service__center_assignments__center_id=center_id,
+            service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}
