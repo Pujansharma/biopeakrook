@@ -154,3 +154,50 @@ class CustomerAssociateAssignment(BaseUUIDModel):
 
     def __str__(self):
         return f"{self.pk}"
+
+
+class CustomerProfileAddress(BaseUUIDModel):
+    customer_profile = models.ForeignKey(
+        CustomerProfile,
+        on_delete=models.CASCADE,
+        related_name="addresses",
+    )
+
+    label = models.CharField(max_length=30, blank=True)
+    line_1 = models.CharField(max_length=255)
+    line_2 = models.CharField(max_length=255, blank=True)
+    landmark = models.CharField(max_length=255, blank=True)
+
+    city = models.CharField(max_length=100)
+    district = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100)
+    country = models.CharField(max_length=2, default="IN")
+    pincode = models.CharField(max_length=20)
+
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-is_default", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["customer_profile"],
+                condition=models.Q(is_default=True),
+                name="uniq_default_customer_profile_address",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
