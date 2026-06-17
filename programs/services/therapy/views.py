@@ -128,6 +128,7 @@ class ProgramServiceRedemptionHistory(BaseListAPIView):
             )
             .select_related("redeemed_by", "redeem_center")
             .prefetch_related()
+            .order_by("-redeemed_date", "-redeemed_at")
         )
         return qs
 
