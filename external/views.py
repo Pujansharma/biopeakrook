@@ -164,9 +164,9 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                     programs_base.filter(
                         is_active=True,
                         therapy_program__sessions_count=(
-                                F("therapy_program__sessions_used") +
-                                F("therapy_program__sessions_cancelled")
-                        )
+                                F("therapy_program__sessions_used")
+                                + F("therapy_program__sessions_cancelled")
+                        ),
                     )
                     .annotate(count=Count("pk"))
                     .values("count")[:1]
