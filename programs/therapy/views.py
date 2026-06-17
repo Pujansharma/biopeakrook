@@ -24,7 +24,7 @@ from programs.therapy.serializers import (
 
 class TherapyProgramServicesView(BaseListAPIView):
     serializer_class = TherapyProgramServiceSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
         code_query_param = self.request.query_params.get("code", None)
