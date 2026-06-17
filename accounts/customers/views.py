@@ -11,6 +11,7 @@ from accounts.customers.models import (
     CustomerAssociateAssignment,
     CustomerCenterAssignment,
     CustomerProfile,
+    CustomerProfileAddress,
 )
 from accounts.customers.serializers import (
     CustomerAccountSerializer,
@@ -20,6 +21,7 @@ from accounts.customers.serializers import (
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
     BaseCustomerAssignedCenterSerializer,
+    CustomerProfileAddressSerializer,
 )
 from accounts.organizations.utils.db import (
     decrement_organization_clients_count,
@@ -33,6 +35,7 @@ from core.utils.views.main import (
     BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
     BaseCreateAPIView,
+    BaseListCreateAPIView,
 )
 
 
@@ -308,3 +311,26 @@ class CustomerCenterListView(BaseListAPIView):
             .filter(search, customer_profile_id=self.kwargs["pk"])
         )
         return qs
+
+
+class CustomerProfileAddressView(BaseListCreateAPIView):
+    serializer_class = CustomerProfileAddressSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_customer_profile(self):
+        qs = CustomerProfile.objects.filter()
+        return get_object_or_404(
+            qs, "No customer profile found with the given ID", pk=self.kwargs["pk"]
+        )
+
+    def get_queryset(self):
+        qs = CustomerProfileAddress.objects.filter(
+            customer_profile=self.get_customer_profile()
+        )
+
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(
+            customer_profile=self.get_customer_profile(),
+        )
