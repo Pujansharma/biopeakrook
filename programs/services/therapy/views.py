@@ -22,27 +22,6 @@ from programs.services.therapy.serializers import (
     TherapyServiceDetailSerializer,
 )
 from programs.services.utils.constants import ServiceCategory
-from programs.therapy.serializers import (
-    TherapyProgramServiceSerializer,
-)
-
-
-class TherapyProgramServicesListView(BaseListAPIView):
-    serializer_class = TherapyProgramServiceSerializer
-    permission_classes = [IsAdminUser]
-
-    def get_queryset(self):
-        code_query_param = self.request.query_params.get("code", None)
-        qs = TherapyProgramService.objects.filter(
-            redeem_code__iexact=code_query_param
-        ).select_related(
-            "program_service",
-            "program_service__cancelled_by",
-            "program_service__created_by",
-            "program_service__program__customer_profile",
-            "program_service__service",
-        )
-        return qs
 
 
 class TherapyServicesListView(BaseListCreateAPIView):
