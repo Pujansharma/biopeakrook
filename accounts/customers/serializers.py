@@ -20,6 +20,7 @@ from accounts.customers.models import (
     CustomerCenterAssignment,
     CustomerProfile,
     CustomerAssociateAssignment,
+    CustomerProfileAddress,
 )
 from accounts.customers.utils.db import (
     create_customer_user_account,
@@ -279,7 +280,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -413,7 +414,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -532,12 +533,6 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
                     {"phone": "A user with this phone number already exists."}
                 )
 
-        # if email:
-        #     if User.objects.filter(phone__iexact=phone).exclude(pk=user.pk).exists():
-        #         raise serializers.ValidationError(
-        #             {"phone": "A user with this phone number already exists."}
-        #         )
-
         if profile_wrapper:
             profile = instance.customer_profile
             for key, value in profile_wrapper.items():
@@ -576,73 +571,6 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
         if "gender" in self.get_fields():
             rep["gender"] = instance.customer_profile.get_gender_display()
         return rep
-
-
-class CustomerRegistrationSerializer(BaseModelSerializer):
-    phone = PhoneNumberSerializerField(write_only=True)
-    first_name = serializers.CharField()
-    last_name = serializers.CharField(required=False, allow_null=True)
-    gender = serializers.ChoiceField(
-        choices=Gender.CHOICES, required=False, allow_null=True
-    )
-    date_of_birth = serializers.DateField(required=False, allow_null=True)
-
-    class Meta:
-        model = Customer
-        fields = [
-            "phone",
-            "first_name",
-            "last_name",
-            "gender",
-            "date_of_birth",
-        ]
-
-    def validate_phone(self, phone):
-        if User.objects.filter(phone__iexact=phone).exists():
-            raise serializers.ValidationError(
-                "A user with this phone number already exists."
-            )
-
-        verification = PhoneVerification.objects.filter(
-            phone__iexact=phone,
-            purpose=PhoneVerification.PURPOSE_REGISTER,
-            verified_at__isnull=False,
-            expires_at__gte=timezone.now(),
-        ).first()
-
-        if not verification:
-            raise serializers.ValidationError(
-                "Phone number is not verified or verification has expired."
-            )
-
-        self.context["verification"] = verification
-        return phone
-
-    def create(self, validated_data):
-        phone = validated_data.pop("phone")
-        verification = self.context["verification"]
-
-        profile_data = {
-            "first_name": validated_data.pop("first_name"),
-            "last_name": validated_data.pop("last_name", None),
-            "gender": validated_data.pop("gender", None),
-            "date_of_birth": validated_data.pop("date_of_birth", None),
-        }
-
-        with transaction.atomic():
-            user = User.objects.create_user(
-                email=None, password=None, phone=phone, **profile_data
-            )
-            customer = Customer.objects.create(user=user)
-            CustomerProfile.objects.create(
-                customer=customer, is_primary=True, **profile_data
-            )
-            create_customer_user_account(customer)
-
-            verification.is_active = False
-            verification.save(update_fields=["is_active", "updated_at"])
-
-        return customer
 
 
 class AssociateIDSerializer(BaseSerializer):
@@ -929,3 +857,45 @@ class CustomerCenterAssignmentSerializer(BaseModelSerializer):
                 compute_customer_profile_center_counts(customer_profile_id)
 
         return 1
+
+
+class CustomerProfileAddressSerializer(BaseModelSerializer):
+    class Meta:
+        model = CustomerProfileAddress
+        fields = [
+            "id",
+            "label",
+            "line_1",
+            "line_2",
+            "landmark",
+            "city",
+            "district",
+            "state",
+            "country",
+            "pincode",
+            "latitude",
+            "longitude",
+            "is_default",
+        ]
+
+    def create(self, validated_data):
+        customer_profile = validated_data.get("customer_profile")
+        is_default = validated_data.get("is_default")
+
+        with transaction.atomic():
+            if is_default:
+                CustomerProfileAddress.objects.filter(
+                    customer_profile=customer_profile
+                ).update(is_default=False)
+            instance = super().create(validated_data)
+        return instance
+
+    def update(self, instance: CustomerProfileAddress, validated_data):
+        is_default = validated_data.get("is_default")
+        with transaction.atomic():
+            if is_default:
+                CustomerProfileAddress.objects.exclude(pk=instance.pk).filter(
+                    customer_profile=instance.customer_profile
+                ).update(is_default=False)
+            instance = super().update(instance, validated_data)
+        return instance
