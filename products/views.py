@@ -7,6 +7,7 @@ from core.utils.views.main import (
 )
 from products.models import Product
 from products.serializers import ProductSerializer
+from products.utils.db import update_provider_products_count
 
 
 class ProductsView(BaseListCreateAPIView):
@@ -44,7 +45,9 @@ class ProductDetailView(BaseRetrieveUpdateDestroyAPIView):
         return qs
 
     def perform_destroy(self, instance: Product):
+        provider = instance.provider
         try:
             super().perform_destroy(instance)
-        except ProtectedError, RestrictedError:
+        except (ProtectedError, RestrictedError):
             self.raise_bad_request("This product cannot be deleted")
+        update_provider_products_count(provider.pk)
