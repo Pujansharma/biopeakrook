@@ -8,7 +8,7 @@ from django.template.loader import get_template
 
 from core.utils.emails import EmailAttachment, send_templated_email_with_attachments
 
-REPORTS_EXPORT_EMAIL_SUBJECT = "Your Biopeak reports are ready"
+REPORTS_EXPORT_EMAIL_SUBJECT = "Your Reports Are Attached — Biopeak"
 REPORTS_EXPORT_EMAIL_TEMPLATE = "mails/metsights_reports_export_email.html"
 REQUEST_TIMEOUT_SECONDS = 30
 DEFAULT_ATTACHMENT_MIMETYPE = "application/octet-stream"
