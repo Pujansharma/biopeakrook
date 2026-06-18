@@ -1,13 +1,30 @@
-from sequences.utils import get_next_sequence
+from uuid import UUID
+
+from django.db.models import Count, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
+
+from products.models import Product, Provider
 
 
-def generate_provider_code():
-    name = "PV"
-    sequence = get_next_sequence(name=f"providers", fill_length=4)
-    return f"{name}-{sequence}"
+def update_provider_products_count(provider_id: UUID) -> None:
+    subquery = (
+        Product.objects.filter(provider=OuterRef("pk"))
+        .values("provider")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    Provider.objects.filter(pk=provider_id).update(
+        products_count=Coalesce(Subquery(subquery), Value(0))
+    )
 
 
-def generate_product_code():
-    name = "PC"
-    sequence = get_next_sequence(name=f"products", fill_length=4)
-    return f"{name}-{sequence}"
+def update_all_provider_products_count() -> int:
+    subquery = (
+        Product.objects.filter(provider=OuterRef("pk"))
+        .values("provider")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    return Provider.objects.update(
+        products_count=Coalesce(Subquery(subquery), Value(0))
+    )
