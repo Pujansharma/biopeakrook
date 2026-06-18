@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models.functions import Lower
 
+from accounts.customers.utils.constants import AddressType
 from accounts.users.models import AbstractUserProfile
 from accounts.utils import get_user_model
 from core.utils.models import BaseModel, BaseUUIDModel
@@ -162,6 +163,7 @@ class CustomerProfileAddress(BaseUUIDModel):
         on_delete=models.CASCADE,
         related_name="addresses",
     )
+    address_type = models.CharField(choices=AddressType, default=AddressType.OTHER)
 
     label = models.CharField(max_length=30, blank=True)
     line_1 = models.CharField(max_length=255)
