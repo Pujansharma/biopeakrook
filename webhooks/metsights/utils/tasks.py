@@ -85,5 +85,5 @@ def send_reports_export_email(email, first_name, files) -> None:
         template,
         email,
         attachments,
-        from_email="reports@mails.biopeak.com"
+        from_email="care@mails.biopeak.com"
     )
