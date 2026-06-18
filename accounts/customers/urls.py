@@ -1,8 +1,9 @@
-from django.urls import path
+from django.urls import path, include
 
 from . import views
 
 urlpatterns = [
+    path("addresses/", include('accounts.customers.addresses.urls')),
     path("", views.CustomerProfilesListView.as_view()),
     path("account/", views.CustomerAccountProfileView.as_view()),
     path("<uuid:pk>/", views.CustomerProfileDetailView.as_view()),
