@@ -151,8 +151,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
 
         if account == UserType.ASSOCIATE:
             associate = getattr(user, "associate", None)
-            # filter_kwargs["associate__center_assignments__center_id"] = center_id
-            # TODO: Implement the associate filtering here or remove this
+            filter_kwargs["center__associate_assignments__associate"] = associate
 
         exists_subquery = CustomerAssociateAssignment.objects.filter(
             associate=OuterRef("associate_id"),
@@ -326,6 +325,11 @@ class CustomerProfileAddressView(BaseListCreateAPIView):
     def get_queryset(self):
         qs = CustomerProfileAddress.objects.filter(
             customer_profile=self.get_customer_profile()
+        ).select_related(
+            "customer_profile",
+            "customer_profile__customer",
+        ).order_by(
+            '-is_default', '-created_at'
         )
 
         return qs
