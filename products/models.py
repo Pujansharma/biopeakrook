@@ -34,6 +34,7 @@ class Provider(BaseUUIDModel):
         blank=True,
         related_name="created_providers",
     )
+    products_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
