@@ -5,17 +5,76 @@ from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from products.models import Product, Provider, ProviderAPI
 from products.utils.constants import PROVIDER_PRODUCT_CALLBACK_MAP
-from products.utils.db import generate_product_code, generate_provider_code
+from products.utils.db import update_provider_products_count
+from products.utils.helper import generate_product_code, generate_provider_code
 
 
 class ProductIDSerializer(BaseSerializer):
     id = serializers.UUIDField(required=True)
 
 
+class BaseProductSerializer(BaseModelSerializer):
+    class Meta:
+        model = Product
+        fields = ["id", "name", "code"]
+
+
 class BaseProviderSerializer(BaseModelSerializer):
     class Meta:
         model = Provider
         fields = ["id", "name", "code"]
+
+
+class ProductSerializer(BaseModelSerializer):
+    provider = BaseProviderSerializer(read_only=True)
+    provider_id = serializers.UUIDField(write_only=True)
+    is_active = serializers.BooleanField(default=True, required=False)
+    created_by = BaseUserSerializer(read_only=True)
+    callback_code = serializers.CharField(source="callback", read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "provider",
+            "provider_id",
+            "name",
+            "callback",
+            "callback_code",
+            "code",
+            "is_active",
+            "data",
+            "tags",
+            "sample_file",
+            "created_at",
+            "updated_at",
+            "created_by",
+        ]
+        read_only_fields = ["id", "code", "created_at", "updated_at"]
+
+    def create(self, validated_data: dict) -> Product:
+        provider_id = validated_data.get("provider_id")
+        callback = validated_data.get("callback")
+        provider = Provider.objects.filter(pk=provider_id).first()
+        if not provider:
+            raise serializers.ValidationError({"provider_id": "Invalid provider ID."})
+
+        if callback not in PROVIDER_PRODUCT_CALLBACK_MAP[provider.callback]:
+            raise serializers.ValidationError(
+                {"callback": "Invalid callback selected for the given provider"}
+            )
+
+        validated_data["code"] = generate_product_code()
+        with transaction.atomic():
+            product = super().create(validated_data)
+            update_provider_products_count(product.provider.pk)
+        return product
+
+    def update(self, instance: Product, validated_data: dict) -> Product:
+        validated_data.pop("code", None)
+        validated_data.pop("provider_id", None)
+        validated_data.pop("callback", None)
+        return super().update(instance, validated_data)
 
 
 class MinimumProviderSerializer(BaseModelSerializer):
@@ -38,6 +97,7 @@ class ProviderSerializer(BaseModelSerializer):
     is_active = serializers.BooleanField(default=True, required=False)
     callback_code = serializers.CharField(source="callback", read_only=True)
     created_by = BaseUserSerializer(read_only=True)
+    products = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Provider
@@ -58,11 +118,20 @@ class ProviderSerializer(BaseModelSerializer):
             "has_api",
             "is_active",
             "is_api_enabled",
+            "products_count",
             "created_at",
             "updated_at",
             "created_by",
+            "products",
         ]
         read_only_fields = ["id", "code", "created_at", "updated_at"]
+
+    def get_products(self, instance):
+        _products = getattr(instance, 'products', None)
+        if not _products:
+            return None
+        qs = _products.all()[:3]
+        return BaseProductSerializer(qs, many=True, context=self.context).data
 
     def create(self, validated_data: dict) -> Provider:
         validated_data["code"] = generate_provider_code()
@@ -146,61 +215,6 @@ class ProviderAPISerializer(BaseModelSerializer):
             instance.provider.save(update_fields=[*provider_data.keys(), "updated_at"])
             instance = super().update(instance, validated_data)
         return instance
-
-
-class BaseProductSerializer(BaseModelSerializer):
-    class Meta:
-        model = Product
-        fields = ["id", "name", "code"]
-
-
-class ProductSerializer(BaseModelSerializer):
-    provider = BaseProviderSerializer(read_only=True)
-    provider_id = serializers.UUIDField(write_only=True)
-    is_active = serializers.BooleanField(default=True, required=False)
-    created_by = BaseUserSerializer(read_only=True)
-    callback_code = serializers.CharField(source="callback", read_only=True)
-
-    class Meta:
-        model = Product
-        fields = [
-            "id",
-            "provider",
-            "provider_id",
-            "name",
-            "callback",
-            "callback_code",
-            "code",
-            "is_active",
-            "data",
-            "tags",
-            "sample_file",
-            "created_at",
-            "updated_at",
-            "created_by",
-        ]
-        read_only_fields = ["id", "code", "created_at", "updated_at"]
-
-    def create(self, validated_data: dict) -> Product:
-        provider_id = validated_data.get("provider_id")
-        callback = validated_data.get("callback")
-        provider = Provider.objects.filter(pk=provider_id).first()
-        if not provider:
-            raise serializers.ValidationError({"provider_id": "Invalid provider ID."})
-
-        if callback not in PROVIDER_PRODUCT_CALLBACK_MAP[provider.callback]:
-            raise serializers.ValidationError(
-                {"callback": "Invalid callback selected for the given provider"}
-            )
-
-        validated_data["code"] = generate_product_code()
-        return super().create(validated_data)
-
-    def update(self, instance: Product, validated_data: dict) -> Product:
-        validated_data.pop("code", None)
-        validated_data.pop("provider_id", None)
-        validated_data.pop("callback", None)
-        return super().update(instance, validated_data)
 
 
 class ServiceAvailableProductSerializer(BaseModelSerializer):
