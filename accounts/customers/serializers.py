@@ -280,7 +280,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -414,7 +414,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -860,11 +860,15 @@ class CustomerCenterAssignmentSerializer(BaseModelSerializer):
 
 
 class CustomerProfileAddressSerializer(BaseModelSerializer):
+    address_type_code = serializers.CharField(source='address_type', read_only=True)
+
     class Meta:
         model = CustomerProfileAddress
         fields = [
             "id",
             "label",
+            "address_type",
+            "address_type_code",
             "line_1",
             "line_2",
             "landmark",
