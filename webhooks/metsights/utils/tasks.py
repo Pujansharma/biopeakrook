@@ -60,10 +60,7 @@ def get_email_attachment(file: tuple[str, bytes]) -> EmailAttachment:
 
 def get_reports_export_email_template(subject: str, first_name: str) -> str:
     return get_template(REPORTS_EXPORT_EMAIL_TEMPLATE).render(
-        {
-            "subject": subject,
-            "first_name": first_name
-        }
+        {"subject": subject, "first_name": first_name}
     )
 
 
@@ -74,9 +71,7 @@ def send_reports_export_email(email, first_name, files) -> None:
     subject = "Reports export"
     template = get_reports_export_email_template(subject, first_name)
     _files = fetch_report_files(files)
-    attachments = [
-        get_email_attachment(file) for file in _files
-    ]
+    attachments = [get_email_attachment(file) for file in _files]
     if not attachments:
         return
 
@@ -85,5 +80,5 @@ def send_reports_export_email(email, first_name, files) -> None:
         template,
         email,
         attachments,
-        from_email="care@mails.biopeak.com"
+        from_email="care@mails.biopeak.com",
     )

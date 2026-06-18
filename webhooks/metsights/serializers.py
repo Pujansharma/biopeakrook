@@ -19,7 +19,7 @@ class MetsightsWebhookSerializer(BaseSerializer):
             return True
         if scope == REPORTS_EXPORT_SCOPE:
             profile = data.get("profile", {}) or {}
-            first_name = profile.get('first_name', '')
+            first_name = profile.get("first_name", "")
             files = data.get("files", [])
             send_reports_export_email(data.get("email"), first_name, files)
         return True

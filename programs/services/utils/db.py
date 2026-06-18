@@ -48,11 +48,11 @@ def update_service_product_count(service_id: UUID) -> None:
 
 
 def redeem_program_service(
-        program_service_id: UUID,
-        center_id: UUID,
-        redeemed_by,
-        quantity: int,
-        redeemed_date=timezone.localdate(),
+    program_service_id: UUID,
+    center_id: UUID,
+    redeemed_by,
+    quantity: int,
+    redeemed_date=timezone.localdate(),
 ) -> None:
     center = Center.objects.filter(pk=center_id).first()
     therapy_program_service = TherapyProgramService.objects.filter(
@@ -76,7 +76,7 @@ def redeem_program_service(
 
 
 def redeem_all_program_services(
-        program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
+    program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
 ) -> int:
     services = list(
         TherapyProgramService.objects.filter(
@@ -96,8 +96,8 @@ def redeem_all_program_services(
 
     for therapy_program_service in services:
         remaining = (
-                therapy_program_service.sessions_count
-                - therapy_program_service.sessions_used
+            therapy_program_service.sessions_count
+            - therapy_program_service.sessions_used
         )
         total_quantity += remaining
         histories.append(

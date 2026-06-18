@@ -35,13 +35,15 @@ def send_templated_email(subject, template, email):
 
 
 def send_templated_email_with_attachments(
-        subject: str,
-        template: str,
-        email: str,
-        attachments: Iterable[EmailAttachment],
-        from_email: str = settings.DEFAULT_FROM_EMAIL
+    subject: str,
+    template: str,
+    email: str,
+    attachments: Iterable[EmailAttachment],
+    from_email: str = settings.DEFAULT_FROM_EMAIL,
 ) -> None:
-    email_message = EmailMultiAlternatives(subject=subject, to=[email], from_email=from_email)
+    email_message = EmailMultiAlternatives(
+        subject=subject, to=[email], from_email=from_email
+    )
     email_message.attach_alternative(template, "text/html")
     for attachment in attachments:
         email_message.attach(
