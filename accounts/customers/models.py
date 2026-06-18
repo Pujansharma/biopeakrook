@@ -173,7 +173,7 @@ class CustomerProfileAddress(BaseUUIDModel):
     city = models.CharField(max_length=100)
     district = models.CharField(max_length=100, blank=True)
     state = models.CharField(max_length=100)
-    country = models.CharField(max_length=2, default="IN")
+    country = models.CharField(max_length=50)
     pincode = models.CharField(max_length=20)
 
     latitude = models.DecimalField(
