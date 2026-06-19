@@ -3,7 +3,7 @@ from rest_framework import serializers
 from core.utils.serializers import BaseSerializer
 from webhooks.metsights.utils.tasks import send_reports_export_email
 
-REPORTS_EXPORT_SCOPE = "reports_export"
+REPORTS_EXPORT_SCOPE = "reports.export"
 
 
 class MetsightsWebhookSerializer(BaseSerializer):
