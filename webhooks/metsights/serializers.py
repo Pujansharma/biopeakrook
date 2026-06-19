@@ -4,6 +4,7 @@ from core.utils.serializers import BaseSerializer
 from webhooks.metsights.utils.tasks import send_reports_export_email
 
 REPORTS_EXPORT_SCOPE = "reports.export"
+RECORDS_FILES_UPLOAD = "files.upload"
 
 
 class MetsightsWebhookSerializer(BaseSerializer):
@@ -14,12 +15,16 @@ class MetsightsWebhookSerializer(BaseSerializer):
         if not isinstance(payload, dict):
             return True
         scope = payload.get("scope")
-        data = payload.get("data", {}) or {}
-        if not isinstance(data, dict):
-            return True
+
         if scope == REPORTS_EXPORT_SCOPE:
+            data = payload.get("data", {}) or {}
+            if not isinstance(data, dict):
+                return True
             profile = data.get("profile", {}) or {}
             first_name = profile.get("first_name", "")
             files = data.get("files", [])
             send_reports_export_email(data.get("email"), first_name, files)
+        if scope == RECORDS_FILES_UPLOAD:
+            print("PAYLOAD: ", payload)
+
         return True
