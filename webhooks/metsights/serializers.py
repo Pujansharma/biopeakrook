@@ -25,6 +25,6 @@ class MetsightsWebhookSerializer(BaseSerializer):
             files = data.get("files", [])
             send_reports_export_email(data.get("email"), first_name, files)
         if scope == RECORDS_FILES_UPLOAD:
-            print("PAYLOAD: ", payload)
+            pass
 
         return True

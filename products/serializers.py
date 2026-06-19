@@ -98,6 +98,12 @@ class ProviderSerializer(BaseModelSerializer):
     callback_code = serializers.CharField(source="callback", read_only=True)
     created_by = BaseUserSerializer(read_only=True)
     products = serializers.SerializerMethodField(read_only=True)
+    required_fields = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False, allow_empty=True, allow_null=True
+    )
+    fetch_fields = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False, allow_empty=True, allow_null=True
+    )
 
     class Meta:
         model = Provider
@@ -132,6 +138,17 @@ class ProviderSerializer(BaseModelSerializer):
             return None
         qs = _products.all()[:3]
         return BaseProductSerializer(qs, many=True, context=self.context).data
+
+    def validate(self, attrs):
+        _required_fields = attrs.pop("required_fields") or []
+        _fetch_fields = attrs.pop("fetch_fields") or []
+
+        required_fields = list(filter(None, _required_fields))
+        fetch_fields = list(filter(None, _fetch_fields))
+
+        attrs['required_fields'] = required_fields
+        attrs['fetch_fields'] = fetch_fields
+        return attrs
 
     def create(self, validated_data: dict) -> Provider:
         validated_data["code"] = generate_provider_code()
