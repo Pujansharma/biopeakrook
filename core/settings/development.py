@@ -55,3 +55,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = [*default_headers, "x-center-id"]
 
 PASSWORD_BASE_URL = config("DEV_PASSWORD_BASE_URL", "")
+
+# Firebase
+ADMIN_CERT = config("ADMIN_CERT", None)
+APP_CERT = config("APP_CERT", None)

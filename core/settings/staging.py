@@ -95,3 +95,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Other
 
 PASSWORD_BASE_URL = config("STG_PASSWORD_BASE_URL", "")
+
+# Firebase
+ADMIN_CERT = config("ADMIN_CERT", None)
+APP_CERT = config("APP_CERT", None)
