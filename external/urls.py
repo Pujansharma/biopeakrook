@@ -25,4 +25,7 @@ urlpatterns = [
         views.ExternalUserProgramServiceRedemptionHistory.as_view(),
     ),
     path("customer-associates/", views.ExternalCustomerAssociateListView.as_view()),
+
+    # Notifications
+    path("customer-notifications/register/", views.CustomerFirebaseTokenView.as_view()),
 ]

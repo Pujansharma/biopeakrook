@@ -21,14 +21,15 @@ from accounts.customers.models import (
 )
 from core.utils.exceptions import get_object_or_404
 from core.utils.formatters import PhoneNumberFormat
-from core.utils.views.main import BaseListAPIView, BaseRetrieveAPIView
+from core.utils.helper import get_request_ip_address, get_request_user_agent
+from core.utils.views.main import BaseListAPIView, BaseRetrieveAPIView, BaseCreateAPIView
 from external.serializers import (
     CustomerProfileSummarySerializer,
     ExternalProgramServiceSerializer,
     CustomerTherapyProgramSerializer,
     CustomerTherapyProgramDetailSerializer,
     CustomerServiceDetailSerializer,
-    ExternalCustomerAssociateSerializer,
+    ExternalCustomerAssociateSerializer, CustomerFirebaseTokenSerializer,
 )
 from programs.models import (
     Program,
@@ -164,8 +165,8 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
                     programs_base.filter(
                         is_active=True,
                         therapy_program__sessions_count=(
-                            F("therapy_program__sessions_used")
-                            + F("therapy_program__sessions_cancelled")
+                                F("therapy_program__sessions_used")
+                                + F("therapy_program__sessions_cancelled")
                         ),
                     )
                     .annotate(count=Count("pk"))
@@ -327,3 +328,15 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
             .order_by("-created_at")
         )
         return qs
+
+
+class CustomerFirebaseTokenView(BaseCreateAPIView):
+    serializer_class = CustomerFirebaseTokenSerializer
+
+    def perform_create(self, serializer):
+        ip_address = get_request_ip_address(self.request)
+        user_agent = get_request_user_agent(self.request)
+        serializer.save(
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
