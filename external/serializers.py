@@ -5,7 +5,9 @@ from accounts.associates.serializers import (
     AssociateSourceMixinSerializer,
 )
 from accounts.centers.serializers import MinimumCenterSerializer
-from accounts.customers.models import CustomerProfile, CustomerAssociateAssignment
+from accounts.customers.models import CustomerProfile, CustomerAssociateAssignment, Customer
+from accounts.notifications.models import FirebaseRegistrationToken
+from accounts.notifications.utils.db import save_firebase_registration_token
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer
@@ -299,3 +301,31 @@ class ExternalCustomerAssociateSerializer(
         if "gender" in self.get_fields():
             rep["gender"] = instance.associate.user.get_gender_display()
         return rep
+
+
+class CustomerFirebaseTokenSerializer(BaseModelSerializer):
+    phone = PhoneNumberSerializerField(required=True, write_only=True)
+
+    class Meta:
+        model = FirebaseRegistrationToken
+        fields = [
+            "id", "phone", "token", "project_id"
+        ]
+
+    def create(self, validated_data):
+        ip_address = validated_data.get("ip_address")
+        user_agent = validated_data.get("user_agent")
+        token = validated_data.get("token")
+        project_id = validated_data.get("project_id")
+        phone = validated_data.pop('phone', None)
+        customer_instance = Customer.objects.filter(
+            user__phone=phone
+        ).first()
+
+        if not customer_instance:
+            raise serializers.ValidationError({'phone': "Customer not found with the given phone"})
+
+        user = customer_instance.user
+        return save_firebase_registration_token(
+            user, ip_address, user_agent, token, project_id
+        )
