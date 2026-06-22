@@ -15,7 +15,7 @@ DATABASES = {
         "HOST": config("STG_DB_HOST"),
         "PORT": config("STG_DB_PORT"),
         "OPTIONS": {
-            "sslmode": "required",
+            "sslmode": "prefer",
         },
     }
 }
