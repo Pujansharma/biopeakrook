@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "accounts",
     "accounts.organizations",
     "accounts.verifications",
+    "accounts.notifications",
     "accounts.users",
     "accounts.associates",
     "accounts.centers",
