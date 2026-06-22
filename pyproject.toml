@@ -26,6 +26,7 @@ dependencies = [
     "black",
     "django-storages[s3]",
     "arrow",
+    "firebase-admin",
 ]
 
 [tool.black]

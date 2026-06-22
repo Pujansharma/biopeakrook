@@ -61,6 +61,15 @@
 
 ---
 
+## Tooling Notes
+
+**django-debug-toolbar v7 (2026-06-20)**
+- `include("debug_toolbar.urls")` still works in v7 — no URL config change needed when upgrading from v6
+- `CompressedManifestStaticFilesStorage` (used in development.py) requires `collectstatic` to have been run; without it, toolbar static files are stale/missing, causing `Uncaught TypeError: Cannot read properties of null (reading 'dataset')` in toolbar.js
+- Fix: run `uv run manage.py collectstatic` after upgrading the package
+
+---
+
 ## Conventions Established Through Collaboration
 
 **Naming Standards (2026-05-11)**
