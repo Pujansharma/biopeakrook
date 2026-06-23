@@ -27,7 +27,9 @@ class MetsightsWebhookSerializer(BaseSerializer):
             send_reports_export_email(data.get("email"), first_name, files)
         if scope == RECORDS_FILES_UPLOAD:
             # print("PAYLOAD: ", json.dumps(payload, indent=2))
-            data = payload.get('data', {}) or {}
+            data = payload.get("data", {}) or {}
+            if not isinstance(data, dict):
+                return True
             perform_file_upload_action(data)
 
         return True

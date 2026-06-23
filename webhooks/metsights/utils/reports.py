@@ -3,19 +3,24 @@ from accounts.notifications.utils.constants import NotificationType
 from accounts.notifications.utils.db import send_user_notification
 
 
-def perform_file_upload_action(data):
-    profile = data.get('profile', {}) or {}
-    phone = profile.get('phone', None)
+def perform_file_upload_action(data: dict) -> None:
+    profile = data.get("profile", {}) or {}
+    phone = profile.get("phone", None)
+    if not phone:
+        return None
 
     firebase_token = FirebaseRegistrationToken.objects.filter(
         user__phone=phone, token__isnull=False
     ).first()
 
+    if not firebase_token:
+        return None
+
     user = firebase_token.user
     token = firebase_token.token
 
-    attachment = data.get('attachment', {}) or {}
-    attachment_metadata = data.get('metadata', {}) or {}
+    attachment = data.get("attachment", {}) or {}
+    attachment_metadata = data.get("metadata", {}) or {}
 
     send_user_notification(
         user,
@@ -27,3 +32,5 @@ def perform_file_upload_action(data):
         image=None,
         data=data,
     )
+
+    return None
