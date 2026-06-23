@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from core.utils.serializers import BaseSerializer
+from webhooks.metsights.utils.reports import perform_file_upload_action
 from webhooks.metsights.utils.tasks import send_reports_export_email
 
 REPORTS_EXPORT_SCOPE = "reports.export"
@@ -25,6 +26,8 @@ class MetsightsWebhookSerializer(BaseSerializer):
             files = data.get("files", [])
             send_reports_export_email(data.get("email"), first_name, files)
         if scope == RECORDS_FILES_UPLOAD:
-            pass
+            # print("PAYLOAD: ", json.dumps(payload, indent=2))
+            data = payload.get('data', {}) or {}
+            perform_file_upload_action(data)
 
         return True

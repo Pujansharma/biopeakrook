@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils.text import gettext_lazy as _
 
+from accounts.notifications.utils.constants import NotificationType
 from core.utils.models import BaseUUIDModel
 
 User = get_user_model()
@@ -33,12 +34,12 @@ class UserNotification(BaseUUIDModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
     title = models.CharField(max_length=120)
     body = models.TextField(null=True, blank=True)
-    notification_type = models.CharField(max_length=50, db_index=True)
+    notification_type = models.CharField(
+        max_length=50, db_index=True, choices=NotificationType
+    )
     project_id = models.CharField(max_length=30, db_index=True)
-    sent_at = models.DateTimeField(null=True, blank=True)
-
     firebase_message_id = models.CharField(max_length=255, blank=True)
-
+    seen_at = models.DateTimeField(null=True, blank=True, editable=False)
     data = models.JSONField(null=True, blank=True, default=dict, editable=False)
 
     class Meta:
