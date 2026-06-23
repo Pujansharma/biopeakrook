@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "webhooks",
     "webhooks.bugspeaks",
     "webhooks.strand_genomics",
+    "pre_consultation",
 ]
 
 AUTH_USER_MODEL = "users.User"

@@ -23,4 +23,5 @@ urlpatterns = [
     path("programs/", include("programs.urls")),
     path("services/", include("programs.services.urls")),
     path("webhooks/", include("webhooks.urls")),
+    path("pre-consultation/", include("pre_consultation.urls")),
 ]
