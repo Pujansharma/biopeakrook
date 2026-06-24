@@ -37,6 +37,7 @@ class UserNotification(BaseUUIDModel):
     notification_type = models.CharField(
         max_length=50, db_index=True, choices=NotificationType
     )
+    image = models.FileField(upload_to="users/notifications/", null=True, blank=True)
     project_id = models.CharField(max_length=30, db_index=True)
     firebase_message_id = models.CharField(max_length=255, blank=True)
     seen_at = models.DateTimeField(null=True, blank=True, editable=False)
