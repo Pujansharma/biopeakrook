@@ -45,6 +45,7 @@ def send_user_notification(
     payload = {
         **data,
         "notification_id": str(notification.pk),
+        "notification_type": notification_type,
     }
 
     firebase_message_id = send_multicast_firebase_notification(
