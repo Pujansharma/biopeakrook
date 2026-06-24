@@ -332,7 +332,7 @@ class CustomerFirebaseTokenSerializer(BaseModelSerializer):
 
 
 class ExternalCustomerNotificationSerializer(BaseModelSerializer):
-    notification_type_code = serializers.CharField(source='notification_type_code', read_only=True)
+    notification_type_code = serializers.CharField(source='notification_type', read_only=True)
 
     class Meta:
         model = UserNotification
