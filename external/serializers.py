@@ -10,7 +10,7 @@ from accounts.notifications.models import FirebaseRegistrationToken, UserNotific
 from accounts.notifications.utils.db import save_firebase_registration_token
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
-from core.utils.serializers import BaseModelSerializer
+from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from programs.models import TherapyProgram, TherapyProgramService
 from programs.services.models import Service
 from programs.utils.constants import ProgramType
@@ -331,6 +331,21 @@ class CustomerFirebaseTokenSerializer(BaseModelSerializer):
         )
 
 
+class CustomerFirebaseTokenDeregisterSerializer(BaseSerializer):
+    phone = PhoneNumberSerializerField(required=True, write_only=True)
+    token = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        token = attrs.get("token")
+        phone = attrs.pop('phone', None)
+
+        FirebaseRegistrationToken.objects.filter(
+            token=token, user__phone=phone
+        ).delete()
+
+        return True
+
+
 class ExternalCustomerNotificationSerializer(BaseModelSerializer):
     notification_type_code = serializers.CharField(source='notification_type', read_only=True)
 
@@ -346,4 +361,3 @@ class ExternalCustomerNotificationSerializer(BaseModelSerializer):
             "seen_at",
             "data"
         ]
-
