@@ -29,5 +29,6 @@ urlpatterns = [
     # Notifications
     path("customer-notifications/", views.CustomerNotificationsView.as_view()),
     path("customer-notifications/register/", views.CustomerFirebaseTokenView.as_view()),
+    path("customer-notifications/deregister/", views.CustomerFirebaseTokenDeregisterView.as_view()),
     path("customer-notifications/<uuid:pk>/", views.CustomerNotificationDetailView.as_view()),
 ]
