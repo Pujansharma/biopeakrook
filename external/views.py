@@ -19,6 +19,7 @@ from accounts.customers.models import (
     CustomerProfile,
     CustomerAssociateAssignment,
 )
+from accounts.notifications.models import UserNotification
 from core.utils.exceptions import get_object_or_404
 from core.utils.formatters import PhoneNumberFormat
 from core.utils.helper import get_request_ip_address, get_request_user_agent
@@ -29,7 +30,7 @@ from external.serializers import (
     CustomerTherapyProgramSerializer,
     CustomerTherapyProgramDetailSerializer,
     CustomerServiceDetailSerializer,
-    ExternalCustomerAssociateSerializer, CustomerFirebaseTokenSerializer,
+    ExternalCustomerAssociateSerializer, CustomerFirebaseTokenSerializer, ExternalCustomerNotificationSerializer,
 )
 from programs.models import (
     Program,
@@ -340,3 +341,47 @@ class CustomerFirebaseTokenView(BaseCreateAPIView):
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+
+class CustomerNotificationsView(BaseListAPIView):
+    serializer_class = ExternalCustomerNotificationSerializer
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        search = Q()
+        phone_query = self.request.query_params.get("phone", None)
+        phone_formatter = PhoneNumberFormat(phone_query)
+        phone_cleaned = phone_formatter.clean(raise_exception=False)
+
+        is_read_query = self.request.query_params.get('read', None)
+        if is_read_query and is_read_query in ['0', '1']:
+            filter_kwargs['seen_at__isnull'] = not bool(int(is_read_query))
+
+        qs = UserNotification.objects.filter(
+            search, user__phone=phone_cleaned, **filter_kwargs
+        )
+        return qs
+
+
+class CustomerNotificationDetailView(BaseRetrieveAPIView):
+    serializer_class = ExternalCustomerNotificationSerializer
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        search = Q()
+        phone_query = self.request.query_params.get("phone", None)
+        phone_formatter = PhoneNumberFormat(phone_query)
+        phone_cleaned = phone_formatter.clean(raise_exception=False)
+
+        qs = UserNotification.objects.filter(
+            search, user__phone=phone_cleaned, **filter_kwargs
+        )
+        return qs
+
+    def get_object(self):
+        qs = self.get_queryset()
+        instance = get_object_or_404(qs, "Notification not found", pk=self.kwargs['pk'])
+        if not instance.seen_at:
+            instance.seen_at = timezone.localtime()
+            instance.save(update_fields=['seen_at'])
+        return instance
