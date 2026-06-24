@@ -1,7 +1,9 @@
 from rest_framework import serializers
 
 from core.utils.serializers import BaseSerializer
-from webhooks.metsights.utils.reports import perform_file_upload_action
+from webhooks.metsights.utils.notifications import (
+    send_metsights_file_upload_notification,
+)
 from webhooks.metsights.utils.tasks import send_reports_export_email
 
 REPORTS_EXPORT_SCOPE = "reports.export"
@@ -30,6 +32,6 @@ class MetsightsWebhookSerializer(BaseSerializer):
             data = payload.get("data", {}) or {}
             if not isinstance(data, dict):
                 return True
-            perform_file_upload_action(data)
+            send_metsights_file_upload_notification(data)
 
         return True
