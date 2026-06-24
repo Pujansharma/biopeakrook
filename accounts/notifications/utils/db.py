@@ -1,4 +1,5 @@
 from accounts.notifications.models import FirebaseRegistrationToken, UserNotification
+from accounts.notifications.utils.helper import fetch_file_from_url
 from accounts.notifications.utils.sdk import send_multicast_firebase_notification
 
 
@@ -32,11 +33,15 @@ def send_user_notification(
 
     if not data:
         return None
+    _image = None
+    if image:
+        _image = fetch_file_from_url(_image)
 
     notification = UserNotification.objects.create(
         user=user,
         title=title,
         body=body,
+        image=_image,
         notification_type=notification_type,
         project_id=project_id,
         data=data,
