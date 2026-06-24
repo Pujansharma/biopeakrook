@@ -6,6 +6,8 @@ from django.conf import settings
 from firebase_admin import credentials
 from firebase_admin import messaging
 
+from accounts.notifications.utils.constants import NotificationProjectID
+
 ADMIN_CERT = settings.ADMIN_CERT
 APP_CERT = settings.APP_CERT
 
@@ -14,12 +16,9 @@ class FirebaseApp:
     initialized_apps = []
     FIREBASE_CRED_DIR = settings.BASE_DIR / ".firebase"
 
-    APP_PROJECT_ID = "health-app-36fd7"
-    ADMIN_PROJECT_ID = "biopeak-admin"
-
     PROJECT_KEY_MAP = {
-        APP_PROJECT_ID: APP_CERT,
-        ADMIN_PROJECT_ID: ADMIN_CERT,
+        NotificationProjectID.APP: APP_CERT,
+        NotificationProjectID.ADMIN: ADMIN_CERT,
     }
 
     def get_certificate_data(self, project_id):
@@ -37,7 +36,7 @@ class FirebaseApp:
             return firebase_admin.get_app(project_id)
         return self.initialize_app(project_id)
 
-    def initialize_app(self, project_id=APP_PROJECT_ID):
+    def initialize_app(self, project_id=NotificationProjectID.APP):
         data = self.get_certificate_data(project_id)
         cred = credentials.Certificate(data)
         app = firebase_admin.initialize_app(cred, name=project_id)
@@ -71,24 +70,35 @@ def send_firebase_notification(
     return messaging.send(message, app=app)
 
 
+def _build_firebase_data(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    firebase_payload = {}
+    for key, value in payload.items():
+        if not value:
+            continue
+        firebase_payload[key] = value
+
+        if isinstance(value, (dict, list)):
+            firebase_payload[key] = json.dumps(value)
+    return firebase_payload
+
+
 def send_multicast_firebase_notification(
         project_id: str,
         tokens: list[str],
         title: str,
         body: str,
-        image=None,
-        extras: dict[str, Any] | None = None,
+        image: str | None = None,
+        data: dict[str, Any] | None = None,
 ):
     app = get_app_for_project_id(project_id)
-    output = {"title": title, "body": body, "image": image}
-    if extras:
-        output.update(**extras)
-    data = {k: str(v) for k, v in output.items() if v is not None}
+
     multicast_message = messaging.MulticastMessage(
-        # notification=messaging.Notification(
-        #     title=title, body=body, image=image
-        # ),
-        data=data,
+        notification=messaging.Notification(
+            title=title, body=body, image=image
+        ),
+        data=_build_firebase_data(data),
         tokens=tokens,
     )
     return messaging.send_each_for_multicast(multicast_message, app=app)
