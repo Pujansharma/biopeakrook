@@ -28,7 +28,7 @@ def perform_file_upload_action(data: dict) -> None:
     send_user_notification(
         user,
         title="Health reports updated",
-        body="",
+        body="Your health reports have been updated with the latest details and are now available for review.",
         notification_type=NotificationType.METSIGHTS_FILE_UPLOAD,
         project_id=project_id,
         tokens=list(firebase_tokens),
