@@ -1,6 +1,7 @@
 from accounts.notifications.models import FirebaseRegistrationToken
-from accounts.notifications.utils.constants import NotificationType
+from accounts.notifications.utils.constants import NotificationType, NotificationProjectID
 from accounts.notifications.utils.db import send_user_notification
+from accounts.users.models import User
 
 
 def perform_file_upload_action(data: dict) -> None:
@@ -9,15 +10,17 @@ def perform_file_upload_action(data: dict) -> None:
     if not phone:
         return None
 
-    firebase_token = FirebaseRegistrationToken.objects.filter(
-        user__phone=phone, token__isnull=False
-    ).first()
+    user = User.objects.exclude(phone__isnull=True).filter(phone=phone).first()
 
-    if not firebase_token:
+    if not user:
         return None
+    project_id = NotificationProjectID.APP
+    firebase_tokens = FirebaseRegistrationToken.objects.filter(
+        user=user, token__isnull=False, project_id=project_id
+    ).values_list('token', flat=True)
 
-    user = firebase_token.user
-    token = firebase_token.token
+    if not firebase_tokens:
+        return None
 
     attachment = data.get("attachment", {}) or {}
     attachment_metadata = data.get("metadata", {}) or {}
@@ -27,8 +30,8 @@ def perform_file_upload_action(data: dict) -> None:
         title="Health reports updated",
         body="",
         notification_type=NotificationType.METSIGHTS_FILE_UPLOAD,
-        project_id=firebase_token.project_id,
-        token=token,
+        project_id=project_id,
+        tokens=list(firebase_tokens),
         image=None,
         data=data,
     )
