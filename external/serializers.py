@@ -6,7 +6,7 @@ from accounts.associates.serializers import (
 )
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import CustomerProfile, CustomerAssociateAssignment, Customer
-from accounts.notifications.models import FirebaseRegistrationToken
+from accounts.notifications.models import FirebaseRegistrationToken, UserNotification
 from accounts.notifications.utils.db import save_firebase_registration_token
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
@@ -329,3 +329,21 @@ class CustomerFirebaseTokenSerializer(BaseModelSerializer):
         return save_firebase_registration_token(
             user, ip_address, user_agent, token, project_id
         )
+
+
+class ExternalCustomerNotificationSerializer(BaseModelSerializer):
+    notification_type_code = serializers.CharField(source='notification_type_code', read_only=True)
+
+    class Meta:
+        model = UserNotification
+        fields = [
+            "id",
+            "title",
+            "body",
+            "notification_type",
+            "notification_type_code",
+            "created_at",
+            "seen_at",
+            "data"
+        ]
+
