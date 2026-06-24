@@ -1,5 +1,5 @@
 from accounts.notifications.models import FirebaseRegistrationToken, UserNotification
-from accounts.notifications.utils.sdk import send_firebase_notification
+from accounts.notifications.utils.sdk import send_multicast_firebase_notification
 
 
 def save_firebase_registration_token(
@@ -22,12 +22,12 @@ def send_user_notification(
         title,
         body,
         notification_type,
+        tokens,
         project_id,
-        token,
         image=None,
         data=None,
 ):
-    if not token:
+    if not tokens:
         return None
 
     if not data:
@@ -47,8 +47,13 @@ def send_user_notification(
         "notification_id": str(notification.pk),
     }
 
-    firebase_message_id = send_firebase_notification(
-        project_id, token, title, body, image, payload
+    firebase_message_id = send_multicast_firebase_notification(
+        project_id,
+        tokens,
+        title=title,
+        body=body,
+        image=image,
+        data=payload,
     )
 
     notification.firebase_message_id = firebase_message_id
