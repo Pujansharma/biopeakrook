@@ -1,5 +1,8 @@
 from accounts.notifications.models import FirebaseRegistrationToken
-from accounts.notifications.utils.constants import NotificationType, NotificationProjectID
+from accounts.notifications.utils.constants import (
+    NotificationType,
+    NotificationProjectID,
+)
 from accounts.notifications.utils.db import send_user_notification
 from accounts.users.models import User
 
@@ -17,7 +20,7 @@ def perform_file_upload_action(data: dict) -> None:
     project_id = NotificationProjectID.APP
     firebase_tokens = FirebaseRegistrationToken.objects.filter(
         user=user, token__isnull=False, project_id=project_id
-    ).values_list('token', flat=True)
+    ).values_list("token", flat=True)
 
     if not firebase_tokens:
         return None
