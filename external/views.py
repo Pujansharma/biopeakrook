@@ -20,17 +20,23 @@ from accounts.customers.models import (
     CustomerAssociateAssignment,
 )
 from accounts.notifications.models import UserNotification
+from accounts.notifications.serializers import UserNotificationSerializer
 from core.utils.exceptions import get_object_or_404
 from core.utils.formatters import PhoneNumberFormat
 from core.utils.helper import get_request_ip_address, get_request_user_agent
-from core.utils.views.main import BaseListAPIView, BaseRetrieveAPIView, BaseCreateAPIView
+from core.utils.views.main import (
+    BaseCreateAPIView,
+    BaseListAPIView,
+    BaseRetrieveAPIView,
+)
 from external.serializers import (
     CustomerProfileSummarySerializer,
     ExternalProgramServiceSerializer,
     CustomerTherapyProgramSerializer,
     CustomerTherapyProgramDetailSerializer,
     CustomerServiceDetailSerializer,
-    ExternalCustomerAssociateSerializer, CustomerFirebaseTokenSerializer, ExternalCustomerNotificationSerializer,
+    ExternalCustomerAssociateSerializer,
+    CustomerFirebaseTokenSerializer,
     CustomerFirebaseTokenDeregisterSerializer,
 )
 from programs.models import (
@@ -351,10 +357,10 @@ class CustomerFirebaseTokenDeregisterView(BaseCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return self.send_response("Firebase token deregistered successfully")
-    
+
 
 class CustomerNotificationsView(BaseListAPIView):
-    serializer_class = ExternalCustomerNotificationSerializer
+    serializer_class = UserNotificationSerializer
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -363,9 +369,9 @@ class CustomerNotificationsView(BaseListAPIView):
         phone_formatter = PhoneNumberFormat(phone_query)
         phone_cleaned = phone_formatter.clean(raise_exception=False)
 
-        is_read_query = self.request.query_params.get('read', None)
-        if is_read_query and is_read_query in ['0', '1']:
-            filter_kwargs['seen_at__isnull'] = not bool(int(is_read_query))
+        is_read_query = self.request.query_params.get("read", None)
+        if is_read_query and is_read_query in ["0", "1"]:
+            filter_kwargs["seen_at__isnull"] = not bool(int(is_read_query))
 
         qs = UserNotification.objects.filter(
             search, user__phone=phone_cleaned, **filter_kwargs
@@ -374,7 +380,7 @@ class CustomerNotificationsView(BaseListAPIView):
 
 
 class CustomerNotificationDetailView(BaseRetrieveAPIView):
-    serializer_class = ExternalCustomerNotificationSerializer
+    serializer_class = UserNotificationSerializer
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -390,8 +396,8 @@ class CustomerNotificationDetailView(BaseRetrieveAPIView):
 
     def get_object(self):
         qs = self.get_queryset()
-        instance = get_object_or_404(qs, "Notification not found", pk=self.kwargs['pk'])
+        instance = get_object_or_404(qs, "Notification not found", pk=self.kwargs["pk"])
         if not instance.seen_at:
             instance.seen_at = timezone.localtime()
-            instance.save(update_fields=['seen_at'])
+            instance.save(update_fields=["seen_at"])
         return instance
