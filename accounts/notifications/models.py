@@ -31,7 +31,9 @@ class FirebaseRegistrationToken(BaseUUIDModel):
 
 
 class UserNotification(BaseUUIDModel):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="notifications"
+    )
     title = models.CharField(max_length=120)
     body = models.TextField(null=True, blank=True)
     notification_type = models.CharField(
@@ -44,7 +46,7 @@ class UserNotification(BaseUUIDModel):
     data = models.JSONField(null=True, blank=True, default=dict, editable=False)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"
