@@ -1,6 +1,8 @@
-from core.utils.serializers import BaseModelSerializer
-from .models import FirebaseRegistrationToken
-from .utils.db import save_firebase_registration_token
+from rest_framework import serializers
+
+from accounts.notifications.models import FirebaseRegistrationToken, UserNotification
+from accounts.notifications.utils.db import save_firebase_registration_token
+from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
 
 class FirebaseRegistrationTokenSerializer(BaseModelSerializer):
@@ -17,3 +19,35 @@ class FirebaseRegistrationTokenSerializer(BaseModelSerializer):
         return save_firebase_registration_token(
             user, ip_address, user_agent, token, project_id
         )
+
+
+class FirebaseRegistrationTokenDeregisterSerializer(BaseSerializer):
+    token = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        user = request.user
+        FirebaseRegistrationToken.objects.filter(
+            user=user,
+            token=attrs["token"],
+        ).delete()
+        return attrs
+
+
+class UserNotificationSerializer(BaseModelSerializer):
+    notification_type_code = serializers.CharField(
+        source="notification_type", read_only=True
+    )
+
+    class Meta:
+        model = UserNotification
+        fields = [
+            "id",
+            "title",
+            "body",
+            "notification_type",
+            "notification_type_code",
+            "created_at",
+            "seen_at",
+            "data",
+        ]
