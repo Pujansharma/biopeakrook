@@ -31,17 +31,17 @@ class FirebaseApp:
         except json.JSONDecodeError:
             return None
 
-    def get_app(self, project_id):
-        if project_id in self.initialized_apps:
-            return firebase_admin.get_app(project_id)
-        return self.initialize_app(project_id)
-
     def initialize_app(self, project_id=NotificationProjectID.APP):
         data = self.get_certificate_data(project_id)
         cred = credentials.Certificate(data)
         app = firebase_admin.initialize_app(cred, name=project_id)
         self.initialized_apps.append(project_id)
         return app
+
+    def get_app(self, project_id):
+        if project_id in self.initialized_apps:
+            return firebase_admin.get_app(project_id)
+        return self.initialize_app(project_id)
 
 
 def get_app_for_project_id(project_id):

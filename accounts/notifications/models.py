@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils.text import gettext_lazy as _
 
-from accounts.notifications.utils.constants import NotificationType
+from accounts.notifications.utils.constants import NotificationType, NotificationProjectID
 from core.utils.models import BaseUUIDModel
 
 User = get_user_model()
@@ -14,7 +14,7 @@ class FirebaseRegistrationToken(BaseUUIDModel):
     )
     ip_address = models.GenericIPAddressField(_("IP Address"))
     user_agent = models.CharField(max_length=300)
-    project_id = models.CharField(max_length=30, db_index=True)
+    project_id = models.CharField(max_length=30, db_index=True, choices=NotificationProjectID)
     token = models.TextField()
 
     class Meta:
