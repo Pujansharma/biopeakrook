@@ -3,9 +3,7 @@ from accounts.notifications.utils.helper import fetch_file_from_url
 from accounts.notifications.utils.sdk import send_multicast_firebase_notification
 
 
-def save_firebase_registration_token(
-        user, ip_address, user_agent, token, project_id
-):
+def save_firebase_registration_token(user, ip_address, user_agent, token, project_id):
     registration_token, _ = FirebaseRegistrationToken.objects.update_or_create(
         user=user,
         project_id=project_id,
