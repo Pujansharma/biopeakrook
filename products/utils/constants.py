@@ -39,7 +39,7 @@ PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
     ProviderCallbackFunction.STRAND_LIFE_SCIENCES: [
         ProductCallbackFunction.GENOMICS_NUTRI_DNA,
         ProductCallbackFunction.GENOMICS_HEALTH_INSIGHTS,
-    ]
+    ],
 }
 
 
