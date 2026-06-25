@@ -95,9 +95,7 @@ def send_multicast_firebase_notification(
     app = get_app_for_project_id(project_id)
 
     multicast_message = messaging.MulticastMessage(
-        notification=messaging.Notification(
-            title=title, body=body, image=image
-        ),
+        notification=messaging.Notification(title=title, body=body, image=image),
         data=_build_firebase_data(data),
         tokens=tokens,
     )
