@@ -23,12 +23,12 @@ dependencies = [
     "pandas-stubs",
     "pyotp",
     "qrcode",
-    "black",
     "django-storages[s3]",
     "arrow",
     "firebase-admin",
+    "ruff",
 ]
 
-[tool.black]
-extend-exclude = "migrations/"
-target-version = ['py314']
+
+[tool.ruff]
+extend-exclude = ["migrations"]
