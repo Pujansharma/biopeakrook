@@ -1,5 +1,5 @@
 from accounts.notifications.models import FirebaseRegistrationToken, UserNotification
-from accounts.notifications.utils.helper import fetch_file_from_url
+from core.utils.helper import fetch_file_from_url
 from accounts.notifications.utils.sdk import send_multicast_firebase_notification
 
 
