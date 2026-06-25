@@ -20,19 +20,20 @@ class CustomerProfileAddressDetailView(BaseRetrieveUpdateDestroyAPIView):
         account_type = get_user_account_type(user)
 
         if account_type == UserType.CUSTOMER:
-            customer = getattr(user, 'customer')
-            filter_kwargs['customer_profile__customer'] = customer
+            customer = getattr(user, "customer")
+            filter_kwargs["customer_profile__customer"] = customer
         if account_type == UserType.ASSOCIATE:
-            associate = getattr(user, 'associate')
-            query_filter = (
-                    Q(
-                        customer_profile__center_assignments__center__associate_assignments__associate=associate
-                    )
-                    | Q(customer_profile__associate_assignments__associate=associate)
-            )
+            associate = getattr(user, "associate")
+            query_filter = Q(
+                customer_profile__center_assignments__center__associate_assignments__associate=associate
+            ) | Q(customer_profile__associate_assignments__associate=associate)
 
-        qs = CustomerProfileAddress.objects.select_related(
-            "customer_profile",
-            "customer_profile__customer",
-        ).filter(query_filter, **filter_kwargs).distinct()
+        qs = (
+            CustomerProfileAddress.objects.select_related(
+                "customer_profile",
+                "customer_profile__customer",
+            )
+            .filter(query_filter, **filter_kwargs)
+            .distinct()
+        )
         return qs
