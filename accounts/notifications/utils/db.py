@@ -1,6 +1,7 @@
 from accounts.notifications.models import FirebaseRegistrationToken, UserNotification
-from core.utils.helper import fetch_file_from_url
 from accounts.notifications.utils.sdk import send_multicast_firebase_notification
+from core.utils.helper import fetch_file_from_url
+from core.utils.log import logger
 
 
 def save_firebase_registration_token(user, ip_address, user_agent, token, project_id):
@@ -27,9 +28,11 @@ def send_user_notification(
         data=None,
 ):
     if not tokens:
+        logger.warning("No tokens found for this user")
         return None
 
     if not data:
+        logger.warning("No data received for this notification request")
         return None
     _image = None
     if image:
