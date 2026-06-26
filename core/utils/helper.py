@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 import requests
 from django.core.files.base import ContentFile
 from django.utils.http import parse_header_parameters
+from rest_framework.request import Request
 
 
 def response_format(detail, data=None):
@@ -16,14 +17,14 @@ def response_format(detail, data=None):
     return context
 
 
-def get_request_ip_address(request):
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+def get_request_ip_address(request: Request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR")
 
 
-def get_request_user_agent(request):
+def get_request_user_agent(request: Request):
     return request.META.get("HTTP_USER_AGENT")
 
 
