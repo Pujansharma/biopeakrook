@@ -28,6 +28,11 @@ def perform_file_upload_action(data: dict) -> None:
     attachment = data.get("attachment", {}) or {}
     attachment_metadata = data.get("metadata", {}) or {}
 
+    if attachment_metadata.get('category_type') in [
+        'consultation_notes'
+    ]:
+       return None
+
     send_user_notification(
         user,
         title="Health reports updated",
