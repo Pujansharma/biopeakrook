@@ -155,3 +155,6 @@ GitHub.sublime-settings
 .aider
 .windsurf
 .continue
+
+# MacOS #
+.DS_Store
