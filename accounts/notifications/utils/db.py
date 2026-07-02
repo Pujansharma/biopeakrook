@@ -9,8 +9,8 @@ def save_firebase_registration_token(user, ip_address, user_agent, token, projec
         user=user,
         project_id=project_id,
         user_agent=user_agent,
+        ip_address=ip_address,
         defaults={
-            "ip_address": ip_address,
             "token": token,
         },
     )
