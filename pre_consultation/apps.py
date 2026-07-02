@@ -7,3 +7,4 @@ class PreConsultationConfig(AppConfig):
 
     def ready(self) -> None:
         import core.utils.openapi  # noqa: F401
+        import pre_consultation.signals  # noqa: F401
