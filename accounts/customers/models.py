@@ -1,7 +1,7 @@
-from django.utils.translation import gettext_lazy as _
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils.translation import gettext_lazy as _
 
 from accounts.customers.utils.constants import AddressType
 from accounts.organizations.utils.constants import FeatureTabOptions
@@ -48,7 +48,10 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
         Customer, on_delete=models.PROTECT, related_name="profiles"
     )
     is_main = models.BooleanField(default=False, editable=False)
-    is_onboarding_complete = models.BooleanField(default=False, editable=False)
+
+    is_legacy = models.BooleanField(default=False)
+    is_onboarding_complete = models.BooleanField(default=False)
+
     created_by = models.ForeignKey(
         User,
         null=True,
@@ -206,7 +209,6 @@ class CustomerProfileAddress(BaseUUIDModel):
 
     def __str__(self):
         return f"{self.pk}"
-
 
 
 class CustomerProfileFeature(BaseUUIDModel):

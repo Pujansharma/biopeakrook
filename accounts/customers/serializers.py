@@ -112,6 +112,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "date_of_birth",
             "image",
             "is_main",
+            "is_legacy",
             "is_onboarding_complete",
             "created_at",
             "updated_at",
@@ -280,7 +281,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -414,7 +415,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
