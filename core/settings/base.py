@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "debug_toolbar",
     "corsheaders",
+    "drf_spectacular",
     "sequences",
     "external",
     "accounts",
@@ -119,9 +120,24 @@ REST_FRAMEWORK = {
         "core.utils.authentication.BaseJWTAuthentication",
     ],
     "DEFAULT_PAGINATION_CLASS": "core.utils.pagination.BasePageNumberPagination",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "PAGE_SIZE": 10,
     "NON_FIELD_ERRORS_KEY": "detail",
     "EXCEPTION_HANDLER": "core.utils.exceptions.base_exception_handler",
+    "DEFAULT_THROTTLE_RATES": {
+        "pre_consultation_get": "120/min",
+        "pre_consultation_put": "30/min",
+        "pre_consultation_post": "30/min",
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Biopeak Nexus API",
+    "DESCRIPTION": "Biopeak Nexus backend REST API.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": r"/",
 }
 
 # Simple JWT

@@ -1,9 +1,12 @@
 from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from core.utils.defaults import HomePageView
 
 urlpatterns = [
     path("", HomePageView.as_view()),
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("auth/", include("accounts.urls")),
     path("users/", include("accounts.users.urls")),
     path("notifications/", include("accounts.notifications.urls")),
