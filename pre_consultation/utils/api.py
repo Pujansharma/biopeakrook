@@ -1,3 +1,5 @@
+"""Standard {success, data} response envelope for pre-consultation APIs."""
+
 from rest_framework.response import Response
 
 

@@ -1,3 +1,5 @@
+"""Serializers for session start/response payloads."""
+
 from rest_framework import serializers
 
 from pre_consultation.models import PreConsultationSession

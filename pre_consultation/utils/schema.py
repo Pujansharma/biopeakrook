@@ -1,3 +1,5 @@
+"""OpenAPI schema helpers and layer endpoint descriptions for drf-spectacular."""
+
 from typing import Type
 
 from drf_spectacular.utils import OpenApiParameter, inline_serializer
@@ -25,7 +27,8 @@ PRE_CONSULTATION_OPENAPI_DESCRIPTION = (
     "patient_symptom → patient_concern_probe → patient_medical_history_context → "
     "patient_lifestyle_environment → patient_cluster_probe (conditional) → "
     "patient_goals_priorities → complete → result. "
-    "Human-readable reference: api-pre-consultation.md."
+    "Human-readable reference: api-pre-consultation.md. "
+    "OpenAPI schema: /pre-consultation/openapi/ · Swagger UI: /pre-consultation/openapi/docs/."
 )
 
 PRE_CONSULTATION_PATH_ORDER: tuple[str, ...] = (
@@ -76,7 +79,6 @@ LAYER_EXECUTION_STEPS: dict[str, int] = {
 PRE_CONSULTATION_SPECTACULAR_SETTINGS: dict = {
     "TITLE": PRE_CONSULTATION_OPENAPI_TITLE,
     "DESCRIPTION": PRE_CONSULTATION_OPENAPI_DESCRIPTION,
-    "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "PREPROCESSING_HOOKS": [
         "pre_consultation.utils.schema.filter_pre_consultation_endpoints",

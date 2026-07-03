@@ -1,3 +1,5 @@
+"""Read-only accessors over pre_consultation_directive.json catalog data."""
+
 import json
 from pathlib import Path
 

@@ -1,3 +1,5 @@
+"""Dynamically generated DRF views — one GET/PUT pair per progression layer."""
+
 from dataclasses import dataclass
 from typing import Type
 

@@ -1,3 +1,5 @@
+"""Layer 3 — concern selection filtered by chosen categories."""
+
 from rest_framework import serializers
 
 from pre_consultation.layers.serialization import DirectiveJsonKeyCharField

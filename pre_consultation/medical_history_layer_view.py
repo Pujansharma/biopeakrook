@@ -1,3 +1,5 @@
+"""Medical history layer view — GET/PUT plus multipart medical-report upload."""
+
 from django.db import transaction
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status

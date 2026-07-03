@@ -1,3 +1,5 @@
+"""Django app config — registers OpenAPI extensions and medical-report delete signal."""
+
 from django.apps import AppConfig
 
 

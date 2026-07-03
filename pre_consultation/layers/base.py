@@ -1,3 +1,5 @@
+"""LayerHandler dataclass — contract each progression layer implements."""
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Type
@@ -7,6 +9,8 @@ from rest_framework import serializers
 
 @dataclass(frozen=True)
 class LayerHandler:
+    """Wires serializers and load/persist/has_changed callables for one layer."""
+
     layer_id: str
     request_serializer_class: Type[serializers.Serializer] | None = None
     response_serializer_class: Type[serializers.Serializer] | None = None

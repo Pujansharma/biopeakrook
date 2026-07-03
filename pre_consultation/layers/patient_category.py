@@ -1,3 +1,5 @@
+"""Layer 2 — wellness category multi-select from directive catalog."""
+
 from rest_framework import serializers
 
 from pre_consultation.layers.serialization import DirectiveJsonKeyCharField

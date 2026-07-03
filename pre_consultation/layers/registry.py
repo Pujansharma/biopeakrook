@@ -1,3 +1,5 @@
+"""Maps PreConsultationLayerProgression values to fully wired LayerHandler instances."""
+
 from pre_consultation.layers.base import LayerHandler
 from pre_consultation.layers.patient_baseline import (
     PatientBaselineRequestSerializer,

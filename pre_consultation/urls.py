@@ -1,4 +1,7 @@
+"""URL routes for pre-consultation session and layer endpoints."""
+
 from django.urls import path
+from django.views.generic import RedirectView
 
 from pre_consultation.layer_views import (
     PatientBaselineLayerView,
@@ -25,16 +28,30 @@ from pre_consultation.views import (
 
 urlpatterns = [
     path(
-        "schema/",
+        "openapi/",
         PreConsultationSpectacularAPIView.as_view(),
-        name="pre-consultation-schema",
+        name="pre-consultation-openapi",
+    ),
+    path(
+        "openapi/docs/",
+        PreConsultationSpectacularSwaggerView.as_view(
+            url_name="pre-consultation-openapi",
+        ),
+        name="pre-consultation-openapi-docs",
+    ),
+    path(
+        "schema/",
+        RedirectView.as_view(
+            pattern_name="pre-consultation-openapi",
+            permanent=True,
+        ),
     ),
     path(
         "docs/",
-        PreConsultationSpectacularSwaggerView.as_view(
-            url_name="pre-consultation-schema",
+        RedirectView.as_view(
+            pattern_name="pre-consultation-openapi-docs",
+            permanent=True,
         ),
-        name="pre-consultation-docs",
     ),
     path(
         "session/start/",

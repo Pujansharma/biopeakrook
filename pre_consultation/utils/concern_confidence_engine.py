@@ -1,3 +1,5 @@
+"""Concern Confidence Engine — per-concern attention score from sources and probes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

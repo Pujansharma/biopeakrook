@@ -1,3 +1,9 @@
+"""Shared GET/PUT orchestration for all pre-consultation layer endpoints.
+
+Resolves optional customer profile, validates input, persists layer data, and
+cascades resets to downstream layers when upstream answers change.
+"""
+
 from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
@@ -144,6 +150,7 @@ def execute_layer_put(request: Request, layer_handler: LayerHandler) -> Response
     customer_profile = resolve_customer_profile_for_handler(request, layer_handler)
     validated_data = request_serializer.validated_data
     with transaction.atomic():
+        # Upstream edits invalidate downstream answers and derived cluster scores.
         if call_layer_has_changed(
             layer_handler,
             session,

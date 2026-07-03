@@ -1,3 +1,5 @@
+"""Shared ORM queries for layer handlers and scoring engines."""
+
 from django.db.models import QuerySet
 
 from pre_consultation.models import (
@@ -41,6 +43,7 @@ def get_concern_by_id(
 
 
 def get_medical_override_concern_ids(session: PreConsultationSession) -> set[str]:
+    """Diagnosis selections that force a concern confidence floor via directive."""
     medical_history = PreConsultationMedicalHistory.objects.filter(
         session=session,
     ).first()

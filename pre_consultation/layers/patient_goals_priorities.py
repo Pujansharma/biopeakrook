@@ -1,3 +1,5 @@
+"""Layer 10 — ranked health goals; final layer before session completion."""
+
 from django.utils import timezone
 from rest_framework import serializers
 

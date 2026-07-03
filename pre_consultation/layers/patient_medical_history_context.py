@@ -1,3 +1,5 @@
+"""Layer 7 — diagnoses, allergies, medications, sexual health, and report uploads."""
+
 from datetime import date
 
 from django.core.exceptions import ValidationError as DjangoValidationError

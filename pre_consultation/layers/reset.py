@@ -1,3 +1,9 @@
+"""Cascade invalidation when a layer is edited or its upstream inputs change.
+
+LAYER_DEPENDENTS defines the downstream layers to wipe; cluster scores are
+deleted whenever concern, symptom, probe, or lifestyle data changes.
+"""
+
 from django.db import transaction
 
 from pre_consultation.cluster_scoring import delete_session_cluster_scores
@@ -18,6 +24,8 @@ from pre_consultation.models import (
 
 from pre_consultation.utils.constants import PreConsultationLayerProgression
 
+# Keys are edited layers; values are downstream layers whose stored answers
+# become stale and must be cleared.
 LAYER_DEPENDENTS: dict[str, list[str]] = {
     PreConsultationLayerProgression.PATIENT_CATEGORY: [
         PreConsultationLayerProgression.PATIENT_CONCERN,
@@ -120,6 +128,7 @@ def reset_dependent_layers(session: PreConsultationSession, layer_id: str) -> No
 
 
 def reset_gender_dependent_medical_history(session: PreConsultationSession) -> None:
+    """Clear reproductive diagnoses and sexual-health answers after gender change."""
     medical_history = PreConsultationMedicalHistory.objects.filter(
         session=session
     ).first()

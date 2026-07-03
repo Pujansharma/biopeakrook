@@ -1,3 +1,5 @@
+"""Per-method rate limits for pre-consultation GET/PUT/POST endpoints."""
+
 from rest_framework.throttling import SimpleRateThrottle
 
 

@@ -1,3 +1,10 @@
+"""ORM models for the pre-consultation health-map session.
+
+One PreConsultationSession per user tracks layer progression and client metadata.
+Layer answers persist as normalized rows (concerns, medical history, lifestyle, etc.).
+Cluster scores are computed on write and stored in PreConsultationSessionClusterScore.
+"""
+
 from django.db import models
 
 from accounts.utils import get_user_model
@@ -12,6 +19,8 @@ from pre_consultation.utils.constants import (
 
 User = get_user_model()
 
+
+# --- Session root -----------------------------------------------------------
 
 class PreConsultationSession(BaseUUIDModel):
     user = models.OneToOneField(
@@ -48,6 +57,8 @@ class PreConsultationSession(BaseUUIDModel):
         return f"{self.pk}"
 
 
+# --- Category & concern tree (layers 2–6) -----------------------------------
+
 class PreConsultationCategorySelection(BaseUUIDModel):
     session = models.ForeignKey(
         PreConsultationSession,
@@ -80,6 +91,7 @@ class PreConsultationConcern(BaseUUIDModel):
     functional_impact_id = models.CharField(max_length=100, blank=True, default="")
     duration_impact_id = models.CharField(max_length=100, blank=True, default="")
     progression_impact_id = models.CharField(max_length=100, blank=True, default="")
+    # Set at concern_probe layer; used by cluster scoring and cluster_probe eligibility.
     probe_flagged = models.BooleanField(default=False)
     confidence_score = models.IntegerField(default=0)
     probe_question_count = models.IntegerField(default=0)
@@ -198,6 +210,8 @@ class PreConsultationConcernProbeAnswer(BaseUUIDModel):
     def __str__(self) -> str:
         return f"{self.pk}"
 
+
+# --- Medical history (layer 7) ----------------------------------------------
 
 class PreConsultationMedicalHistory(BaseUUIDModel):
     session = models.OneToOneField(
@@ -339,6 +353,8 @@ class PreConsultationMedicalReport(BaseUUIDModel):
         return f"{self.pk}"
 
 
+# --- Lifestyle, cluster scores, goals (layers 8–10) -------------------------
+
 class PreConsultationLifestyleAnswer(BaseUUIDModel):
     session = models.ForeignKey(
         PreConsultationSession,
@@ -363,6 +379,8 @@ class PreConsultationLifestyleAnswer(BaseUUIDModel):
 
 
 class PreConsultationSessionClusterScore(BaseUUIDModel):
+    """Persisted output of lifestyle + cluster confidence engines per health cluster."""
+
     session = models.ForeignKey(
         PreConsultationSession,
         on_delete=models.CASCADE,
@@ -378,6 +396,7 @@ class PreConsultationSessionClusterScore(BaseUUIDModel):
     provisional_score = models.PositiveSmallIntegerField(default=0)
     validation_probed = models.BooleanField(default=False)
     validation_contribution = models.PositiveSmallIntegerField(default=0)
+    # Populated when cluster_probe skipped: settled | weak_signal | not_probed.
     validation_skip_reason = models.CharField(max_length=50, blank=True, default="")
     final_score = models.PositiveSmallIntegerField(default=0)
     bucket_id = models.CharField(max_length=100, blank=True, default="")

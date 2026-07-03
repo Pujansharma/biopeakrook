@@ -1,3 +1,5 @@
+"""Build the completed-session summary shown after layer 10."""
+
 from rest_framework import serializers
 
 from pre_consultation.layers.serialization import DirectiveJsonKeyCharField
@@ -52,6 +54,7 @@ def build_lifestyle_option_label_map() -> dict[str, dict[str, str]]:
 
 
 def build_explored_cluster_ids(session: PreConsultationSession) -> list[str]:
+    """Derive health-system clusters from selected concerns via directive mapping."""
     concern_cluster_ids_map = get_concern_cluster_ids_map()
     cluster_ids: set[str] = set()
     for concern_id in get_session_concern_ids(session):

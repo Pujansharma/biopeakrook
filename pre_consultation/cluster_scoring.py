@@ -22,6 +22,7 @@ from pre_consultation.utils.lifestyle_contribution_engine import (
 
 
 def build_family_risk_by_cluster(session: PreConsultationSession) -> dict[str, int]:
+    """Aggregate family-history burden per cluster from concerns sourced as family."""
     family_risk_engine = FamilyRiskEngine()
     concern_burdens: dict[str, float] = {}
     for concern in session.concerns.prefetch_related("family_history", "sources"):
@@ -80,6 +81,7 @@ def build_cluster_validation_stats(
     probed = questions_asked > 0
     skip_reason = None
     if not probed:
+        # Derive why cluster_probe layer was skipped (settled, weak signal, etc.).
         probe_action = cluster_confidence_engine.probe_action(provisional_score)
         if probe_action == "skip":
             if provisional_score >= 80:

@@ -1,3 +1,5 @@
+"""Layer 1 — sync demographics and address to the selected CustomerProfile."""
+
 from django.db import transaction
 from rest_framework import serializers
 

@@ -1,3 +1,5 @@
+"""Resolve X-Customer-Profile-ID (or main profile) for baseline/medical layers."""
+
 from rest_framework.exceptions import NotFound, ValidationError
 
 from accounts.customers.models import Customer, CustomerProfile

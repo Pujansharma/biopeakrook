@@ -1,3 +1,5 @@
+"""Session lookup helpers shared by views and layer execution."""
+
 from rest_framework.exceptions import NotFound
 
 from pre_consultation.models import PreConsultationSession

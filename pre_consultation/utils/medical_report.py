@@ -1,3 +1,5 @@
+"""Medical report upload validation and S3 key generation."""
+
 import os
 import uuid
 

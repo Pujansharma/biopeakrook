@@ -1,3 +1,5 @@
+"""Layer 8 — lifestyle answers; triggers lifestyle + cluster score computation."""
+
 from django.utils import timezone
 from rest_framework import serializers
 

@@ -1,3 +1,5 @@
+"""Layer 6 — cluster validation probes for probe-flagged clusters (conditional)."""
+
 from rest_framework import serializers
 
 from django.utils import timezone

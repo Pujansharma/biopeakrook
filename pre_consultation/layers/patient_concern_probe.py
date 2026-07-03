@@ -1,3 +1,5 @@
+"""Layer 5 — concern deep-dive probes; computes per-concern confidence scores."""
+
 from rest_framework import serializers
 
 from django.utils import timezone

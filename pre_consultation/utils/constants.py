@@ -1,3 +1,5 @@
+"""TextChoices and enums for pre-consultation session state and layer IDs."""
+
 from django.db import models
 
 
@@ -12,6 +14,8 @@ class PreConsultationSessionStatus(models.TextChoices):
 
 
 class PreConsultationLayerProgression(models.TextChoices):
+    """Ordered health-map layers; enum order matches client progression."""
+
     PATIENT_BASELINE = "patient_baseline", "Patient Baseline"
     PATIENT_CATEGORY = "patient_category", "Patient Category"
     PATIENT_CONCERN = "patient_concern", "Patient Concern"

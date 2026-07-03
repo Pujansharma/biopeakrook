@@ -1,3 +1,5 @@
+"""Layer 4 — symptoms, sources, and family history per selected concern."""
+
 from rest_framework import serializers
 
 from pre_consultation.models import (

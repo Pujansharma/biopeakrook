@@ -1,9 +1,13 @@
+"""Layer response helpers — directive JSON key aliasing and payload serialization."""
+
 from typing import Type
 
 from rest_framework import serializers
 
 
 class DirectiveJsonKeyCharField(serializers.CharField):
+    """Expose directive JSON keys like icon-class under valid Python field names."""
+
     def __init__(self, json_key: str, **kwargs):
         self.json_key = json_key
         super().__init__(**kwargs)

@@ -1,3 +1,5 @@
+"""Session lifecycle endpoints: start, complete, and final result summary."""
+
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
