@@ -48,6 +48,6 @@ class ProductDetailView(BaseRetrieveUpdateDestroyAPIView):
         provider = instance.provider
         try:
             super().perform_destroy(instance)
-        except (ProtectedError, RestrictedError):
+        except ProtectedError, RestrictedError:
             self.raise_bad_request("This product cannot be deleted")
         update_provider_products_count(provider.pk)

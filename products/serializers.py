@@ -99,10 +99,16 @@ class ProviderSerializer(BaseModelSerializer):
     created_by = BaseUserSerializer(read_only=True)
     products = serializers.SerializerMethodField(read_only=True)
     required_fields = serializers.ListField(
-        child=serializers.CharField(allow_blank=True), required=False, allow_empty=True, allow_null=True
+        child=serializers.CharField(allow_blank=True),
+        required=False,
+        allow_empty=True,
+        allow_null=True,
     )
     fetch_fields = serializers.ListField(
-        child=serializers.CharField(allow_blank=True), required=False, allow_empty=True, allow_null=True
+        child=serializers.CharField(allow_blank=True),
+        required=False,
+        allow_empty=True,
+        allow_null=True,
     )
 
     class Meta:
@@ -133,7 +139,7 @@ class ProviderSerializer(BaseModelSerializer):
         read_only_fields = ["id", "code", "created_at", "updated_at"]
 
     def get_products(self, instance):
-        _products = getattr(instance, 'products', None)
+        _products = getattr(instance, "products", None)
         if not _products:
             return None
         qs = _products.all()[:3]
@@ -146,8 +152,8 @@ class ProviderSerializer(BaseModelSerializer):
         required_fields = list(filter(None, _required_fields))
         fetch_fields = list(filter(None, _fetch_fields))
 
-        attrs['required_fields'] = required_fields
-        attrs['fetch_fields'] = fetch_fields
+        attrs["required_fields"] = required_fields
+        attrs["fetch_fields"] = fetch_fields
         return attrs
 
     def create(self, validated_data: dict) -> Provider:

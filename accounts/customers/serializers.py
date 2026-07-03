@@ -112,6 +112,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "date_of_birth",
             "image",
             "is_main",
+            "is_legacy",
             "is_onboarding_complete",
             "created_at",
             "updated_at",
@@ -860,7 +861,7 @@ class CustomerCenterAssignmentSerializer(BaseModelSerializer):
 
 
 class CustomerProfileAddressSerializer(BaseModelSerializer):
-    address_type_code = serializers.CharField(source='address_type', read_only=True)
+    address_type_code = serializers.CharField(source="address_type", read_only=True)
 
     class Meta:
         model = CustomerProfileAddress

@@ -1,7 +1,10 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils.translation import gettext_lazy as _
 
 from accounts.customers.utils.constants import AddressType
+from accounts.organizations.utils.constants import FeatureTabOptions
 from accounts.users.models import AbstractUserProfile
 from accounts.utils import get_user_model
 from core.utils.fields import PhoneNumberField
@@ -46,7 +49,10 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
         Customer, on_delete=models.PROTECT, related_name="profiles"
     )
     is_main = models.BooleanField(default=False, editable=False)
-    is_onboarding_complete = models.BooleanField(default=False, editable=False)
+
+    is_legacy = models.BooleanField(default=False)
+    is_onboarding_complete = models.BooleanField(default=False)
+
     created_by = models.ForeignKey(
         User,
         null=True,
@@ -203,6 +209,32 @@ class CustomerProfileAddress(BaseUUIDModel):
                 name="uniq_default_customer_profile_address",
             )
         ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CustomerProfileFeature(BaseUUIDModel):
+    customer_profile = models.OneToOneField(
+        CustomerProfile, on_delete=models.CASCADE, related_name="feature"
+    )
+
+    is_copilot_chat_enabled = models.BooleanField(
+        default=False,
+        help_text=_("Enables the Copilot Chat feature for this organization."),
+    )
+    is_stable = models.BooleanField(
+        default=False, help_text=_("Indicates if the app is stable or not")
+    )
+    enabled_tabs = ArrayField(
+        base_field=models.CharField(choices=FeatureTabOptions),
+        default=list,
+        blank=True,
+        help_text=_("List of tabs visible to profiles in this organization."),
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"

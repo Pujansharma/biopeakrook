@@ -58,7 +58,7 @@ class BaseServiceSerializerMeta(BaseSerializer):
         if missing_ids:
             raise serializers.ValidationError(
                 {
-                    "add_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
+                    "add_centers": f"Invalid center IDs provided: {', '.join(map(str, missing_ids))}"
                 }
             )
 
@@ -76,7 +76,7 @@ class BaseServiceSerializerMeta(BaseSerializer):
         if missing_ids:
             raise serializers.ValidationError(
                 {
-                    "remove_centers": f'Invalid center IDs provided: {", ".join(map(str, missing_ids))}'
+                    "remove_centers": f"Invalid center IDs provided: {', '.join(map(str, missing_ids))}"
                 }
             )
 

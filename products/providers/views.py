@@ -48,7 +48,7 @@ class ProviderListView(BaseListCreateAPIView):
 
         qs = (
             Provider.objects.select_related("created_by", "api")
-            .prefetch_related('products')
+            .prefetch_related("products")
             .annotate(has_api=Q(api__isnull=False))
             .filter(search, **filter_kwargs)
         )

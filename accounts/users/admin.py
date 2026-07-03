@@ -7,7 +7,6 @@ from core.utils.fields import PhoneNumberFormField
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "phone":
             kwargs["form_class"] = PhoneNumberFormField

@@ -323,7 +323,7 @@ class TherapyProgramSerializer(BaseModelSerializer):
             if missing_ids:
                 raise serializers.ValidationError(
                     {
-                        "add_redeemable_centers": f"Invalid center IDs provided: {", ".join(map(str, missing_ids))}"
+                        "add_redeemable_centers": f"Invalid center IDs provided: {', '.join(map(str, missing_ids))}"
                     }
                 )
 
@@ -332,7 +332,7 @@ class TherapyProgramSerializer(BaseModelSerializer):
             if missing_ids:
                 raise serializers.ValidationError(
                     {
-                        "add_services": f'Invalid service ID provided: {", ".join(map(str, missing_ids))}'
+                        "add_services": f"Invalid service ID provided: {', '.join(map(str, missing_ids))}"
                     }
                 )
 

@@ -51,7 +51,7 @@ class AssessmentServiceSerializerMeta(BaseServiceSerializerMeta):
         if missing_ids:
             raise serializers.ValidationError(
                 {
-                    "add_products": f'Invalid product IDs provided: {", ".join(map(str, missing_ids))}'
+                    "add_products": f"Invalid product IDs provided: {', '.join(map(str, missing_ids))}"
                 }
             )
 
@@ -72,7 +72,7 @@ class AssessmentServiceSerializerMeta(BaseServiceSerializerMeta):
         if missing_ids:
             raise serializers.ValidationError(
                 {
-                    "remove_products": f'Invalid product IDs provided: {", ".join(map(str, missing_ids))}'
+                    "remove_products": f"Invalid product IDs provided: {', '.join(map(str, missing_ids))}"
                 }
             )
 
