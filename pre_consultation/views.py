@@ -1,5 +1,6 @@
 """Session lifecycle endpoints: start, complete, and final result summary."""
 
+from django.db import transaction
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
@@ -17,8 +18,10 @@ from pre_consultation.serializers import (
     PreConsultationSessionResponseSerializer,
     PreConsultationSessionStartSerializer,
 )
+from pre_consultation.customer_profile import resolve_customer_profile_for_request
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
+    guard_onboarding_incomplete_for_mutation,
     is_session_completed,
 )
 from pre_consultation.utils.api import pre_consultation_response
@@ -61,6 +64,10 @@ class PreConsultationSessionStartView(BaseGenericAPIView, PostMethodMixin):
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        onboarding_conflict = guard_onboarding_incomplete_for_mutation(request)
+        if onboarding_conflict is not None:
+            return onboarding_conflict
 
         session = PreConsultationSession.objects.filter(user=request.user).first()
 
@@ -167,9 +174,19 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
                 "Session must be at patient_goals_priorities before completion."
             )
 
-        session.status = PreConsultationSessionStatus.COMPLETED
-        session.completed_at = timezone.now()
-        session.save(update_fields=["status", "completed_at", "updated_at"])
+        with transaction.atomic():
+            session.status = PreConsultationSessionStatus.COMPLETED
+            session.completed_at = timezone.now()
+            session.save(update_fields=["status", "completed_at", "updated_at"])
+
+            customer_profile = resolve_customer_profile_for_request(
+                request.user,
+                getattr(request, "customer_profile_id", None),
+            )
+            customer_profile.is_onboarding_complete = True
+            customer_profile.save(
+                update_fields=["is_onboarding_complete", "updated_at"]
+            )
 
         return pre_consultation_response(
             success=True,

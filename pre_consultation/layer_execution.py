@@ -19,6 +19,7 @@ from pre_consultation.models import PreConsultationSession
 from pre_consultation.serializers import PreConsultationSessionResponseSerializer
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
+    guard_onboarding_incomplete_for_mutation,
     is_session_completed,
 )
 from pre_consultation.utils.api import pre_consultation_response
@@ -129,6 +130,10 @@ def execute_layer_put(request: Request, layer_handler: LayerHandler) -> Response
             data=PreConsultationSessionResponseSerializer(session).data,
             status_code=status.HTTP_409_CONFLICT,
         )
+
+    onboarding_conflict = guard_onboarding_incomplete_for_mutation(request, session)
+    if onboarding_conflict is not None:
+        return onboarding_conflict
 
     if not layer_handler.is_implemented:
         return pre_consultation_response(
