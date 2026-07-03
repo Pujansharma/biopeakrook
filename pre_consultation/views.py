@@ -110,10 +110,10 @@ class PreConsultationSessionStartView(BaseGenericAPIView, PostMethodMixin):
 @extend_schema_view(
     get=extend_schema(
         tags=[PRE_CONSULTATION_SESSION_TAG],
-        description="Step 12 — Session summary (completed sessions only).",
+        description="Step 11 — Health map summary via GET result (in-progress or completed).",
         responses={
             200: SESSION_RESULT_ENVELOPE,
-            409: SESSION_CONFLICT_ENVELOPE,
+            404: None,
         },
     ),
 )
@@ -122,13 +122,6 @@ class PreConsultationSessionResultView(BaseGenericAPIView, GetMethodMixin):
 
     def get(self, request, *args, **kwargs):
         session = get_user_pre_consultation_session(request.user)
-
-        if not is_session_completed(session):
-            return pre_consultation_response(
-                success=False,
-                data=PreConsultationSessionResponseSerializer(session).data,
-                status_code=status.HTTP_409_CONFLICT,
-            )
 
         result_payload = build_session_result_payload(session)
         response_data = PreConsultationSessionResultSerializer(result_payload).data
@@ -143,8 +136,8 @@ class PreConsultationSessionResultView(BaseGenericAPIView, GetMethodMixin):
     post=extend_schema(
         tags=[PRE_CONSULTATION_SESSION_TAG],
         description=(
-            "Step 11 — Mark session completed. "
-            "Requires current_layer = patient_goals_priorities."
+            "Step 12 — Mark session completed. "
+            "Requires current_layer = patient_health_map."
         ),
         request=None,
         responses={
@@ -166,12 +159,9 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
                 status_code=status.HTTP_409_CONFLICT,
             )
 
-        if (
-            session.current_layer
-            != PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
-        ):
+        if session.current_layer != PreConsultationLayerProgression.PATIENT_HEALTH_MAP:
             raise ValidationError(
-                "Session must be at patient_goals_priorities before completion."
+                "Session must be at patient_health_map before completion."
             )
 
         with transaction.atomic():

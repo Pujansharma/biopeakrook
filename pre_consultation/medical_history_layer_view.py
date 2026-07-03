@@ -69,21 +69,6 @@ def execute_medical_history_report_upload(request: Request) -> Response:
             status_code=status.HTTP_409_CONFLICT,
         )
 
-    if (
-        session.current_layer
-        != PreConsultationLayerProgression.PATIENT_MEDICAL_HISTORY_CONTEXT
-    ):
-        return pre_consultation_response(
-            success=False,
-            data={
-                "detail": (
-                    "Medical reports can only be uploaded on the "
-                    "patient_medical_history_context layer."
-                )
-            },
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
     upload_serializer = PatientMedicalHistoryContextMedicalReportUploadSerializer(
         data=request.data,
     )
@@ -119,7 +104,7 @@ def execute_medical_history_report_upload(request: Request) -> Response:
         tags=[PRE_CONSULTATION_LAYER_TAG],
         description=(
             "Upload one medical report file for the active session. "
-            "Allowed only when current_layer is patient_medical_history_context."
+            "Returns 409 when the session is completed."
         ),
         request=PatientMedicalHistoryContextMedicalReportUploadSerializer,
         responses={200: _POST_RESPONSE, 409: PreConsultationSessionConflictEnvelope},

@@ -1,4 +1,4 @@
-"""Layer 10 — ranked health goals; final layer before session completion."""
+"""Layer 10 — ranked health goals; advances to patient_health_map on save."""
 
 from django.utils import timezone
 from rest_framework import serializers
@@ -169,3 +169,7 @@ def persist_patient_goals_priorities_payload(
             for selection in validated_data
         ]
     )
+
+    if session.current_layer == PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES:
+        session.current_layer = PreConsultationLayerProgression.PATIENT_HEALTH_MAP
+        session.save(update_fields=["current_layer", "updated_at"])

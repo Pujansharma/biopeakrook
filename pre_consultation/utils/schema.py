@@ -26,7 +26,7 @@ PRE_CONSULTATION_OPENAPI_DESCRIPTION = (
     "start → patient_baseline → patient_category → patient_concern → "
     "patient_symptom → patient_concern_probe → patient_medical_history_context → "
     "patient_lifestyle_environment → patient_cluster_probe (conditional) → "
-    "patient_goals_priorities → complete → result. "
+    "patient_goals_priorities → patient_health_map (GET result) → complete. "
     "Human-readable reference: api-pre-consultation.md. "
     "OpenAPI schema: /pre-consultation/openapi/ · Swagger UI: /pre-consultation/openapi/docs/."
 )
@@ -42,8 +42,8 @@ PRE_CONSULTATION_PATH_ORDER: tuple[str, ...] = (
     "/pre-consultation/session/patient_lifestyle_environment/",
     "/pre-consultation/session/patient_cluster_probe/",
     "/pre-consultation/session/patient_goals_priorities/",
-    "/pre-consultation/session/complete/",
     "/pre-consultation/session/result/",
+    "/pre-consultation/session/complete/",
 )
 
 LAYER_STEP_SUMMARIES: dict[str, str] = {
@@ -198,7 +198,7 @@ def postprocess_pre_consultation_schema(
     result["tags"] = [
         {
             "name": PRE_CONSULTATION_SESSION_TAG,
-            "description": "Steps 1, 11–12: session start, complete, and result.",
+            "description": "Steps 1, 11–12: session start, result (health map), and complete.",
         },
         {
             "name": PRE_CONSULTATION_LAYER_TAG,
@@ -222,6 +222,8 @@ def build_layer_put_description(layer_id: str) -> str:
         extra = " Returns `data.next_layer` for cluster-probe routing."
     elif layer_id == PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE:
         extra = " Skipped unless lifestyle routes here."
+    elif layer_id == PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES:
+        extra = " Advances current_layer to patient_health_map."
     return f"Step {step} — Save `{layer_id}` ({summary}).{extra}"
 
 

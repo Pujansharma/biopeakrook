@@ -31,6 +31,7 @@ class PreConsultationLayerProgression(models.TextChoices):
         "Patient Lifestyle Environment",
     )
     PATIENT_GOALS_PRIORITIES = "patient_goals_priorities", "Patient Goals Priorities"
+    PATIENT_HEALTH_MAP = "patient_health_map", "Patient Health Map"
 
 
 class PatientBaselineGender(models.TextChoices):
