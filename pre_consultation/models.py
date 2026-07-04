@@ -3,6 +3,8 @@
 One PreConsultationSession per user tracks layer progression and client metadata.
 Layer answers persist as normalized rows (concerns, medical history, lifestyle, etc.).
 Cluster scores are computed on write and stored in PreConsultationSessionClusterScore.
+Post-completion AI outputs persist in PreConsultationSessionArtifacts,
+PreConsultationPreparationChecklistItem, and PreConsultationMedicalReportSummary.
 """
 
 from django.db import models
@@ -11,6 +13,7 @@ from accounts.utils import get_user_model
 from core.utils.models import BaseUUIDModel
 from pre_consultation.utils.medical_report import medical_report_upload_to
 from pre_consultation.utils.constants import (
+    PreConsultationArtifactGenerationStatus,
     PreConsultationLayerProgression,
     PreConsultationMedicationStatus,
     PreConsultationSessionInterface,
@@ -438,6 +441,79 @@ class PreConsultationHealthGoal(BaseUUIDModel):
                 name="pre_consultation_health_goal_priority_unique",
             ),
         ]
+
+    def __str__(self) -> str:
+        return f"{self.pk}"
+
+
+# --- Post-completion AI artifacts (generated after session/complete) --------
+
+class PreConsultationSessionArtifacts(BaseUUIDModel):
+    """Session-level generated summaries; one row per completed session."""
+
+    session = models.OneToOneField(
+        PreConsultationSession,
+        on_delete=models.CASCADE,
+        related_name="artifacts",
+    )
+    summary = models.TextField(blank=True, default="")
+    quick_summary = models.TextField(blank=True, default="")
+    family_risk_summary = models.TextField(blank=True, default="")
+    generation_status = models.CharField(
+        max_length=20,
+        choices=PreConsultationArtifactGenerationStatus.choices,
+        default=PreConsultationArtifactGenerationStatus.PENDING,
+        db_index=True,
+    )
+    generation_started_at = models.DateTimeField(null=True, blank=True)
+    generation_completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "pre_consultation_session_artifacts"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.pk}"
+
+
+class PreConsultationPreparationChecklistItem(BaseUUIDModel):
+    """Consultation prep checklist item; identified_concern is generated, marked is user-toggleable."""
+
+    session = models.ForeignKey(
+        PreConsultationSession,
+        on_delete=models.CASCADE,
+        related_name="preparation_checklist_items",
+    )
+    identified_concern = models.TextField()
+    marked = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "pre_consultation_preparation_checklist_item"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.pk}"
+
+
+class PreConsultationMedicalReportSummary(BaseUUIDModel):
+    """Generated summary for one uploaded medical report."""
+
+    medical_report = models.OneToOneField(
+        PreConsultationMedicalReport,
+        on_delete=models.CASCADE,
+        related_name="summary",
+    )
+    summary = models.TextField(blank=True, default="")
+    generation_status = models.CharField(
+        max_length=20,
+        choices=PreConsultationArtifactGenerationStatus.choices,
+        default=PreConsultationArtifactGenerationStatus.PENDING,
+        db_index=True,
+    )
+
+    class Meta:
+        db_table = "pre_consultation_medical_report_summary"
+        ordering = ["created_at"]
 
     def __str__(self) -> str:
         return f"{self.pk}"

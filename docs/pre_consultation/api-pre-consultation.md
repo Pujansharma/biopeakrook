@@ -19,11 +19,11 @@
 8  patient_lifestyle_environment
 9  patient_cluster_probe          (conditional)
 10 patient_goals_priorities
-11 POST session/complete
-12 GET session/result
+11 patient_health_map              GET session/result
+12 POST session/complete
 ```
 
-Steps 2–10: `GET` load → `PUT` save. Step 7: optional `POST` file upload(s) before `PUT`.
+Steps 2–10: `GET` load → `PUT` save. Step 7: optional `POST` file upload(s) before `PUT`. Step 11: health map UI loads via `GET /session/result/` (`current_layer` = `patient_health_map`).
 
 ---
 
@@ -41,13 +41,13 @@ Steps 2–10: `GET` load → `PUT` save. Step 7: optional `POST` file upload(s) 
   "success": false,
   "data": {
     "status": "completed",
-    "current_layer": "patient_goals_priorities"
+    "current_layer": "patient_health_map"
   }
 }
 ```
 
 - Layer PUT advances `current_layer` only when session is already on that layer (see per-step side effects).
-- Step 11 sets `status = completed`, `completed_at = now`. Further layer PUTs → `409`.
+- Step 12 sets `status = completed`, `completed_at = now`. Further layer PUTs → `409`.
 
 ### Cascade reset on PUT
 
@@ -996,46 +996,25 @@ Only concerns in flagged clusters (`final_score` 65–80).
 #### Side effects
 
 - Replaces all `PreConsultationHealthGoal` rows.
-- Does **not** advance `current_layer` — proceed to step 11.
+- `current_layer` → `patient_health_map` when on `patient_goals_priorities`.
 
 ---
 
-## Step 11 — POST `/session/complete/`
+## Step 11 — `patient_health_map`
 
-No request body.
+After step 10 PUT, `current_layer` is `patient_health_map`. Client renders health map from `GET /session/result/`.
 
-| Status | When | Body |
-|---|---|---|
-| `200` | Marked completed | `{ "success": true, "data": { "status": "completed", "current_layer" } }` |
-| `400` | `current_layer` ≠ `patient_goals_priorities` | `{ "detail": "..." }` |
-| `409` | Already completed | `{ "success": false, "data": { ... } }` |
-| `404` | No session | |
+| Field | Value |
+|---|---|
+| `current_layer` | `patient_health_map` |
 
-```json
-{
-  "success": true,
-  "data": {
-    "status": "completed",
-    "current_layer": "patient_goals_priorities"
-  }
-}
-```
+### GET `/session/result/`
 
-### Side effects
-
-- `status` → `completed`, `completed_at` → now.
-- Blocks further layer PUTs (`409`).
-
----
-
-## Step 12 — GET `/session/result/`
-
-Read-only summary. Completed sessions only.
+Read-only summary. Call during step 11 (also available after completion).
 
 | Status | When |
 |---|---|
-| `200` | Session completed |
-| `409` | Still in progress — `{ "success": false, "data": { "status", "current_layer" } }` |
+| `200` | Session exists |
 | `404` | No session |
 
 #### Response `data`
@@ -1078,3 +1057,31 @@ Read-only summary. Completed sessions only.
   }
 }
 ```
+
+---
+
+## Step 12 — POST `/session/complete/`
+
+No request body.
+
+| Status | When | Body |
+|---|---|---|
+| `200` | Marked completed | `{ "success": true, "data": { "status": "completed", "current_layer" } }` |
+| `400` | `current_layer` ≠ `patient_health_map` | `{ "detail": "..." }` |
+| `409` | Already completed | `{ "success": false, "data": { ... } }` |
+| `404` | No session | |
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "current_layer": "patient_health_map"
+  }
+}
+```
+
+### Side effects
+
+- `status` → `completed`, `completed_at` → now.
+- Blocks further layer PUTs (`409`).

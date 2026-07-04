@@ -51,3 +51,10 @@ class PreConsultationMedicationStatus(models.TextChoices):
     MEDICATION = "medication", "Medication"
     SUPPLEMENTS = "supplements", "Supplements"
     MEDICATION_SUPPLEMENT = "medication_supplement", "Medication Supplement"
+
+
+class PreConsultationArtifactGenerationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    IN_PROGRESS = "in_progress", "In Progress"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
