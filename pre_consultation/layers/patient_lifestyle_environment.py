@@ -183,7 +183,9 @@ def get_probe_flagged_cluster_ids(session: PreConsultationSession) -> set[str]:
 def resolve_next_layer_from_cluster_confidence(
     session: PreConsultationSession,
 ) -> str:
-    if get_probe_flagged_cluster_ids(session):
+    from pre_consultation.cluster_probe_session import session_requires_cluster_probe
+
+    if session_requires_cluster_probe(session):
         return PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE
     return PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
 

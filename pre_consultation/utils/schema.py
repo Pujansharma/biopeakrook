@@ -18,6 +18,7 @@ CUSTOMER_PROFILE_HEADER = OpenApiParameter(
 
 PRE_CONSULTATION_LAYER_TAG = "Pre-Consultation Layers"
 PRE_CONSULTATION_SESSION_TAG = "Pre-Consultation Session"
+PRE_CONSULTATION_RESULT_TAG = "Pre-Consultation Result"
 
 PRE_CONSULTATION_OPENAPI_TITLE = "Biopeak Nexus Pre-Consultation API"
 PRE_CONSULTATION_OPENAPI_DESCRIPTION = (
@@ -44,6 +45,16 @@ PRE_CONSULTATION_PATH_ORDER: tuple[str, ...] = (
     "/pre-consultation/session/patient_goals_priorities/",
     "/pre-consultation/session/result/",
     "/pre-consultation/session/complete/",
+    "/pre-consultation/result/{user_id}/overview/",
+    "/pre-consultation/result/{user_id}/checklist/{item_id}/",
+    "/pre-consultation/result/{user_id}/context/",
+    "/pre-consultation/result/{user_id}/family-risk/",
+    "/pre-consultation/result/{user_id}/health-map/",
+    "/pre-consultation/result/{user_id}/clusters/",
+    "/pre-consultation/result/{user_id}/lifestyle/",
+    "/pre-consultation/result/{user_id}/medical-context/",
+    "/pre-consultation/result/{user_id}/raw-data/",
+    "/pre-consultation/result/{user_id}/notes/",
 )
 
 LAYER_STEP_SUMMARIES: dict[str, str] = {

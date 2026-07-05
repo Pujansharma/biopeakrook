@@ -20,6 +20,18 @@ from pre_consultation.openapi_views import (
     PreConsultationSpectacularAPIView,
     PreConsultationSpectacularSwaggerView,
 )
+from pre_consultation.result_views import (
+    PreConsultationResultChecklistItemView,
+    PreConsultationResultClustersView,
+    PreConsultationResultContextView,
+    PreConsultationResultFamilyRiskView,
+    PreConsultationResultHealthMapView,
+    PreConsultationResultLifestyleView,
+    PreConsultationResultMedicalContextView,
+    PreConsultationResultNotesView,
+    PreConsultationResultOverviewView,
+    PreConsultationResultRawDataView,
+)
 from pre_consultation.views import (
     PreConsultationSessionCompleteView,
     PreConsultationSessionResultView,
@@ -112,5 +124,55 @@ urlpatterns = [
         "session/patient_goals_priorities/",
         PatientGoalsPrioritiesLayerView.as_view(),
         name="session-patient-goals-priorities",
+    ),
+    path(
+        "result/<uuid:user_id>/overview/",
+        PreConsultationResultOverviewView.as_view(),
+        name="result-overview",
+    ),
+    path(
+        "result/<uuid:user_id>/checklist/<uuid:item_id>/",
+        PreConsultationResultChecklistItemView.as_view(),
+        name="result-checklist-item",
+    ),
+    path(
+        "result/<uuid:user_id>/context/",
+        PreConsultationResultContextView.as_view(),
+        name="result-context",
+    ),
+    path(
+        "result/<uuid:user_id>/family-risk/",
+        PreConsultationResultFamilyRiskView.as_view(),
+        name="result-family-risk",
+    ),
+    path(
+        "result/<uuid:user_id>/health-map/",
+        PreConsultationResultHealthMapView.as_view(),
+        name="result-health-map",
+    ),
+    path(
+        "result/<uuid:user_id>/clusters/",
+        PreConsultationResultClustersView.as_view(),
+        name="result-clusters",
+    ),
+    path(
+        "result/<uuid:user_id>/lifestyle/",
+        PreConsultationResultLifestyleView.as_view(),
+        name="result-lifestyle",
+    ),
+    path(
+        "result/<uuid:user_id>/medical-context/",
+        PreConsultationResultMedicalContextView.as_view(),
+        name="result-medical-context",
+    ),
+    path(
+        "result/<uuid:user_id>/raw-data/",
+        PreConsultationResultRawDataView.as_view(),
+        name="result-raw-data",
+    ),
+    path(
+        "result/<uuid:user_id>/notes/",
+        PreConsultationResultNotesView.as_view(),
+        name="result-notes",
     ),
 ]

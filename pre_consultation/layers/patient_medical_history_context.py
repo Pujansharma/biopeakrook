@@ -7,7 +7,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from pre_consultation.customer_profile import resolve_customer_profile_for_request
-from pre_consultation.gender_mapping import profile_gender_to_baseline_gender
+from pre_consultation.gender_mapping import (
+    baseline_gender_supports_sex_gated_content,
+    profile_gender_to_baseline_gender,
+)
 from pre_consultation.models import (
     PreConsultationAllergy,
     PreConsultationDiagnosis,
@@ -45,6 +48,7 @@ EMPTY_PATIENT_MEDICAL_HISTORY_CONTEXT_PAYLOAD = {
     "reproductive_diagnosis": [],
     "allergies": [],
     "surgeries": [],
+    "medication_status": "",
     "medication": [],
     "sexual_health_question": [],
     "medical_reports": [],
@@ -165,6 +169,12 @@ class PatientMedicalHistoryContextRequestSerializer(serializers.Serializer):
 
     def validate_reproductive_diagnosis_ids(self, value: list[str]) -> list[str]:
         gender = self.context["gender"]
+        if not baseline_gender_supports_sex_gated_content(gender):
+            if value:
+                raise serializers.ValidationError(
+                    "Reproductive diagnoses are not applicable for this gender."
+                )
+            return value
         return validate_unique_ids(
             value,
             get_valid_reproductive_diagnosis_ids_for_gender(gender),
@@ -199,11 +209,22 @@ class PatientMedicalHistoryContextRequestSerializer(serializers.Serializer):
 
         gender = self.context["gender"]
         age_years = self.context.get("age_years")
-        validate_sexual_health_answers(
-            attrs.get("sexual_health_question", []),
-            gender,
-            age_years,
-        )
+        sexual_health_question = attrs.get("sexual_health_question", [])
+        if not baseline_gender_supports_sex_gated_content(gender):
+            if sexual_health_question:
+                raise serializers.ValidationError(
+                    {
+                        "sexual_health_question": (
+                            "Sexual health questions are not applicable for this gender."
+                        )
+                    }
+                )
+        else:
+            validate_sexual_health_answers(
+                sexual_health_question,
+                gender,
+                age_years,
+            )
 
         return attrs
 
@@ -264,6 +285,12 @@ class PatientMedicalHistoryContextResponseSerializer(serializers.Serializer):
     )
     allergies = serializers.ListField(child=serializers.CharField())
     surgeries = PatientMedicalHistoryContextSurgeryResponseSerializer(many=True)
+    medication_status = serializers.ChoiceField(
+        choices=PreConsultationMedicationStatus.choices,
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+    )
     medication = PatientMedicalHistoryContextMedicationResponseSerializer(many=True)
     sexual_health_question = (
         PatientMedicalHistoryContextSexualHealthQuestionResponseSerializer(many=True)
@@ -499,28 +526,35 @@ def load_patient_medical_history_context_payload(
         return EMPTY_PATIENT_MEDICAL_HISTORY_CONTEXT_PAYLOAD
 
     stored = load_medical_history_from_db(session)
-    selected_option_map = build_selected_option_map(
-        stored["sexual_health_answers"],
-        gender,
-    )
+    if not baseline_gender_supports_sex_gated_content(gender):
+        reproductive_diagnosis: list[dict] = []
+        sexual_health_question: list[dict] = []
+    else:
+        selected_option_map = build_selected_option_map(
+            stored["sexual_health_answers"],
+            gender,
+        )
+        reproductive_diagnosis = build_diagnosis_response(
+            get_directive_reproductive_diagnoses_for_gender(gender),
+            stored["selected_reproductive_diagnosis_ids"],
+        )
+        sexual_health_question = build_sexual_health_question_response(
+            gender,
+            age_years,
+            selected_option_map,
+        )
 
     return {
         "diagnosis": build_diagnosis_response(
             get_directive_diagnoses(),
             stored["selected_diagnosis_ids"],
         ),
-        "reproductive_diagnosis": build_diagnosis_response(
-            get_directive_reproductive_diagnoses_for_gender(gender),
-            stored["selected_reproductive_diagnosis_ids"],
-        ),
+        "reproductive_diagnosis": reproductive_diagnosis,
         "allergies": stored["allergies"],
         "surgeries": stored["surgeries"],
+        "medication_status": stored["medication_status"],
         "medication": stored["medication"],
-        "sexual_health_question": build_sexual_health_question_response(
-            gender,
-            age_years,
-            selected_option_map,
-        ),
+        "sexual_health_question": sexual_health_question,
         "medical_reports": stored["medical_reports"],
     }
 

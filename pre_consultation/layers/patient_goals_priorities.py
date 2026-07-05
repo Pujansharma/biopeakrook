@@ -3,9 +3,6 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from pre_consultation.layers.patient_lifestyle_environment import (
-    get_probe_flagged_cluster_ids,
-)
 from pre_consultation.models import PreConsultationHealthGoal, PreConsultationSession
 from pre_consultation.utils.constants import PreConsultationLayerProgression
 from pre_consultation.utils.directive import (
@@ -54,7 +51,9 @@ class PatientGoalsPrioritiesResponseSerializer(serializers.Serializer):
 
 
 def resolve_previous_layer_for_session(session: PreConsultationSession) -> str:
-    if get_probe_flagged_cluster_ids(session):
+    from pre_consultation.cluster_probe_session import session_requires_cluster_probe
+
+    if session_requires_cluster_probe(session):
         return PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE
     return PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT
 

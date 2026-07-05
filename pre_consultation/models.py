@@ -17,6 +17,7 @@ from pre_consultation.utils.constants import (
     PreConsultationLayerProgression,
     PreConsultationMedicationStatus,
     PreConsultationSessionInterface,
+    PreConsultationSessionNoteCategory,
     PreConsultationSessionStatus,
 )
 
@@ -514,6 +515,29 @@ class PreConsultationMedicalReportSummary(BaseUUIDModel):
     class Meta:
         db_table = "pre_consultation_medical_report_summary"
         ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.pk}"
+
+
+class PreConsultationSessionNote(BaseUUIDModel):
+    """Associate-authored note linked to a completed pre-consultation session."""
+
+    session = models.ForeignKey(
+        PreConsultationSession,
+        on_delete=models.CASCADE,
+        related_name="notes",
+    )
+    note = models.TextField()
+    category = models.CharField(
+        max_length=20,
+        choices=PreConsultationSessionNoteCategory.choices,
+        db_index=True,
+    )
+
+    class Meta:
+        db_table = "pre_consultation_session_note"
+        ordering = ["-created_at"]
 
     def __str__(self) -> str:
         return f"{self.pk}"

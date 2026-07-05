@@ -12,6 +12,7 @@ from accounts.customers.models import CustomerProfile
 from accounts.users.models import User
 from core.utils.request import Request
 from pre_consultation.customer_profile import resolve_customer_profile_for_request
+from pre_consultation.cluster_probe_session import reconcile_cluster_probe_progression
 from pre_consultation.layers.base import LayerHandler
 from pre_consultation.layers.reset import reset_dependent_layers
 from pre_consultation.layers.serialization import serialize_layer_payload
@@ -22,6 +23,7 @@ from pre_consultation.session_utils import (
     guard_onboarding_incomplete_for_mutation,
     is_session_completed,
 )
+from pre_consultation.utils.constants import PreConsultationLayerProgression
 from pre_consultation.utils.api import pre_consultation_response
 
 
@@ -95,6 +97,12 @@ def build_put_serializer_context(
 
 def execute_layer_get(request: Request, layer_handler: LayerHandler) -> Response:
     session = get_user_pre_consultation_session(request.user)
+
+    if (
+        layer_handler.layer_id
+        == PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE
+    ):
+        reconcile_cluster_probe_progression(session)
 
     if not layer_handler.is_implemented:
         return pre_consultation_response(
@@ -171,6 +179,7 @@ def execute_layer_put(request: Request, layer_handler: LayerHandler) -> Response
             validated_data,
             customer_profile=customer_profile,
         )
+        reconcile_cluster_probe_progression(session)
 
     if not layer_handler.put_includes_data:
         return pre_consultation_response(

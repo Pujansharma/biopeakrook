@@ -205,6 +205,62 @@ def get_directive_cluster_label_map() -> dict[str, str]:
     return {cluster["id"]: cluster["label"] for cluster in get_directive_clusters()}
 
 
+def get_directive_impact_label_map(impact_key: str) -> dict[str, str]:
+    accessor_by_key = {
+        "functional_impact": get_directive_functional_impacts,
+        "duration_impact": get_directive_duration_impacts,
+        "progression_impact": get_directive_progression_impacts,
+    }
+    return {
+        impact_row["id"]: impact_row["label"]
+        for impact_row in accessor_by_key[impact_key]()
+    }
+
+
+def get_directive_age_band_label_map() -> dict[str, str]:
+    return {age_band["id"]: age_band["label"] for age_band in get_directive_age_bands()}
+
+
+def get_directive_family_relation_label_map() -> dict[str, str]:
+    return {
+        family_relation["id"]: family_relation["label"]
+        for family_relation in get_directive_family_relations()
+    }
+
+
+def get_directive_symptom_label_map() -> dict[str, str]:
+    return {symptom["id"]: symptom["label"] for symptom in get_directive_symptoms()}
+
+
+def get_directive_diagnosis_label_map() -> dict[str, str]:
+    return {diagnosis["id"]: diagnosis["label"] for diagnosis in get_directive_diagnoses()}
+
+
+def get_directive_concern_metadata_map() -> dict[str, dict]:
+    return {
+        concern["id"]: concern for concern in get_directive_data()["concern"]
+    }
+
+
+def get_directive_cluster_metadata_map() -> dict[str, dict]:
+    return {cluster["id"]: cluster for cluster in get_directive_data()["cluster"]}
+
+
+def get_directive_lifestyle_signal_label_map() -> dict[str, str]:
+    lifestyle_field_label_by_id = {
+        lifestyle_field["id"]: lifestyle_field["label"]
+        for lifestyle_field in get_directive_lifestyle_fields()
+    }
+    signal_labels: dict[str, str] = {}
+    for lifestyle_signal in get_directive_data()["lifestyle_signal"]:
+        field_label = lifestyle_field_label_by_id.get(
+            lifestyle_signal["field_id"],
+            lifestyle_signal["field_id"],
+        )
+        signal_labels[lifestyle_signal["id"]] = field_label
+    return signal_labels
+
+
 def get_directive_cluster_display_map() -> dict[str, dict[str, str]]:
     return {
         cluster["id"]: {

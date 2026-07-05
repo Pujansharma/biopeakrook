@@ -37,6 +37,7 @@ class PreConsultationLayerProgression(models.TextChoices):
 class PatientBaselineGender(models.TextChoices):
     MALE = "male", "Male"
     FEMALE = "female", "Female"
+    OTHER = "other", "Other"
 
 
 class PreConsultationConcernSourceId(models.TextChoices):
@@ -58,3 +59,11 @@ class PreConsultationArtifactGenerationStatus(models.TextChoices):
     IN_PROGRESS = "in_progress", "In Progress"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
+
+
+class PreConsultationSessionNoteCategory(models.TextChoices):
+    GENERAL = "general", "General"
+    INVESTIGATION = "investigation", "Investigation"
+    TREATMENT = "treatment", "Treatment"
+    FOLLOW_UP = "follow_up", "Follow-up"
+    QUESTION = "question", "Question"
