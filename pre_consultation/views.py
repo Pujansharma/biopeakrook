@@ -18,7 +18,6 @@ from pre_consultation.serializers import (
     PreConsultationSessionResponseSerializer,
     PreConsultationSessionStartSerializer,
 )
-from pre_consultation.cluster_probe_session import reconcile_cluster_probe_progression
 from pre_consultation.customer_profile import resolve_customer_profile_for_request
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
@@ -86,7 +85,6 @@ class PreConsultationSessionStartView(BaseGenericAPIView, PostMethodMixin):
             session.save(
                 update_fields=[*serializer.validated_data.keys(), "updated_at"]
             )
-            reconcile_cluster_probe_progression(session)
             response_data = PreConsultationSessionResponseSerializer(session).data
             return pre_consultation_response(
                 success=True,

@@ -1,7 +1,7 @@
 """Shared GET/PUT orchestration for all pre-consultation layer endpoints.
 
-Resolves optional customer profile, validates input, persists layer data, and
-cascades resets to downstream layers when upstream answers change.
+Resolves optional customer profile, validates input, and persists layer data.
+Downstream rows are updated surgically in each layer persist handler (no blanket cascade).
 """
 
 from django.db import transaction
@@ -12,9 +12,7 @@ from accounts.customers.models import CustomerProfile
 from accounts.users.models import User
 from core.utils.request import Request
 from pre_consultation.customer_profile import resolve_customer_profile_for_request
-from pre_consultation.cluster_probe_session import reconcile_cluster_probe_progression
 from pre_consultation.layers.base import LayerHandler
-from pre_consultation.layers.reset import reset_dependent_layers
 from pre_consultation.layers.serialization import serialize_layer_payload
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.serializers import PreConsultationSessionResponseSerializer
@@ -23,7 +21,6 @@ from pre_consultation.session_utils import (
     guard_onboarding_incomplete_for_mutation,
     is_session_completed,
 )
-from pre_consultation.utils.constants import PreConsultationLayerProgression
 from pre_consultation.utils.api import pre_consultation_response
 
 
@@ -72,19 +69,6 @@ def call_layer_persist_payload(
     )
 
 
-def call_layer_has_changed(
-    layer_handler: LayerHandler,
-    session: PreConsultationSession,
-    validated_data: dict,
-    customer_profile: CustomerProfile | None = None,
-) -> bool:
-    if layer_handler.has_changed is None:
-        return True
-    if customer_profile is None:
-        return layer_handler.has_changed(session, validated_data)
-    return layer_handler.has_changed(session, validated_data, customer_profile)
-
-
 def build_put_serializer_context(
     layer_handler: LayerHandler,
     session: PreConsultationSession,
@@ -97,12 +81,6 @@ def build_put_serializer_context(
 
 def execute_layer_get(request: Request, layer_handler: LayerHandler) -> Response:
     session = get_user_pre_consultation_session(request.user)
-
-    if (
-        layer_handler.layer_id
-        == PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE
-    ):
-        reconcile_cluster_probe_progression(session)
 
     if not layer_handler.is_implemented:
         return pre_consultation_response(
@@ -163,15 +141,6 @@ def execute_layer_put(request: Request, layer_handler: LayerHandler) -> Response
     customer_profile = resolve_customer_profile_for_handler(request, layer_handler)
     validated_data = request_serializer.validated_data
     with transaction.atomic():
-        # Upstream edits invalidate downstream answers and derived cluster scores.
-        if call_layer_has_changed(
-            layer_handler,
-            session,
-            validated_data,
-            customer_profile=customer_profile,
-        ):
-            reset_dependent_layers(session, layer_handler.layer_id)
-
         call_layer_persist_payload(
             layer_handler,
             request.user,
@@ -179,7 +148,6 @@ def execute_layer_put(request: Request, layer_handler: LayerHandler) -> Response
             validated_data,
             customer_profile=customer_profile,
         )
-        reconcile_cluster_probe_progression(session)
 
     if not layer_handler.put_includes_data:
         return pre_consultation_response(

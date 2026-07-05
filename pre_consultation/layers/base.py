@@ -9,7 +9,7 @@ from rest_framework import serializers
 
 @dataclass(frozen=True)
 class LayerHandler:
-    """Wires serializers and load/persist/has_changed callables for one layer."""
+    """Wires serializers and load/persist callables for one layer."""
 
     layer_id: str
     request_serializer_class: Type[serializers.Serializer] | None = None
@@ -18,7 +18,6 @@ class LayerHandler:
     load_payload: Callable[[Any, Any], dict | None] | None = None
     load_put_payload: Callable[[Any, Any], dict | None] | None = None
     persist_payload: Callable[[Any, Any, dict], None] | None = None
-    has_changed: Callable[[Any, dict], bool] | None = None
     build_put_serializer_context: Callable[[Any, Any], dict] | None = None
     needs_customer_profile: bool = False
     put_includes_data: bool = True

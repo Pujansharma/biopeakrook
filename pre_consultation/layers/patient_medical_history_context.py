@@ -568,112 +568,6 @@ def build_patient_medical_history_put_context(session, request) -> dict:
     return {"gender": gender, "age_years": age_years, "session": session}
 
 
-def build_medical_history_layer_snapshot(session: PreConsultationSession) -> dict:
-    stored = load_medical_history_from_db(session)
-    return {
-        "selected_diagnosis_ids": tuple(sorted(stored["selected_diagnosis_ids"])),
-        "reproductive_diagnosis_ids": tuple(
-            sorted(stored["selected_reproductive_diagnosis_ids"])
-        ),
-        "allergies": tuple(stored["allergies"]),
-        "surgeries": tuple(
-            sorted(
-                (
-                    surgery["name"],
-                    surgery["area"],
-                    surgery["performed_when"],
-                    surgery["reason"],
-                )
-                for surgery in stored["surgeries"]
-            )
-        ),
-        "medication_status": stored["medication_status"],
-        "medications": tuple(
-            sorted(
-                (
-                    medication["name"],
-                    medication["dosage"],
-                    medication["frequency"],
-                    medication["duration"],
-                )
-                for medication in stored["medication"]
-            )
-        ),
-        "sexual_health_question": tuple(
-            sorted(
-                (
-                    answer["id"],
-                    answer["option_id"],
-                )
-                for answer in stored["sexual_health_answers"]
-            )
-        ),
-        "medical_report_ids": tuple(sorted(stored["medical_report_ids"])),
-    }
-
-
-def build_medical_history_layer_snapshot_from_validated(
-    validated_data: dict,
-) -> dict:
-    medications = validated_data.get("medications", [])
-    if validated_data["medication_status"] == PreConsultationMedicationStatus.NO:
-        medications = []
-    return {
-        "selected_diagnosis_ids": tuple(
-            sorted(validated_data["selected_diagnosis_ids"])
-        ),
-        "reproductive_diagnosis_ids": tuple(
-            sorted(validated_data["reproductive_diagnosis_ids"])
-        ),
-        "allergies": tuple(validated_data["allergies"]),
-        "surgeries": tuple(
-            sorted(
-                (
-                    surgery["name"],
-                    surgery["area"],
-                    surgery["performed_when"],
-                    surgery["reason"],
-                )
-                for surgery in validated_data["surgeries"]
-            )
-        ),
-        "medication_status": validated_data["medication_status"],
-        "medications": tuple(
-            sorted(
-                (
-                    medication["name"],
-                    medication["dosage"],
-                    medication["frequency"],
-                    medication["duration"],
-                )
-                for medication in medications
-            )
-        ),
-        "sexual_health_question": tuple(
-            sorted(
-                (
-                    answer["id"],
-                    answer["option_id"],
-                )
-                for answer in validated_data.get("sexual_health_question", [])
-            )
-        ),
-        "medical_report_ids": tuple(
-            sorted(validated_data.get("medical_report_ids", []))
-        ),
-    }
-
-
-def medical_history_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-    customer_profile=None,
-) -> bool:
-    return build_medical_history_layer_snapshot_from_validated(validated_data) != (
-        build_medical_history_layer_snapshot(session)
-    )
-
-
 def sync_medical_reports(
     medical_history: PreConsultationMedicalHistory,
     medical_report_ids: list[str],
@@ -806,12 +700,6 @@ def persist_patient_medical_history_context_payload(
 
     update_concern_probe_scores_for_session(session)
 
-    if (
-        session.current_layer
-        == PreConsultationLayerProgression.PATIENT_MEDICAL_HISTORY_CONTEXT
-    ):
-        session.current_layer = (
-            PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT
-        )
-        session.updated_at = timezone.now()
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT
+    session.updated_at = timezone.now()
+    session.save(update_fields=["current_layer", "updated_at"])

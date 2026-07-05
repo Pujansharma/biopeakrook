@@ -95,15 +95,6 @@ def load_patient_concern_payload(user, session: PreConsultationSession) -> dict:
     return build_patient_concern_payload(session)
 
 
-def concern_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-) -> bool:
-    submitted_ids = set(validated_data["concern_ids"])
-    stored_ids = get_session_concern_ids(session)
-    return submitted_ids != stored_ids
-
-
 def persist_patient_concern_payload(
     user, session: PreConsultationSession, validated_data: dict
 ) -> None:
@@ -125,9 +116,8 @@ def persist_patient_concern_payload(
         ]
     )
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_CONCERN:
-        session.current_layer = PreConsultationLayerProgression.PATIENT_SYMPTOM
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = PreConsultationLayerProgression.PATIENT_SYMPTOM
+    session.save(update_fields=["current_layer", "updated_at"])
 
 
 def build_patient_concern_put_context(session, request) -> dict:

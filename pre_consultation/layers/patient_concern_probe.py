@@ -191,37 +191,6 @@ def update_concern_probe_scores_for_session(session: PreConsultationSession) -> 
         )
 
 
-def build_concern_probe_layer_snapshot(session: PreConsultationSession) -> dict:
-    snapshot = {}
-    for concern in get_session_concerns_ordered(session):
-        snapshot[concern.concern_id] = (
-            concern.functional_impact_id,
-            concern.duration_impact_id,
-            concern.progression_impact_id,
-        )
-    return snapshot
-
-
-def build_concern_probe_layer_snapshot_from_validated(validated_data: dict) -> dict:
-    snapshot = {}
-    for concern_data in validated_data["concerns"]:
-        snapshot[concern_data["id"]] = (
-            concern_data["selected_functional_impact_id"],
-            concern_data["selected_duration_impact_id"],
-            concern_data["selected_progression_impact_id"],
-        )
-    return snapshot
-
-
-def concern_probe_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-) -> bool:
-    return build_concern_probe_layer_snapshot_from_validated(validated_data) != (
-        build_concern_probe_layer_snapshot(session)
-    )
-
-
 def persist_patient_concern_probe_payload(
     user, session: PreConsultationSession, validated_data: dict
 ) -> None:
@@ -235,8 +204,7 @@ def persist_patient_concern_probe_payload(
 
     update_concern_probe_scores_for_session(session)
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_CONCERN_PROBE:
-        session.current_layer = (
-            PreConsultationLayerProgression.PATIENT_MEDICAL_HISTORY_CONTEXT
-        )
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = (
+        PreConsultationLayerProgression.PATIENT_MEDICAL_HISTORY_CONTEXT
+    )
+    session.save(update_fields=["current_layer", "updated_at"])

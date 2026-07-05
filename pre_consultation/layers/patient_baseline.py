@@ -170,20 +170,6 @@ def persist_customer_profile_address(
     existing_address.save(update_fields=[*defaults.keys(), "updated_at"])
 
 
-def baseline_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-    customer_profile: CustomerProfile | None = None,
-) -> bool:
-    if customer_profile is None:
-        return False
-    submitted_gender = validated_data["gender"]
-    submitted_dob = validated_data["dob"]
-    stored_gender = profile_gender_to_baseline_gender(customer_profile.gender)
-    stored_dob = customer_profile.date_of_birth
-    return submitted_gender != stored_gender or submitted_dob != stored_dob
-
-
 def persist_patient_baseline_payload(
     user,
     session: PreConsultationSession,
@@ -235,6 +221,5 @@ def persist_patient_baseline_payload(
 
         persist_customer_profile_address(customer_profile, address)
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_BASELINE:
-        session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
+    session.save(update_fields=["current_layer", "updated_at"])

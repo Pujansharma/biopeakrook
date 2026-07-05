@@ -291,53 +291,6 @@ def build_patient_symptom_put_context(session, request) -> dict:
     return {"session_concern_ids": get_session_concern_ids(session)}
 
 
-def build_symptom_layer_snapshot(session: PreConsultationSession) -> dict:
-    snapshot = {}
-    for concern in get_session_concerns_ordered(session):
-        snapshot[concern.concern_id] = {
-            "selected_symptom_ids": sorted(
-                concern.symptoms.values_list("symptom_id", flat=True)
-            ),
-            "selected_concern_source_ids": sorted(
-                concern.sources.values_list("source_id", flat=True)
-            ),
-            "selected_family_relations": sorted(
-                [
-                    (family_history.relation_id, family_history.age_band_id)
-                    for family_history in concern.family_history.all()
-                ]
-            ),
-        }
-    return snapshot
-
-
-def build_symptom_layer_snapshot_from_validated(validated_data: dict) -> dict:
-    snapshot = {}
-    for concern_data in validated_data["concerns"]:
-        snapshot[concern_data["id"]] = {
-            "selected_symptom_ids": sorted(concern_data["selected_symptom_ids"]),
-            "selected_concern_source_ids": sorted(
-                concern_data["selected_concern_source_ids"]
-            ),
-            "selected_family_relations": sorted(
-                [
-                    (family_relation["id"], family_relation["age_band_id"])
-                    for family_relation in concern_data["selected_family_relations"]
-                ]
-            ),
-        }
-    return snapshot
-
-
-def symptom_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-) -> bool:
-    return build_symptom_layer_snapshot_from_validated(validated_data) != (
-        build_symptom_layer_snapshot(session)
-    )
-
-
 def persist_concern_symptom_data(
     concern: PreConsultationConcern,
     concern_data: dict,
@@ -386,6 +339,5 @@ def persist_patient_symptom_payload(
         concern = session.concerns.get(concern_id=concern_data["id"])
         persist_concern_symptom_data(concern, concern_data)
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_SYMPTOM:
-        session.current_layer = PreConsultationLayerProgression.PATIENT_CONCERN_PROBE
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = PreConsultationLayerProgression.PATIENT_CONCERN_PROBE
+    session.save(update_fields=["current_layer", "updated_at"])

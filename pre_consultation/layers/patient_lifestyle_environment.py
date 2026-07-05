@@ -5,7 +5,6 @@ from rest_framework import serializers
 
 from pre_consultation.cluster_scoring import (
     build_cluster_score_response,
-    delete_session_cluster_scores,
     persist_session_cluster_scores,
 )
 from pre_consultation.models import (
@@ -211,13 +210,6 @@ def load_patient_lifestyle_environment_put_payload(
     }
 
 
-def lifestyle_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-) -> bool:
-    return validated_data != get_session_lifestyle_answers(session)
-
-
 def persist_patient_lifestyle_environment_payload(
     user,
     session: PreConsultationSession,
@@ -236,10 +228,6 @@ def persist_patient_lifestyle_environment_payload(
     )
     persist_session_cluster_scores(session, validated_data)
 
-    if (
-        session.current_layer
-        == PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT
-    ):
-        session.current_layer = resolve_next_layer_from_cluster_confidence(session)
-        session.updated_at = timezone.now()
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = resolve_next_layer_from_cluster_confidence(session)
+    session.updated_at = timezone.now()
+    session.save(update_fields=["current_layer", "updated_at"])

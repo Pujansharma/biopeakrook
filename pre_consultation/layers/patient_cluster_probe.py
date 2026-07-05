@@ -223,38 +223,6 @@ def build_patient_cluster_probe_put_context(session, request) -> dict:
     }
 
 
-def build_cluster_probe_layer_snapshot(session: PreConsultationSession) -> dict:
-    eligible_concern_ids = get_cluster_probe_eligible_concern_ids(session)
-    snapshot = {}
-    for concern in get_session_concerns_ordered(session):
-        if concern.concern_id not in eligible_concern_ids:
-            continue
-        snapshot[concern.concern_id] = tuple(
-            sorted(
-                concern.probe_answers.values_list("probe_id", "value"),
-            )
-        )
-    return snapshot
-
-
-def build_cluster_probe_layer_snapshot_from_validated(validated_data: dict) -> dict:
-    snapshot = {}
-    for concern_data in validated_data["concerns"]:
-        snapshot[concern_data["id"]] = tuple(
-            sorted(concern_data["cluster_probe_answers"].items())
-        )
-    return snapshot
-
-
-def cluster_probe_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-) -> bool:
-    return build_cluster_probe_layer_snapshot_from_validated(validated_data) != (
-        build_cluster_probe_layer_snapshot(session)
-    )
-
-
 def persist_patient_cluster_probe_payload(
     user, session: PreConsultationSession, validated_data: dict
 ) -> None:
@@ -288,6 +256,5 @@ def persist_patient_cluster_probe_payload(
 
     persist_session_cluster_scores(session, get_session_lifestyle_answers(session))
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE:
-        session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
+    session.save(update_fields=["current_layer", "updated_at"])

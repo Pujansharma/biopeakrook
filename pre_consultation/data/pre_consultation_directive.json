@@ -1058,9 +1058,9 @@
     "layer_2": "patient_concern",
     "layer_3": "patient_symptom",
     "layer_4": "patient_concern_probe",
-    "layer_5": "patient_cluster_probe",
     "layer_5_5": "patient_medical_history_context",
     "layer_6": "patient_lifestyle_environment",
+    "layer_5": "patient_cluster_probe",
     "layer_7": "patient_goals_priorities",
     "layer_8": "patient_health_map"
   },

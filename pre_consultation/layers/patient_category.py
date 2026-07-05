@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from pre_consultation.layers.reset import delete_concerns_for_deselected_categories
 from pre_consultation.layers.serialization import DirectiveJsonKeyCharField
 from pre_consultation.models import (
     PreConsultationCategorySelection,
@@ -64,15 +65,6 @@ def load_patient_category_payload(user, session: PreConsultationSession) -> dict
     return build_patient_category_payload(session)
 
 
-def category_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: dict,
-) -> bool:
-    submitted_ids = set(validated_data["category_ids"])
-    stored_ids = get_session_category_ids(session)
-    return submitted_ids != stored_ids
-
-
 def persist_patient_category_payload(
     user, session: PreConsultationSession, validated_data: dict
 ) -> None:
@@ -94,6 +86,7 @@ def persist_patient_category_payload(
         ]
     )
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_CATEGORY:
-        session.current_layer = PreConsultationLayerProgression.PATIENT_CONCERN
-        session.save(update_fields=["current_layer", "updated_at"])
+    delete_concerns_for_deselected_categories(session, category_ids)
+
+    session.current_layer = PreConsultationLayerProgression.PATIENT_CONCERN
+    session.save(update_fields=["current_layer", "updated_at"])

@@ -4,14 +4,12 @@ from pre_consultation.layers.base import LayerHandler
 from pre_consultation.layers.patient_baseline import (
     PatientBaselineRequestSerializer,
     PatientBaselineResponseSerializer,
-    baseline_layer_has_changed,
     load_patient_baseline_payload,
     persist_patient_baseline_payload,
 )
 from pre_consultation.layers.patient_category import (
     PatientCategoryRequestSerializer,
     PatientCategoryResponseSerializer,
-    category_layer_has_changed,
     load_patient_category_payload,
     persist_patient_category_payload,
 )
@@ -19,7 +17,6 @@ from pre_consultation.layers.patient_concern import (
     PatientConcernRequestSerializer,
     PatientConcernResponseSerializer,
     build_patient_concern_put_context,
-    concern_layer_has_changed,
     load_patient_concern_payload,
     persist_patient_concern_payload,
 )
@@ -27,14 +24,12 @@ from pre_consultation.layers.patient_concern_probe import (
     PatientConcernProbeRequestSerializer,
     PatientConcernProbeResponseSerializer,
     build_patient_concern_probe_put_context,
-    concern_probe_layer_has_changed,
     load_patient_concern_probe_payload,
     persist_patient_concern_probe_payload,
 )
 from pre_consultation.layers.patient_goals_priorities import (
     PatientGoalsPrioritiesRequestSerializer,
     PatientGoalsPrioritiesResponseSerializer,
-    goals_layer_has_changed,
     load_patient_goals_priorities_payload,
     persist_patient_goals_priorities_payload,
 )
@@ -42,7 +37,6 @@ from pre_consultation.layers.patient_lifestyle_environment import (
     PatientLifestyleEnvironmentPutResponseSerializer,
     PatientLifestyleEnvironmentRequestSerializer,
     PatientLifestyleEnvironmentResponseSerializer,
-    lifestyle_layer_has_changed,
     load_patient_lifestyle_environment_payload,
     load_patient_lifestyle_environment_put_payload,
     persist_patient_lifestyle_environment_payload,
@@ -52,14 +46,12 @@ from pre_consultation.layers.patient_medical_history_context import (
     PatientMedicalHistoryContextResponseSerializer,
     build_patient_medical_history_put_context,
     load_patient_medical_history_context_payload,
-    medical_history_layer_has_changed,
     persist_patient_medical_history_context_payload,
 )
 from pre_consultation.layers.patient_cluster_probe import (
     PatientClusterProbeRequestSerializer,
     PatientClusterProbeResponseSerializer,
     build_patient_cluster_probe_put_context,
-    cluster_probe_layer_has_changed,
     load_patient_cluster_probe_payload,
     persist_patient_cluster_probe_payload,
 )
@@ -69,7 +61,6 @@ from pre_consultation.layers.patient_symptom import (
     build_patient_symptom_put_context,
     load_patient_symptom_payload,
     persist_patient_symptom_payload,
-    symptom_layer_has_changed,
 )
 from pre_consultation.utils.constants import PreConsultationLayerProgression
 
@@ -84,7 +75,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_BASELINE] = LayerHandler(
     response_serializer_class=PatientBaselineResponseSerializer,
     load_payload=load_patient_baseline_payload,
     persist_payload=persist_patient_baseline_payload,
-    has_changed=baseline_layer_has_changed,
     needs_customer_profile=True,
     put_includes_data=False,
 )
@@ -95,7 +85,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_CATEGORY] = LayerHandler(
     response_serializer_class=PatientCategoryResponseSerializer,
     load_payload=load_patient_category_payload,
     persist_payload=persist_patient_category_payload,
-    has_changed=category_layer_has_changed,
     put_includes_data=False,
 )
 
@@ -105,7 +94,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_CONCERN] = LayerHandler(
     response_serializer_class=PatientConcernResponseSerializer,
     load_payload=load_patient_concern_payload,
     persist_payload=persist_patient_concern_payload,
-    has_changed=concern_layer_has_changed,
     build_put_serializer_context=build_patient_concern_put_context,
     put_includes_data=False,
 )
@@ -116,7 +104,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_SYMPTOM] = LayerHandler(
     response_serializer_class=PatientSymptomResponseSerializer,
     load_payload=load_patient_symptom_payload,
     persist_payload=persist_patient_symptom_payload,
-    has_changed=symptom_layer_has_changed,
     build_put_serializer_context=build_patient_symptom_put_context,
     put_includes_data=False,
 )
@@ -127,7 +114,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_CONCERN_PROBE] = LayerHan
     response_serializer_class=PatientConcernProbeResponseSerializer,
     load_payload=load_patient_concern_probe_payload,
     persist_payload=persist_patient_concern_probe_payload,
-    has_changed=concern_probe_layer_has_changed,
     build_put_serializer_context=build_patient_concern_probe_put_context,
     put_includes_data=False,
 )
@@ -138,7 +124,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE] = LayerHan
     response_serializer_class=PatientClusterProbeResponseSerializer,
     load_payload=load_patient_cluster_probe_payload,
     persist_payload=persist_patient_cluster_probe_payload,
-    has_changed=cluster_probe_layer_has_changed,
     build_put_serializer_context=build_patient_cluster_probe_put_context,
     put_includes_data=False,
 )
@@ -150,7 +135,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_MEDICAL_HISTORY_CONTEXT] 
         response_serializer_class=PatientMedicalHistoryContextResponseSerializer,
         load_payload=load_patient_medical_history_context_payload,
         persist_payload=persist_patient_medical_history_context_payload,
-        has_changed=medical_history_layer_has_changed,
         build_put_serializer_context=build_patient_medical_history_put_context,
         needs_customer_profile=True,
         put_includes_data=False,
@@ -166,7 +150,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT] = 
         load_payload=load_patient_lifestyle_environment_payload,
         load_put_payload=load_patient_lifestyle_environment_put_payload,
         persist_payload=persist_patient_lifestyle_environment_payload,
-        has_changed=lifestyle_layer_has_changed,
         put_includes_data=True,
     )
 )
@@ -177,7 +160,6 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES] = Layer
     response_serializer_class=PatientGoalsPrioritiesResponseSerializer,
     load_payload=load_patient_goals_priorities_payload,
     persist_payload=persist_patient_goals_priorities_payload,
-    has_changed=goals_layer_has_changed,
     put_includes_data=False,
 )
 

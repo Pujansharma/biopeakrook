@@ -136,22 +136,6 @@ def load_patient_goals_priorities_payload(
     }
 
 
-def goals_layer_has_changed(
-    session: PreConsultationSession,
-    validated_data: list[dict],
-) -> bool:
-    submitted = tuple(
-        sorted((selection["id"], selection["priority"]) for selection in validated_data)
-    )
-    stored = tuple(
-        sorted(
-            (goal["goal_id"], goal["priority"])
-            for goal in get_session_stored_health_goals(session)
-        )
-    )
-    return submitted != stored
-
-
 def persist_patient_goals_priorities_payload(
     user,
     session: PreConsultationSession,
@@ -169,6 +153,5 @@ def persist_patient_goals_priorities_payload(
         ]
     )
 
-    if session.current_layer == PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES:
-        session.current_layer = PreConsultationLayerProgression.PATIENT_HEALTH_MAP
-        session.save(update_fields=["current_layer", "updated_at"])
+    session.current_layer = PreConsultationLayerProgression.PATIENT_HEALTH_MAP
+    session.save(update_fields=["current_layer", "updated_at"])
