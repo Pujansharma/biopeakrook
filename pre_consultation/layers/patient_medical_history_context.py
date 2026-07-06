@@ -105,8 +105,13 @@ class PatientMedicalHistoryContextRequestSerializer(serializers.Serializer):
         allow_empty=True,
     )
     medication_status = serializers.ChoiceField(
-        choices=PreConsultationMedicationStatus.choices
+        choices=PreConsultationMedicationStatus.choices,
+        allow_blank=True,
     )
+
+    def validate_medication_status(self, value: str) -> str:
+        return normalize_medication_status(value)
+
     medications = PatientMedicalHistoryContextMedicationRequestSerializer(
         many=True,
         required=False,
@@ -298,6 +303,12 @@ class PatientMedicalHistoryContextResponseSerializer(serializers.Serializer):
     medical_reports = PatientMedicalHistoryContextMedicalReportResponseSerializer(
         many=True
     )
+
+
+def normalize_medication_status(medication_status: str) -> str:
+    if not medication_status or medication_status == PreConsultationMedicationStatus.NO:
+        return PreConsultationMedicationStatus.NO
+    return medication_status
 
 
 def validate_unique_ids(
@@ -620,7 +631,8 @@ def persist_patient_medical_history_context_payload(
     customer_profile=None,
 ) -> None:
     medical_history = get_or_create_medical_history(session)
-    medical_history.medication_status = validated_data["medication_status"]
+    medication_status = normalize_medication_status(validated_data["medication_status"])
+    medical_history.medication_status = medication_status
     medical_history.save(update_fields=["medication_status", "updated_at"])
 
     medical_history.diagnoses.all().delete()
@@ -665,7 +677,7 @@ def persist_patient_medical_history_context_payload(
     )
 
     medication_entries = validated_data.get("medications", [])
-    if validated_data["medication_status"] == PreConsultationMedicationStatus.NO:
+    if medication_status == PreConsultationMedicationStatus.NO:
         medication_entries = []
     medical_history.medications.all().delete()
     PreConsultationMedication.objects.bulk_create(
