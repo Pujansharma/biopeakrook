@@ -1,23 +1,15 @@
 # Pre-consultation Intelligence Engine
 
-Production-grade module for generating doctor-facing reference materials from structured patient intake data and clinical documents. Two independent capabilities work in tandem:
+Two independent capabilities are:
 
 1. **Preconsultation Summary** — turns pre-consultation form data into clinical briefs, family risk assessments, and scored probe checklists
 2. **Insight Extraction** — distills patient documents (PDFs, scans, reports) into page-cited, necessity-scored clinical findings
 
-Both capabilities are production-hardened with:
-- Automatic retry logic and timeout protection (90s per LLM call, 5 retries for transient failures)
-- Comprehensive error classification and fail-soft patterns (extraction batches continue on per-document failure)
-- Latency instrumentation ([timing.py](timing.py)) wired into application logs for oncall observability
-- Error typing via `PreconsultationError` / `SummaryGenerationError` / `classify_retryable()` for fallback logic
-
-See [errors.py](errors.py) and [timing.py](timing.py) for implementation details.
 
 ---
 
 ## Environment Variables
 
-All environment variables are optional unless marked **[REQUIRED]**.
 
 ### LLM & API Credentials
 
@@ -30,184 +22,196 @@ All environment variables are optional unless marked **[REQUIRED]**.
 
 ### Webhook Configuration
 
-| Variable | Type | Default | Purpose |
-|---|---|---|---|
-| `TOOLS_URL` | string | `http://localhost:8000` | Base URL of the tool endpoint that receives summarize webhook payloads |
-| `PRECONS_TOOL_TRIGGER_API` | string | `/preconsultation/v1/onboarding-webhook` | Endpoint path appended to `TOOLS_URL` for webhook POSTs |
-| `ONBOARDING_WEBHOOK_SECRET` | string | (none) | HMAC-SHA256 signing secret for webhook payloads (optional; if set, all webhook POSTs are signed) |
-
-**Example webhook flow:**
-```bash
-export TOOLS_URL="https://api.example.com"
-export PRECONS_TOOL_TRIGGER_API="/webhooks/onboarding"
-export ONBOARDING_WEBHOOK_SECRET="your-secret-key"
-
-# Webhook is POSTed to: https://api.example.com/webhooks/onboarding
-# Payload is signed with HMAC-SHA256 using the secret (see _post_webhook in summarize.py)
-```
-
-Webhook payloads include patient name, email, and the full summary output. Payloads are fire-and-forget on a daemon thread (do not block the summarize call). Failures are logged but do not fail the whole summarize operation.
-
-### Insight Extraction Budgeting & Limits
+`asummarize_patient` / `summarize_patient` can notify the **legacy backend** that
+a patient's pre-consultation form has been received. This is a one-way,
+fire-and-forget POST of the **raw input form** (not the generated summary/
+checklist) — it fires immediately when the call starts, before any LLM work, so
+the legacy backend learns "this patient's form came in" regardless of whether
+summarization later succeeds or fails.
 
 | Variable | Type | Default | Purpose |
 |---|---|---|---|
-| `INSIGHT_EXTRACTION_TOKEN_LIMIT` | int | `40000` | Max input tokens per document; larger documents are skipped with reason `exceeds_token_limit` |
-| `INSIGHT_EXTRACTION_BUDGET` | float | (none) | Per-client USD budget for extraction runs; if set, docs are processed in order of estimated cost until budget is exhausted; remaining docs are skipped with reason `over_budget` |
+| `TOOLS_URL` | string | `http://localhost:8000` | Base URL of the **legacy backend** that receives the webhook |
+| `PRECONS_TOOL_TRIGGER_API` | string | `/preconsultation/v1/onboarding-webhook` | Endpoint path appended to `TOOLS_URL` for the webhook POST |
+| `ONBOARDING_WEBHOOK_SECRET` | string | (none) | HMAC-SHA256 signing secret for the webhook payload (optional; if set, the POST is signed via an `X-Onboarding-Signature` header so the legacy backend can verify authenticity) |
 
-### Prompt Versioning
+Behavior, from [summarize.py](summarize.py):
+- Runs on a background daemon thread ([`_fire_webhook`](summarize.py)) — the response is never awaited, so a slow or dead legacy backend never blocks or fails the summarize call.
+- Any POST failure (timeout, connection error, non-2xx) is caught and only logged (`logger.warning`) — it is invisible to the caller.
+- Skipped entirely when `mock=True`, or when the caller passes `trigger_webhook=False` (recommended for local/offline runs, or you'll get connection errors against a legacy backend that isn't reachable).
 
-| Variable | Type | Default | Purpose |
-|---|---|---|---|
-| `ACTIVE_CHECKLIST_REGISTER` | string | `associate_v2` | Selects the checklist probe persona: `imperative_v1` (commanding) or `associate_v2` (deferential, "briefing the doctor") |
-
-Available registers are defined in [prompts.py](prompts.py) under `_CHECKLIST_PROBE_REGISTERS`. Swap instantly without code deployment:
-```bash
-# Use the deferential "associate briefing doctor" tone
-export ACTIVE_CHECKLIST_REGISTER=associate_v2
-
-# Fall back to the original imperative tone
-export ACTIVE_CHECKLIST_REGISTER=imperative_v1
-```
 
 ---
 
-## Mental model
-
-- **Cluster** = a higher-level health pattern with criticality (final_score 0–100, bucket_id) and clinical drivers
-- **Concern** = a patient-declared health concern within a cluster (e.g. *Sleep Onset Latency* within *Sleep & Recovery*)
 
 ## 1. Onboarding Summary — `summarize_patient` / `asummarize_patient`
 
-Use this when you have a **structured pre-consultation form** and want the
-doctor's pre-read. Both functions share the same signature and return the same
-`PreconsultationSummaries` shape.
+Use this when you have a **v3 pre-consultation form export** (`directive_schema_id
+3.0.1`) and want the doctor's pre-read. Both functions share the same signature
+and return the same shape.
+
 
 ```python
 from intelligence_engine.preconsultation import summarize_patient, asummarize_patient
 
 # sync
-summaries = summarize_patient(client_details, trigger_webhook=False)
+result = summarize_patient(form, trigger_webhook=False)
 
 # async (native coroutine — use inside an async context)
-summaries = await asummarize_patient(client_details, trigger_webhook=False)
+result = await asummarize_patient(form, trigger_webhook=False)
+
+# larger / bulleted output
+result = summarize_patient(form, output_style="markdown", output_size="large", trigger_webhook=False)
 ```
 
 | Argument | Type | Required? | Notes |
 | --- | --- | --- | --- |
-| `client_details` | `dict` | **Required** | One pre-consultation form. Required top-level keys: `client_id`, `clusters`, `family_risk`, `medical_context`, `surgeries`, `patient_priorities`. Missing any of these (or a missing/empty `client_id`) raises `ValueError`. Optional: `metadata` object (`name`, `email_id` — used by the webhook), `age`, `gender`. See full annotated schema below. |
+| `client_details` | `dict` | **Required** | Pre-consultation form. Required top-level keys: `patient_baseline`, `concerns`, `medical_history`, `cluster_scores`, `health_goals`, `lifestyle_answers`. Missing any of these — or a missing/empty `patient_baseline.id` — raises `ValueError`. See full annotated schema below. |
 | `llm` | LangChain chat model | Optional (default `None`) | Leave unset to use the per-task config. When set, overrides model/config entirely. |
 | `model` | `str` | Optional (default `None`) | Model name override (e.g. `"gpt-4o"`). Takes precedence over config but not over `llm`. Leave unset to use default. |
-| `trigger_webhook` | `bool` | Optional (default `True`) | POSTs the result to the tool endpoint in a background thread. **Pass `False` for local/offline runs** or you'll get connection errors. |
+| `trigger_webhook` | `bool` | Optional (default `True`) | Notifies the **legacy backend** that this patient's form was received — POSTs the raw input form (not the generated summary) to `TOOLS_URL` + `PRECONS_TOOL_TRIGGER_API`, fire-and-forget on a background thread, before any LLM work runs. See **Webhook Configuration** above. **Pass `False` for local/offline runs** or you'll get connection errors. |
 | `mock` | `bool` | Optional (default `False`) | When `True`, skips all LLM calls and the webhook and returns a fixed dummy response. Use for integration testing without API keys. |
+| `debug` | `bool` | Optional (default `False`) | Raise the module log level to `DEBUG` for this call (prompts, salience profile, scores). Otherwise logs at `WARNING`. |
+| `output_style` | `str` | Optional (default `"paragraph"`) | Format of the two summaries: `"paragraph"` (dense prose) or `"markdown"` (grouped bullets). |
+| `output_size` | `str` | Optional (default `"medium"`) | Detail level: `"small"` (only the most critical), `"medium"` (balanced), `"large"` (exhaustive), or `"all"` (returns a **list** of the small/medium/large variants). |
 
 ### Input schema (`client_details`)
 
-Field annotations (read straight from the code in [salience.py](salience.py)):
+Field annotations (read straight from the code in [salience.py](salience.py) and
+[summarize.py](summarize.py)):
 
-- **[required]** — accessed directly; the call raises `KeyError` if the key is
-  missing. A list/object key may still be **empty** (`[]` / `{}`), just present.
-- **[optional]** — accessed with a fallback; safe to omit. Where it changes
-  behaviour the default is given.
-- **[required-if-present]** — the parent object is optional, but when you
-  include it these keys must be there.
-- **[ignored]** — part of the upstream form schema but **not read by this
-  module**. Pass it or drop it; it has no effect on the output.
-
+- **[required]** — a top-level key the code indexes directly; a missing key
+  raises `ValueError` (via [validation.py](validation.py)). The list/object may
+  still be **empty**, just present.
+- **[optional]** — accessed with a fallback; safe to omit.
+- **[ignored]** — present in the export but **not read** by this module
+  (`meta`, `pre_consultation_session`). Every `*_id` field is an internal join
+  key and is ignored — only the paired `*_label` is read.
 
 ```jsonc
 {
-  "client_id": "CL-001",                 // [required] non-empty string; identifies the client. Threaded into every Langfuse trace's metadata for per-client filtering/cost.
-  // [optional] identity fields. name/email_id used by the webhook trigger.
-  "name": "Jane Doe", 
-  "email_id": "jane@example.com",
-  "age": 29,                             // [required] integer; used to detect age-inappropriate findings (e.g., pre-puberty pregnancy)
-  "gender": "Female",                    // [required] string (e.g., "Male", "Female", "Other"); used to detect gender-inappropriate findings
+  "meta": { ... },                       // [ignored]
+  "pre_consultation_session": { ... },   // [ignored]
+  "category_selections": [               // [optional] read for its category_label ONLY — becomes the profile's
+                                          // second line ("Health categories the patient selected: ..."), which
+                                          // is what the summary's opening statement of goals + categories draws from
+    { "category_id": "heart_bp", "category_label": "Heart & Blood Pressure" }
+  ],
 
-  "clusters": [                          // [required] (may be an empty list)
+  "patient_baseline": {                  // [required] object; must carry a non-empty "id"
+    "id": "abce",                        //   [required] trace/client id — threaded into every Langfuse trace for per-client filtering/cost
+    "first_name": "Priya",               //   [optional] webhook payload only (the profile stays identity-free)
+    "last_name": "Sharma",               //   [optional] webhook payload only
+    "contact_email": "priya@example.com",//   [optional] webhook payload only
+    "date_of_birth": "1990-08-12",       //   [optional] ISO date; age is computed from it for demographic-anomaly checks
+    "gender": "female"                   //   [optional] used for demographic-anomaly checks
+  },
+
+  "concerns": [                          // [required] (may be empty) — the descriptive material; becomes the "Reported concerns" section
     {
-      "cluster_name": "Sleep & Recovery", // [required]
-      "confidence": 85,                   // [required] 0-100;
-      "priority": "Moderate",             // [optional] Critical|High|Moderate|Low; default Moderate(0.5).
-      "review_status": "Needs Validation",// [optional] Needs Validation|Accept|Reject; "Needs Validation"/"Reject" seed the checklist
-      "supporting_nodes": [               // [required] (may be empty)
-        {
-          "node_name": "Sleep Onset Latency", // [required]
-          "confidence": 82,                    // [required] 0-100;
-          "priority": "Moderate",              // [optional] default Moderate(0.5)
-          "rationale": "Difficulty falling asleep within 30 min.", // [optional]
-          "related_clusters": ["Sleep & Recovery", "Stress Axis"], // [optional]
-          "related_family_history": [          // [optional] default []
-            { "relative": "Father", "condition": "Type 2 Diabetes", "age": 45 } 
-          ],
-          "evidence": {                        // [optional] default {};
-            "trend": "Worsening",              //   [optional] Worsening|Stable|Improving;
-            "duration": "8 months",            //   [optional] 
-            "impact": "Moderate impact on alertness" //   [optional]
-          },
-          "signals": ["Takes 45+ minutes to fall asleep"], // [optional] default [];
-          "evidence_count": 5                  // [ignored]
-        }
+      "concern_label": "High Cholesterol",           // [required] the patient-declared concern
+      "category_label": "Heart & Blood Pressure",    // [optional]
+      "functional_impact_label": "Occasionally affects me", // [optional] how much it affects daily life
+      "duration_impact_label": "More than 3 years",  // [optional] how long
+      "progression_impact_label": "Gradually worsening", // [optional] trend
+      "confidence_score": 77,            // [optional] 0-100; low scores seed a "confirm" checklist item
+      "probe_flagged": true,             // [optional] flagged for validation
+      "probe_question_count": 10,        // [optional] a flagged concern with 0 questions seeds a gap
+      "probe_positive_count": 7,         // [optional]
+      "symptoms": [                      // [optional] positive symptoms rendered inline
+        { "symptom_label": "High BP reading" }
       ],
-      "strength": "Moderate",             // [ignored]
-      "evidence_count": 9,                // [ignored]
-      "supporting_diagnoses": ["Pre-diabetes watch"],         // [optional]
-      "family_history": [                                      // [optional]
-        { "relative": "Father", "condition": "Type 2 Diabetes", "age": 45 }
+      "concern_sources": [               // [optional] how the patient knows (family, lab result, symptoms)
+        { "source_label": "It runs in my family" }
       ],
-      "lifestyle_factors": ["Late-night screen use"],         // [optional]
-      "validation_responses": ["Feels groggy most mornings"], // [optional]
-      "confidence_drivers": ["Wearable data consistency"],    // [optional]
-      "notes": "Reviewer note: insulin conversation likely."   // [optional] free-text reviewer guidance;
+      "family_history": [                // [optional] hereditary signal FOR THIS concern (tied to the patient's own condition)
+        { "relation_label": "Mother", "age_band_label": "50–60" }
+      ],
+      "cluster_probe_answers": [         // [optional] validation Q&A; "yes" rendered inline, "no" folded into a compact "answered no to:" note
+        { "probe_label": "BP ever found high?", "cluster_label": "Cardiometabolic Risk", "value": "yes" }
+      ]
     }
   ],
 
-  "family_risk": {                        // [required] key (may be {} or null)
-    "disease_burden": [                   // [optional] default []
-      { "condition": "Type 2 Diabetes", "risk": "High", "affected_relatives": ["Father", "Brother"] }
+  "medical_history": {                   // [required] object
+    "medication_status": "medication_supplement", // [optional]
+    "diagnoses": [                       // [optional] entries whose label is "None" are dropped
+      { "diagnosis_label": "Hypertension (BP)", "is_reproductive": false }
     ],
-    "cluster_contributions": [            // [optional] default []
-      { "cluster_name": "Metabolic Health", "contribution": "Strong paternal diabetes line" }
+    "medications": [                     // [optional] rendered name (dosage, frequency, duration)
+      { "name": "Amlodipine", "dosage": "5mg", "frequency": "Once daily", "duration": "2 years" }
+    ],
+    "allergies": [                       // [optional] NEW in v3 — feeds the summary and a checklist seed
+      { "name": "Sulfa drugs" }
+    ],
+    "surgeries": [ ... ],                // [optional] name (area, when, reason)
+    "sexual_health_answers": [           // [optional] positives inline; meaningful "no" kept as a pertinent negative
+      { "question_label": "Trying to conceive?", "option_id": "no", "option_label": "No" }
     ]
   },
 
-  "medical_context": {                    // [required]
-    "diagnoses": [],                      //   [required] (may be empty)
-    "medications": []                     //   [optional] default []
-  },
-
-  "surgeries": [                          // [required] key (may be empty)
-    { "procedure": "Appendectomy", "current_impact": "Low" } // current_impact: Significant|Moderate|Low
+  "lifestyle_answers": [                 // [required] (may be empty) — full lifestyle profile; pure-absence answers (e.g. tobacco: none) are dropped
+    { "field_label": "Activity", "option_value": "light", "option_label": "Light" }
   ],
 
-  "patient_priorities": ["Improve sleep onset and quality"] // [required] key (may be empty)
+  "cluster_scores": [                    // [required] (may be empty) — the clusters; drives mode selection and the profile's "Health patterns" section
+    {
+      "cluster_label": "Metabolic Health",   // [required] shown in the profile under "Health patterns"
+      "final_score": 70,                      // [required] 0-100; drives criticality banding (very_strong_pattern/strong_pattern/weak_signal)
+      "bucket_id": "strong_pattern",          // [required] very_strong_pattern → HIGH, strong_pattern → MODERATE, weak_signal → LOW
+      "bucket_label": "Strong Pattern",       // [optional] shown in the profile
+      "lifestyle_signals_triggered": [        // [optional] rendered as the cluster's drivers
+        { "signal_label": "DESK_JOB" }
+      ],
+      "family_risk_contribution": 2,          // [optional] >0 corroborates that family signal lifted this cluster
+      "validation_skip_reason": "not_probed"  // [optional] a non-weak cluster left "not_probed" seeds a checklist gap
+    }
+  ],
+
+  "health_goals": [                      // [required] (may be empty) — the summary opens by stating these
+    { "goal_label": "Weight loss", "priority": 1 }
+  ]
 }
 ```
 
-### Output schema (`PreconsultationSummaries`)
+**Mode selection.** If any cluster's bucket is `strong_pattern` / `very_strong_pattern`
+the patient is in **CONCERN** mode; otherwise **WELLNESS** mode. The mode chooses the
+checklist axes (see `tag` below). Each checklist probe stands on its own — it is not
+attributed to a specific cluster; `score` is `probability × tag_weight`, then an
+intra-tag rank decay so one prolific axis can't bury another's best probe.
+
+### Output schema
+
+Each result is a JSON-serialisable dict carrying its own `output_style` /
+`output_size` plus the three sections. **When `output_size="all"` the return is a
+LIST** of three such dicts (one each for small / medium / large); the checklist is
+identical across them.
 
 ```jsonc
 {
-  "preconsultation_summary": "29-year-old female with worsening sleep onset ...",
-  "family_risk_summary": "Strong paternal diabetes line, cross-referenced ...",
+  "output_style": "paragraph",
+  "output_size": "medium",
+  "preconsultation_summary": "Patient reports mid-day energy crashes ... Stated goals are weight loss, balancing hormones and improving energy ...",
+  "family_risk_summary": "Family history shows maternal hypercholesterolemia (mother aged 50–60), a hereditary signal toward the reported high cholesterol ...",
   "preconsultation_checklist": [
     {
-      "probe": "Validate metabolic drivers of poor recovery",
-      "tag": "diagnostic_clarification",
-      "score": 0.74,
-      "node_name": "Sleep Onset Latency",
-      "reason": "Sleep and stress nodes co-occur; metabolic link warrants probing."
+      "probe": "Obtain current glycemic labs (A1c, fasting glucose)",
+      "tag": "missing_context",
+      "score": 0.41,
+      "reason": "'Prediabetes' was reported with low confidence and minimal daily impact; objective labs are needed to confirm status."
     }
   ]
 }
 ```
 
-`tag` is one of:
+`tag` is one of (the mode decides which set applies):
 - **Concern mode:** `red_flag_escalation`, `contradiction_resolution`,
-  `risk_refinement`, `treatment_efficacy`, `diagnostic_clarification`,
-  `missing_context`, `medication_adherence`, `lifestyle_driver`.
-- **Wellness mode:** `preventive_screening`, `early_risk_surveillance`,
-  `baseline_establishment`, `lifestyle_optimization`, `goal_alignment`.
+  `factual_discrepancy`, `risk_refinement`, `treatment_efficacy`,
+  `diagnostic_clarification`, `missing_context`, `medication_adherence`,
+  `lifestyle_driver`.
+- **Wellness mode:** `factual_discrepancy`, `preventive_screening`,
+  `early_risk_surveillance`, `baseline_establishment`, `lifestyle_optimization`,
+  `goal_alignment`.
 
 
 ## 2. Insight Extraction from Reports — `extract_insights` / `aextract_insights`
@@ -248,6 +252,7 @@ result = extract_insights(
 | `strategy_name` | `str` | Optional (default `"default"`) | Label embedded in the Langfuse trace name/tags; only matters when comparing strategies. |
 | `budget` | `float \| None` | Optional (default `None`) | Per-client USD budget for the run. Falls back to the `INSIGHT_EXTRACTION_BUDGET` env var; when neither is set, no budget gating is applied. See **Cost gating** below. |
 | `mock` | `bool` | Optional (default `False`) | When `True`, skips file reading and all LLM calls and returns a dummy result. `doc_id`/`client_id` are still required and validated. |
+| `debug` | `bool` | Optional (default `False`) | Raise the module log level to `DEBUG` for this call (per-page blocks, prompts, redaction, consolidation groups). Otherwise logs at `WARNING`. |
 
 Minimum viable calls:
 
@@ -263,17 +268,12 @@ Supported file types: `pdf`, `docx`, `jpg`, `jpeg`, `png`, `txt`, `md`.
 
 ### Output schema (`ExtractionRunResult`)
 
-> **Breaking change:** both `extract_insights` and `extract_insights_batch` (and
-> their async variants) now return an **`ExtractionRunResult`** wrapping the
-> processed documents plus any that were skipped by cost gating — not a bare
-> `DocumentInsights` / `list[DocumentInsights]`. For a single-document call,
-> `results` holds 0 or 1 entries.
 
 ```jsonc
 {
   "results": [                       // processed documents (each a DocumentInsights)
     {
-      "doc_id": "doc-1",
+      "doc_id": "doc-1",             // name / upload_date / owner default to null (not populated by the pipeline)
       "insights": [
         {
           "id": "doc-1-g0",
@@ -298,12 +298,17 @@ Supported file types: `pdf`, `docx`, `jpg`, `jpeg`, `png`, `txt`, `md`.
     {
       "doc_id": "doc-9",
       "filename": "huge_scan.pdf",
-      "reason": "exceeds_token_limit",   // exceeds_token_limit | over_budget
+      "reason": "exceeds_token_limit",   // exceeds_token_limit | over_budget | extraction_failed
       "detail": "estimated 41200 input tokens exceeds limit 40000"
     }
   ]
 }
 ```
+
+A document that raises during processing (corrupt file, unsupported type, an LLM
+error that survives the client's retries) does **not** abort the batch: it is
+isolated as a `skipped` entry with `reason: "extraction_failed"` and `detail`
+carrying the underlying error, while every other document still returns.
 
 ### Cost gating (token limit + per-client budget)
 
@@ -362,131 +367,38 @@ a dummy `DocumentInsights` derived from its own `metadata` (with no skips).
 
 ---
 
-## 3. Form-Exists Endpoint — `GET /preconsultation/v1/form-exists`
+## 3. Form-Exists Endpoint
 
-Check whether a client has already submitted preconsultation data (e.g., via Typeform).
-This is useful before requesting a new form submission to avoid duplication.
+A separate HTTP API (not a Python function in this module) that checks whether a
+client has already submitted preconsultation data — useful before asking them to
+fill out a new form.
 
-**Endpoint:** `GET /preconsultation/v1/form-exists`
+**Endpoint:** `GET https://api.ai.biopeak.health/preconsultation/v1/form-exists`
 
-**Authentication:** Bearer token (set via API gateway configuration)
+**Authentication:** Bearer token in the `Authorization` header.
 
 ### Request
 
 Query parameters:
 
-| Parameter | Type | Required | Description |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `email` | string (email) | **Yes** | Client's email address |
+| `email` | string (email) | **Yes** | Client's email |
 
-### Response
+### Response (JSON body)
 
-HTTP 200 with JSON body:
-
-```json
-{
-  "exists": true,
-  "source": "typeform"
-}
-```
-
-| Field | Type | Values | Description |
-|---|---|---|---|
-| `exists` | bool | `true` \| `false` | Whether preconsultation data exists for this client |
-| `source` | string \| null | `"typeform"` \| `"onboarding"` \| `null` | Data source (`typeform` for Typeform submissions, `onboarding` for API-submitted forms, `null` if `exists` is `false`) |
-
-### Examples
-
-**Request — form exists (Typeform source):**
-```bash
-curl -X GET "https://api.example.com/preconsultation/v1/form-exists?email=alice@example.com" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-**Response:**
-```json
-{
-  "exists": true,
-  "source": "typeform"
-}
-```
-
-**Request — form does not exist:**
-```bash
-curl -X GET "https://api.example.com/preconsultation/v1/form-exists?email=bob@example.com" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-**Response:**
-```json
-{
-  "exists": false,
-  "source": null
-}
-```
-
-### Error Responses
-
-| Status | Body | Reason |
+| Field | Type | Description |
 |---|---|---|
-| `400` | `{"error": "email is required"}` | Missing `email` query parameter |
-| `400` | `{"error": "invalid email format"}` | Malformed email address |
-| `401` | `{"error": "Unauthorized"}` | Missing or invalid Bearer token |
-| `500` | `{"error": "Internal server error"}` | Unexpected backend failure |
+| `exists` | bool | Whether form data exists for this client |
+| `source` | string \| null | `"typeform"`, `"onboarding"`, or `null` if `exists` is `false` |
 
----
+### Example
 
-## Error Handling & Resilience
-
-### Exception Types
-
-All exceptions inherit from `PreconsultationError` (see [errors.py](errors.py)):
-
-- **`SummaryGenerationError`** — raised when `summarize_patient` fails at any stage
-  - Attributes: `stage` (which step failed), `client_id`, `retryable` (bool), `cause` (original exception)
-  - Classify with `classify_retryable(exc)` to decide whether to retry or escalate
-
-- **`classify_retryable(exc: Exception) -> bool`**
-  - Returns `True` for transient failures: rate limits (429), timeouts, upstream 5xx
-  - Returns `False` for terminal failures: auth errors, insufficient quota, context length exceeded, parse errors
-  - Matches exception type names via MRO, so it works without tight SDK imports
-
-### Fail Patterns
-
-**Summarize (fail-whole):** If any step (summaries, checklist, webhook) fails terminally, the whole `summarize_patient` call raises `SummaryGenerationError` with `retryable=False`. The form is atomic — either all three summaries are produced or none.
-
-**Extract (fail-soft):** If a document fails to process (OCR error, cost-gating, LLM failure), it is skipped (added to `skipped` with reason + detail) and the batch continues. The batch result includes both processed documents (`results`) and skipped ones (`skipped`). Batch resilience is controlled by `return_exceptions=True` internally.
-
-### Timeout & Retry Configuration
-
-All LLM calls are configured with:
-- **Timeout:** 90 seconds per request (transient timeouts are retried)
-- **Max retries:** 5 attempts with exponential backoff (via ChatOpenAI client-side)
-
-Override per task in [llm_config.py](llm_config.py) TASK_CONFIGS without touching call sites:
-```python
-TASK_CONFIGS["my_task"] = TaskLLMConfig(
-    model="gpt-5-mini",
-    timeout=120.0,  # 2 minutes for this task
-    max_retries=3,   # fewer retries for time-sensitive work
-)
+```bash
+curl -X GET "https://api.ai.biopeak.health/preconsultation/v1/form-exists?email=client@example.com" \
+  -H "Authorization: Bearer <TOKEN>"
 ```
 
-### Latency Instrumentation
-
-Every LLM stage and batch operation logs its elapsed time at INFO level (SUCCESS) or WARNING level (FAILURE, re-raises):
-
-```python
-from intelligence_engine.preconsultation.timing import log_stage
-
-with log_stage("stage_name", client_id="CL-001", doc_id="doc-5"):
-    # LLM call here
-    result = await llm.ainvoke(...)
+```json
+{ "exists": true, "source": "typeform" }
 ```
-
-Logs appear as structured entries:
-```
-[timing] stage=stage_name client_id=CL-001 doc_id=doc-5 elapsed_ms=1234.5
-```
-
-Integrate into your observability stack (ELK, DataDog, CloudWatch) by grepping for `[timing]` lines. No Langfuse dependency required for timing — it works standalone.

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bound the spend query so a slow/unreachable Langfuse never stalls a run: it
 # fails fast and cost gating treats spend as 0.0 (fail-open). Tunable via env.
-_SPEND_FETCH_TIMEOUT = float(os.environ.get("INSIGHT_SPEND_FETCH_TIMEOUT", "300"))
+_SPEND_FETCH_TIMEOUT = float(os.environ.get("INSIGHT_SPEND_FETCH_TIMEOUT", "60"))
 # Cap pagination so an enormous trace history can't turn into an unbounded loop.
 _SPEND_MAX_PAGES = int(os.environ.get("INSIGHT_SPEND_FETCH_MAX_PAGES", "20"))
 

@@ -28,6 +28,10 @@ Mental model for the input (v3 pre-consultation form):
               the supporting detail.
 """
 
+from intelligence_engine.preconsultation.errors import (
+    PreconsultationError,
+    SummaryGenerationError,
+)
 from intelligence_engine.preconsultation.summarize import (
     ChecklistProbe,
     ConcernHypothesis,
@@ -53,6 +57,8 @@ from intelligence_engine.preconsultation.extract_insights import (
 )
 
 __all__ = [
+    "PreconsultationError",
+    "SummaryGenerationError",
     "PreconsultationSummaries",
     "ChecklistProbe",
     "ConcernHypothesis",

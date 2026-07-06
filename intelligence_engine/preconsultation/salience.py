@@ -114,11 +114,25 @@ def _sorted_concerns(patient: dict) -> list[dict]:
     return sorted(patient["concerns"], key=_concern_severity, reverse=True)
 
 
+def has_family_history(patient: dict) -> bool:
+    """True if any reported concern carries a nested family-history entry.
+
+    Family history is nested inside each concern, so this is the single source of
+    truth for whether a family-risk summary has anything to say. When it is False
+    the family-risk summary is forced to an empty string (nothing to summarize)."""
+    return any(c.get("family_history") for c in patient.get("concerns", []))
+
+
 def _family_history_str(fh: dict) -> str:
-    """Format one nested family-history entry: 'Mother (50–60)'."""
+    """Format one nested family-history entry: 'Mother (onset 50–60)'.
+
+    The entry is nested under a specific concern, so `age_band_label` is the age
+    band at which that relative DEVELOPED that condition (age of onset), not the
+    relative's current age. The same relative can therefore carry different onset
+    ages under different concerns — that is expected, never a contradiction."""
     who = fh.get("relation_label", "relative")
     band = fh.get("age_band_label")
-    return f"{who} ({band})" if band else who
+    return f"{who} (onset {band})" if band else who
 
 
 # --- Prioritized profile (LLM input) -------------------------------------
@@ -138,6 +152,10 @@ def build_full_profile(patient: dict) -> str:
     goals = _sorted_goal_labels(patient)
     if goals:
         lines.append("Stated goals (in priority order): " + ", ".join(goals))
+
+    categories = _selected_category_labels(patient)
+    if categories:
+        lines.append("Health categories the patient selected: " + ", ".join(categories))
 
     concerns = _sorted_concerns(patient)
     if concerns:
@@ -165,6 +183,16 @@ def _sorted_goal_labels(patient: dict) -> list[str]:
     return [g["goal_label"] for g in goals]
 
 
+def _selected_category_labels(patient: dict) -> list[str]:
+    """Human-readable labels of the health categories the patient chose to report
+    on (`category_selections[]`). These frame what the patient came in for."""
+    return [
+        c["category_label"]
+        for c in patient.get("category_selections", [])
+        if c.get("category_label")
+    ]
+
+
 def _render_concern(concern: dict) -> list[str]:
     """Render one concern: the finding line plus its evidence, symptoms, sources,
     patient-linked family history, and validation answers."""
@@ -187,7 +215,8 @@ def _render_concern(concern: dict) -> list[str]:
     if family:
         rendered = ", ".join(_family_history_str(fh) for fh in family)
         out.append(
-            f"        family history for this condition (hereditary signal): {rendered}"
+            "        family history for this condition — relative (age of onset "
+            f"for THIS condition): {rendered}"
         )
 
     answers = concern.get("cluster_probe_answers", [])
@@ -296,7 +325,7 @@ def _render_clusters(patient: dict) -> list[str]:
         return out
 
     out.append("")
-    out.append("Health patterns (clusters), strongest first:")
+    out.append("Health patterns, strongest first:")
     for cluster in strong:
         out.append(f"- {cluster['cluster_label']} [{cluster.get('bucket_label', '?')}]")
         drivers = [

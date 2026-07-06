@@ -10,6 +10,7 @@ import logging
 import os
 import threading
 from datetime import date
+from time import perf_counter
 from typing import Literal
 
 import requests
@@ -18,6 +19,8 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from intelligence_engine.preconsultation import prompts
 from intelligence_engine.preconsultation.llm import build_llm
+from intelligence_engine.preconsultation.errors import SummaryGenerationError
+from intelligence_engine.preconsultation.timing import elapsed_ms, log_stage
 from intelligence_engine.preconsultation.langfuse_util import (
     build_client,
     patient_trace_span,
@@ -28,8 +31,8 @@ from intelligence_engine.preconsultation.salience import (
     WELLNESS,
     build_full_profile,
     checklist_seeds,
-    cluster_score_map,
     family_risk_priority,
+    has_family_history,
     patient_mode,
     summary_priority,
 )
@@ -50,17 +53,46 @@ def _run_config(callbacks: list | None) -> dict:
         config["metadata"] = meta
     return config
 
-WEBHOOK_URL = os.environ.get(
-    "TOOLS_URL", "http://localhost:8000"
-) + os.environ.get(
-    "PRECONS_TOOL_TRIGGER_API", "/preconsultation/v1/onboarding-webhook"
-)
+
+async def _run_llm(stage: str, client_id: str, coro):
+    """Await one LLM call, log its latency, and (fail-whole) convert any
+    provider/parse failure into a typed SummaryGenerationError carrying the
+    stage, client_id, and the original exception as `cause`, so the first
+    failing stage aborts the run with an error the caller can inspect.
+
+    Retries for transient failures already happened inside the LLM client
+    (`max_retries` in TaskLLMConfig) before this ever raises."""
+    start = perf_counter()
+    try:
+        result = await coro
+    except Exception as exc:
+        logger.warning(
+            "[timing] llm:%s FAILED after %.0fms client=%s: %s",
+            stage,
+            elapsed_ms(start),
+            client_id,
+            exc,
+        )
+        raise SummaryGenerationError(
+            f"{stage} LLM call failed: {exc}",
+            stage=stage,
+            client_id=client_id,
+            cause=exc,
+        ) from exc
+    logger.info(
+        "[timing] llm:%s %.0fms client=%s", stage, elapsed_ms(start), client_id
+    )
+    return result
+
+
+WEBHOOK_URL = os.environ["TOOLS_URL"] + os.environ["PRECONS_TOOL_TRIGGER_API"]
 
 # Concern-mode axes: a node with pressing findings may warrant probing here.
 # Ordered by clinical urgency (see _CONCERN_TAG_WEIGHT).
 ConcernTag = Literal[
     "red_flag_escalation",
     "contradiction_resolution",
+    "factual_discrepancy",
     "risk_refinement",
     "treatment_efficacy",
     "diagnostic_clarification",
@@ -71,6 +103,7 @@ ConcernTag = Literal[
 
 # Wellness-mode axes: proactive directions for a broadly healthy patient.
 WellnessTag = Literal[
+    "factual_discrepancy",
     "preventive_screening",
     "early_risk_surveillance",
     "baseline_establishment",
@@ -85,6 +118,7 @@ WellnessTag = Literal[
 _CONCERN_TAG_WEIGHT: dict[str, float] = {
     "red_flag_escalation": 1.00,
     "contradiction_resolution": 0.95,
+    "factual_discrepancy": 0.90,
     "risk_refinement": 0.85,
     "treatment_efficacy": 0.80,
     "diagnostic_clarification": 0.70,
@@ -93,6 +127,7 @@ _CONCERN_TAG_WEIGHT: dict[str, float] = {
     "lifestyle_driver": 0.55,
 }
 _WELLNESS_TAG_WEIGHT: dict[str, float] = {
+    "factual_discrepancy": 0.90,
     "preventive_screening": 1.00,
     "early_risk_surveillance": 0.80,
     "baseline_establishment": 0.65,
@@ -103,26 +138,15 @@ _WELLNESS_TAG_WEIGHT: dict[str, float] = {
 _TAG_WEIGHT: dict[str, float] = {**_CONCERN_TAG_WEIGHT, **_WELLNESS_TAG_WEIGHT}
 _DEFAULT_TAG_WEIGHT = 0.5
 
-# Fallback cluster criticality when a hypothesis references a cluster label we
-# can't match (e.g. an LLM paraphrase). Mid-low: ranks, but below grounded probes.
-_DEFAULT_CLUSTER_SCORE = 0.4
-
 # Intra-tag rank decay: within a tag, each successive hypothesis (after the
 # strongest) is discounted by this factor ** rank, so one prolific tag can't
 # monopolize the top of the checklist and bury other tags' best probes.
 _TAG_RANK_DECAY = 0.6
 
-# In wellness mode every cluster is low-criticality, which would crush proactive
-# probes to near-zero. Floor the cluster score so probability drives the ranking.
-_WELLNESS_CLUSTER_SCORE_FLOOR = 0.5
-
 
 class _HypothesisBase(BaseModel):
     """Shared fields for an LLM probe hypothesis (tag added per mode)."""
 
-    cluster_name: str = Field(
-        description="Exact cluster label from the profile this probe is about."
-    )
     probability: float = Field(
         description="0.0-1.0 estimate that this probe is warranted and will surface something clinically useful.",
         ge=0.0,
@@ -154,7 +178,6 @@ class ChecklistProbe(BaseModel):
     probe: str
     tag: str
     score: float
-    cluster_name: str
     reason: str
 
 
@@ -202,21 +225,13 @@ class PreconsultationSummaries(BaseModel):
     preconsultation_checklist: list[ChecklistProbe]
 
 
-def _score_hypotheses(
-    hypotheses: list[_HypothesisBase],
-    scores: dict[str, float],
-    cluster_score_floor: float = 0.0,
-) -> list[ChecklistProbe]:
+def _score_hypotheses(hypotheses: list[_HypothesisBase]) -> list[ChecklistProbe]:
     """Turn raw hypotheses into scored checklist probes.
 
-    Base score = probability * cluster_score * tag_weight, where:
-      - cluster_score is the criticality of the cluster the probe is about,
-        floored at `cluster_score_floor` (used in wellness mode so proactive
-        probes aren't crushed by uniformly-low criticality); an unmatched /
-        paraphrased cluster name falls back to `_DEFAULT_CLUSTER_SCORE`;
-      - tag_weight (_TAG_WEIGHT) is a moderate per-axis importance multiplier so
-        clinically urgent axes (e.g. contradiction_resolution) float up. It is
-        INTERNAL — it shapes `score` only and is never exposed on ChecklistProbe.
+    Base score = probability * tag_weight, where tag_weight (_TAG_WEIGHT) is a
+    moderate per-axis importance multiplier so clinically urgent axes (e.g.
+    contradiction_resolution) float up. It is INTERNAL — it shapes `score` only
+    and is never exposed on ChecklistProbe.
 
     Then an INTRA-TAG RANK DECAY is applied: within each tag the probes are
     ranked by base score and discounted by `_TAG_RANK_DECAY ** rank`, so a tag
@@ -225,30 +240,21 @@ def _score_hypotheses(
     score, descending.
     """
     logger.debug(
-        "[score] scoring %d hypotheses (cluster_score_floor=%s, tag_rank_decay=%s)",
+        "[score] scoring %d hypotheses (tag_rank_decay=%s)",
         len(hypotheses),
-        cluster_score_floor,
         _TAG_RANK_DECAY,
     )
 
     # First pass: base score per hypothesis.
     scored: list[tuple[_HypothesisBase, float]] = []
     for h in hypotheses:
-        raw_cluster_score = scores.get(h.cluster_name, _DEFAULT_CLUSTER_SCORE)
-        cluster_score = max(raw_cluster_score, cluster_score_floor)
         tag_weight = _TAG_WEIGHT.get(h.tag, _DEFAULT_TAG_WEIGHT)
-        base = h.probability * cluster_score * tag_weight
+        base = h.probability * tag_weight
         scored.append((h, base))
         logger.debug(
-            "[score]   cluster=%r tag=%r prob=%.3f cluster_score=%.3f"
-            " (raw=%.3f, matched=%s, floored=%s) x tag_weight=%.2f -> base=%.3f",
-            h.cluster_name,
+            "[score]   tag=%r prob=%.3f x tag_weight=%.2f -> base=%.3f",
             h.tag,
             h.probability,
-            cluster_score,
-            raw_cluster_score,
-            h.cluster_name in scores,
-            cluster_score > raw_cluster_score,
             tag_weight,
             base,
         )
@@ -270,9 +276,8 @@ def _score_hypotheses(
             decay = _TAG_RANK_DECAY**rank
             adjusted = base * decay
             logger.debug(
-                "[score]   rank=%d cluster=%r base=%.3f x decay=%.3f -> adjusted=%.3f%s",
+                "[score]   rank=%d base=%.3f x decay=%.3f -> adjusted=%.3f%s",
                 rank,
-                h.cluster_name,
                 base,
                 decay,
                 adjusted,
@@ -282,7 +287,6 @@ def _score_hypotheses(
                 ChecklistProbe(
                     probe=h.probe,
                     tag=h.tag,
-                    cluster_name=h.cluster_name,
                     score=round(adjusted, 3),
                     reason=h.reason,
                 )
@@ -291,11 +295,10 @@ def _score_hypotheses(
     logger.debug("[score] final checklist order (after cross-tag re-sort):")
     for i, item in enumerate(items):
         logger.debug(
-            "[score]   #%d  score=%.3f  tag=%r  cluster=%r  probe=%r",
+            "[score]   #%d  score=%.3f  tag=%r  probe=%r",
             i + 1,
             item.score,
             item.tag,
-            item.cluster_name,
             item.probe,
         )
     return items
@@ -325,9 +328,13 @@ async def areorder_onboarding_summary(
         ]
     )
     chain = prompt | llm.with_structured_output(_ReorderedSummary)
-    out = await chain.ainvoke(
-        {"summary": summary_text, "priority_order": priority_order},
-        config=_run_config(callbacks),
+    out = await _run_llm(
+        "reorder_summary",
+        _client_id(client_details),
+        chain.ainvoke(
+            {"summary": summary_text, "priority_order": priority_order},
+            config=_run_config(callbacks),
+        ),
     )
     reordered = (out.summary or "").strip()
     logger.debug(
@@ -368,9 +375,13 @@ async def areorder_family_risk_summary(
         ]
     )
     chain = prompt | llm.with_structured_output(_ReorderedSummary)
-    out = await chain.ainvoke(
-        {"summary": family_text, "priority_order": priority_order},
-        config=_run_config(callbacks),
+    out = await _run_llm(
+        "reorder_family",
+        _client_id(client_details),
+        chain.ainvoke(
+            {"summary": family_text, "priority_order": priority_order},
+            config=_run_config(callbacks),
+        ),
     )
     reordered = (out.summary or "").strip()
     logger.debug(
@@ -382,15 +393,6 @@ async def areorder_family_risk_summary(
         reordered,
     )
     return reordered or family_text
-
-
-def _format_messages(messages) -> str:
-    """Render LangChain prompt messages into a readable, role-labelled block."""
-    blocks = []
-    for m in messages:
-        role = getattr(m, "type", m.__class__.__name__).upper()
-        blocks.append(f"----- {role} -----\n{m.content}")
-    return "\n".join(blocks)
 
 
 def _post_webhook(payload: dict) -> None:
@@ -486,7 +488,6 @@ def _mock_summaries(client_details: dict) -> PreconsultationSummaries:
                 probe="[MOCK] Confirm primary cluster findings",
                 tag="diagnostic_clarification",
                 score=0.5,
-                cluster_name=cluster_hint,
                 reason="[MOCK] Placeholder probe; no LLM was called.",
             )
         ],
@@ -565,7 +566,16 @@ async def _generate_summaries(
     (preconsultation_summary, family_risk_summary).
 
     The checklist is size-independent and is generated once by the caller, so it
-    is not produced here."""
+    is not produced here.
+
+    Empty-input guards (nothing to summarize -> empty string): if the salience
+    profile is blank, no LLM call is made and both summaries are "". If the
+    patient has no nested family history at all, the family-risk summary is forced
+    to "" (and its reorder skipped) regardless of what the LLM emitted."""
+    if not (profile or "").strip():
+        logger.debug("[summaries] empty profile -> returning empty summaries")
+        return "", ""
+    want_family = has_family_history(client_details)
     summary_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", prompts.build_summary_system_prompt(output_style, output_size)),
@@ -573,20 +583,13 @@ async def _generate_summaries(
         ]
     )
     summary_inputs = {"profile": profile}
-    logger.debug(
-        "\n"
-        "################## LLM CALL 1 (summaries, style=%s size=%s) — INPUT PROMPT ##################\n"
-        "%s\n"
-        "################## END CALL 1 INPUT ##################",
-        output_style,
-        output_size,
-        _format_messages(summary_prompt.format_messages(**summary_inputs)),
-    )
     summary_chain = summary_prompt | summary_llm.with_structured_output(
         _SummaryLLMOutput
     )
-    summaries_raw = await summary_chain.ainvoke(
-        summary_inputs, config=_run_config(callbacks)
+    summaries_raw = await _run_llm(
+        f"summaries[{output_size}]",
+        _client_id(client_details),
+        summary_chain.ainvoke(summary_inputs, config=_run_config(callbacks)),
     )
     logger.debug(
         "\n"
@@ -599,6 +602,9 @@ async def _generate_summaries(
         summaries_raw.preconsultation_summary,
         summaries_raw.family_risk_summary,
     )
+    # No family history in the data -> nothing to summarize; force empty and skip
+    # its reorder (guards against the LLM hallucinating a family-risk paragraph).
+    family_text = summaries_raw.family_risk_summary if want_family else ""
     # Reorder both by deterministic priority, preserving the chosen output_style.
     return await asyncio.gather(
         areorder_onboarding_summary(
@@ -609,7 +615,7 @@ async def _generate_summaries(
             output_style,
         ),
         areorder_family_risk_summary(
-            summaries_raw.family_risk_summary,
+            family_text,
             client_details,
             summary_llm,
             callbacks,
@@ -644,7 +650,6 @@ async def _run_patient_pipeline(
     model: str | None,
     profile: str,
     seeds: str,
-    scores: dict[str, float],
     output_style: str,
     output_size: str,
     handler,
@@ -668,21 +673,19 @@ async def _run_patient_pipeline(
     age = _patient_age(client_details)
     gender = _patient_baseline(client_details).get("gender", "?")
 
-    # --- Call 2 setup: probe checklist with reasons. Mode picks the axes, the
-    # output schema, and the scoring path (wellness floors cluster criticality).
-    # The checklist is INDEPENDENT of output_style/output_size, so it is built
-    # once and (for output_size="all") shared across every size variant.
+    # --- Call 2 setup: probe checklist with reasons. Mode picks the axes and
+    # the output schema. The checklist is INDEPENDENT of output_style/
+    # output_size, so it is built once and (for output_size="all") shared
+    # across every size variant.
     mode = patient_mode(client_details)
     if mode == WELLNESS:
         checklist_system = prompts.WELLNESS_CHECKLIST_SYSTEM_PROMPT
         checklist_output = _WellnessChecklistLLMOutput
-        cluster_score_floor = _WELLNESS_CLUSTER_SCORE_FLOOR
     else:
         checklist_system = prompts.CHECKLIST_SYSTEM_PROMPT
         checklist_output = _ConcernChecklistLLMOutput
-        cluster_score_floor = 0.0
     logger.debug(
-        "[flow] checklist mode=%r (no strong cluster => wellness) -> prompt=%s, output=%s, cluster_score_floor=%s",
+        "[flow] checklist mode=%r (no strong cluster => wellness) -> prompt=%s, output=%s",
         mode,
         (
             "WELLNESS_CHECKLIST_SYSTEM_PROMPT"
@@ -690,7 +693,6 @@ async def _run_patient_pipeline(
             else "CHECKLIST_SYSTEM_PROMPT"
         ),
         checklist_output.__name__,
-        cluster_score_floor,
     )
 
     checklist_llm = build_llm("generate_checklist", model)
@@ -701,14 +703,6 @@ async def _run_patient_pipeline(
         ]
     )
     checklist_inputs = {"profile": profile, "seeds": seeds, "age": age, "gender": gender}
-    logger.debug(
-        "\n"
-        "################## LLM CALL 2 (checklist, mode=%s) — INPUT PROMPT ##################\n"
-        "%s\n"
-        "################## END CALL 2 INPUT ##################",
-        mode,
-        _format_messages(checklist_prompt.format_messages(**checklist_inputs)),
-    )
     checklist_chain = checklist_prompt | checklist_llm.with_structured_output(
         checklist_output
     )
@@ -720,7 +714,11 @@ async def _run_patient_pipeline(
         "[flow] generating summaries for style=%r size(s)=%s", output_style, sizes
     )
     checklist_raw, *summaries_variants = await asyncio.gather(
-        checklist_chain.ainvoke(checklist_inputs, config=_run_config(callbacks)),
+        _run_llm(
+            "checklist",
+            _client_id(client_details),
+            checklist_chain.ainvoke(checklist_inputs, config=_run_config(callbacks)),
+        ),
         *(
             _generate_summaries(
                 output_style, sz, profile, client_details, summary_llm, callbacks
@@ -730,7 +728,7 @@ async def _run_patient_pipeline(
     )
 
     output_lines = "\n".join(
-        f"  - cluster={h.cluster_name!r} tag={h.tag!r} prob={h.probability:.3f}\n"
+        f"  - tag={h.tag!r} prob={h.probability:.3f}\n"
         f"      probe : {h.probe}\n"
         f"      reason: {h.reason}"
         for h in checklist_raw.probe_hypotheses
@@ -745,9 +743,7 @@ async def _run_patient_pipeline(
     )
 
     # Score the (shared) checklist once; every size variant carries the same one.
-    checklist_items = _score_hypotheses(
-        checklist_raw.probe_hypotheses, scores, cluster_score_floor
-    )
+    checklist_items = _score_hypotheses(checklist_raw.probe_hypotheses)
 
     results = [
         _assemble_variant(output_style, sz, variant, checklist_items)
@@ -794,9 +790,9 @@ async def asummarize_patient(
     else:
         logging.getLogger("intelligence_engine.preconsultation").setLevel(logging.WARNING)
     logger.debug(
-        "[flow] asummarize_patient start: name=%r mock=%s trigger_webhook=%s "
+        "[flow] asummarize_patient start: client_id=%s mock=%s trigger_webhook=%s "
         "model_override=%s output_style=%s output_size=%s",
-        _patient_name(client_details),
+        _client_id(client_details),
         mock,
         trigger_webhook,
         model,
@@ -827,57 +823,65 @@ async def asummarize_patient(
             "name": _patient_name(client_details),
         }
         logger.debug(
-            "[flow] firing webhook (fire-and-forget) to %s for name=%r email=%r",
+            "[flow] firing webhook (fire-and-forget) to %s for client_id=%s",
             WEBHOOK_URL,
-            payload["name"],
-            payload["email"],
+            _client_id(client_details),
         )
         _fire_webhook(payload)
     else:
         logger.debug("[flow] trigger_webhook=False -> webhook skipped")
 
-    # --- Deterministic preprocessing (no LLM): this is the exact signal the
-    # model will see. Inspect it to judge whether salience captured the right
-    # findings before any LLM cost is paid. Both LLM calls share one rich,
-    # identity-free profile (reported concerns + medical history + clusters).
-    profile = build_full_profile(client_details)
-    seeds = prompts.render_seeds(checklist_seeds(client_details))
-    scores = cluster_score_map(client_details)
-
-    logger.debug("[preprocess] cluster_score_map (criticality per cluster):")
-    for name, s in sorted(scores.items(), key=lambda kv: kv[1], reverse=True):
-        logger.debug("[preprocess]   %.3f  %s", s, name)
-    logger.debug(
-        "[preprocess] checklist seeds (deterministic gaps):\n%s", seeds
-    )
-    # NOTE: the full prioritized profile text is shown inline in the rendered
-    # LLM CALL 1/2 input prompts below, so it is not dumped separately here.
-
-    # One parent Langfuse span per client: both LLM calls and every reorder pass
-    # nest under it as a single expandable trace (see patient_trace_span). Flush
-    # after the span closes so the whole tree is exported together.
     client_id = _client_id(client_details)
-    langfuse_client = build_client(LANGFUSE_ENVIRONMENT)
-    with patient_trace_span(
-        langfuse_client, client_id, LANGFUSE_ENVIRONMENT
-    ) as (handler, span):
-        result = await _run_patient_pipeline(
-            client_details,
-            llm,
-            model,
-            profile,
-            seeds,
-            scores,
-            output_style,
-            output_size,
-            handler,
-            span,
-        )
-    if langfuse_client is not None:
+    with log_stage("summarize_patient total", client_id=client_id):
+        # --- Deterministic preprocessing (no LLM): this is the exact signal the
+        # model will see. Inspect it to judge whether salience captured the right
+        # findings before any LLM cost is paid. Both LLM calls share one rich,
+        # identity-free profile (reported concerns + medical history + clusters).
+        # A malformed nested shape validation didn't catch surfaces here as a
+        # typed SummaryGenerationError, not a raw KeyError.
         try:
-            langfuse_client.flush()
-        except Exception:
-            pass
+            with log_stage("preprocess", client_id=client_id):
+                profile = build_full_profile(client_details)
+                seeds = prompts.render_seeds(checklist_seeds(client_details))
+        except SummaryGenerationError:
+            raise
+        except Exception as exc:
+            raise SummaryGenerationError(
+                f"preprocessing failed: {exc}",
+                stage="preprocess",
+                client_id=client_id,
+                cause=exc,
+            ) from exc
+
+        logger.debug(
+            "[preprocess] checklist seeds (deterministic gaps):\n%s", seeds
+        )
+        # NOTE: the full prioritized profile text is shown inline in the rendered
+        # LLM CALL 1/2 input prompts below, so it is not dumped separately here.
+
+        # One parent Langfuse span per client: both LLM calls and every reorder
+        # pass nest under it as a single expandable trace (patient_trace_span).
+        # Flush after the span closes so the whole tree is exported together.
+        langfuse_client = build_client(LANGFUSE_ENVIRONMENT)
+        with patient_trace_span(
+            langfuse_client, client_id, LANGFUSE_ENVIRONMENT
+        ) as (handler, span):
+            result = await _run_patient_pipeline(
+                client_details,
+                llm,
+                model,
+                profile,
+                seeds,
+                output_style,
+                output_size,
+                handler,
+                span,
+            )
+        if langfuse_client is not None:
+            try:
+                langfuse_client.flush()
+            except Exception:
+                pass
     return result
 
 

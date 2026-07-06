@@ -44,7 +44,8 @@ def build_llm(task: str, model: str | None = None) -> ChatOpenAI:
         cfg.temperature if pass_temperature else "default(unset, model-restricted)",
         cfg.extra,
     )
-    kwargs = dict(cfg.extra)
+    kwargs = {"max_retries": cfg.max_retries}
+    kwargs.update(cfg.extra)  # per-task extra overrides the defaults above
     if pass_temperature:
         kwargs["temperature"] = cfg.temperature
     return ChatOpenAI(model=chosen, **kwargs)

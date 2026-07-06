@@ -13,7 +13,12 @@ from dataclasses import dataclass, field
 class TaskLLMConfig:
     model: str
     temperature: float = 0.0
-    # Extra kwargs forwarded verbatim to ChatOpenAI (e.g. max_tokens, timeout).
+    # Client-side retries with exponential backoff for transient failures
+    # (429 rate limits, timeouts, upstream 5xx). Does NOT help terminal errors
+    # like insufficient_quota or auth — those still surface after the retries.
+    max_retries: int = 3
+    # Extra kwargs forwarded verbatim to ChatOpenAI (e.g. max_tokens); override
+    # max_retries here per task if needed.
     extra: dict = field(default_factory=dict)
 
 

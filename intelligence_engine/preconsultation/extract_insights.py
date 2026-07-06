@@ -45,6 +45,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from intelligence_engine.cost import count_tokens, estimate_cost
 from intelligence_engine.preconsultation import prompts
+from intelligence_engine.preconsultation.timing import log_stage
 from intelligence_engine.preconsultation.llm import build_llm
 from intelligence_engine.preconsultation.llm_config import TASK_CONFIGS
 from intelligence_engine.preconsultation.langfuse_util import (
@@ -231,8 +232,8 @@ class SkippedFile(BaseModel):
 
     doc_id: str | None = None
     filename: str | None = None
-    reason: str  # "exceeds_token_limit" | "over_budget"
-    detail: str  # human-readable explanation (tokens/limit or cost/remaining)
+    reason: str  # "exceeds_token_limit" | "over_budget" | "extraction_failed"
+    detail: str  # human-readable explanation (tokens/limit, cost, or error)
 
 
 class ExtractionRunResult(BaseModel):
@@ -570,8 +571,16 @@ async def _read_image_block(
     block_id: str,
     semaphore: asyncio.Semaphore,
     handler,
+    client_details: dict | None = None,
 ) -> _Block | None:
-    """Transcribe one image (whole image file, scan, or embedded figure)."""
+    """Transcribe one image (whole image file, scan, or embedded figure).
+
+    The image itself must reach the vision model unredacted (that's the point
+    of OCR), but its transcribed text is redacted immediately on return —
+    before it is placed in a `_Block` or logged — so a name visible only as
+    pixels (e.g. a letterhead or ID sticker) never survives into a log line,
+    a later prompt, or a Langfuse trace as plain text.
+    """
     logger.info(
         "  [image] reading %s (page %s, %.1f KB)",
         block_id,
@@ -581,9 +590,6 @@ async def _read_image_block(
     b64 = base64.b64encode(png_bytes).decode()
     mime = _image_mime(png_bytes)
     llm = build_llm("read_image")
-
-    # DEBUG: Show the exact prompt being sent to the VLM
-    logger.debug(f"  [image] {block_id} prompt:\n{prompts.IMAGE_READ_PROMPT}")
 
     msg = HumanMessage(
         content=[
@@ -613,8 +619,8 @@ async def _read_image_block(
         logger.info("  [image] no text returned for %s", block_id)
         return None
 
-    # DEBUG: Show the full VLM response
-    logger.info("  [image] %s → %d chars\n    Response:\n%s", block_id, len(text), text)
+    text = _redact_pii(text, client_details or {})
+    logger.info("  [image] %s → %d chars transcribed", block_id, len(text))
     return _Block(block_id=block_id, page=page, bbox=bbox, text=text)
 
 
@@ -740,6 +746,7 @@ async def _read_pdf(
     semaphore: asyncio.Semaphore,
     handler,
     ocr_config: OCRConfig = DEFAULT_OCR_CONFIG,
+    client_details: dict | None = None,
 ) -> list[_Block]:
     import fitz  # PyMuPDF
 
@@ -822,6 +829,7 @@ async def _read_pdf(
                     j.block_id,
                     semaphore,
                     handler,
+                    client_details,
                 )
             )
 
@@ -871,7 +879,10 @@ async def _read_pdf(
 
 
 async def _read_docx(
-    filebytestream: bytes, semaphore: asyncio.Semaphore, handler
+    filebytestream: bytes,
+    semaphore: asyncio.Semaphore,
+    handler,
+    client_details: dict | None = None,
 ) -> list[_Block]:
     import io
 
@@ -918,7 +929,13 @@ async def _read_docx(
                 continue
             image_coros.append(
                 _read_image_block(
-                    png_bytes, 1, None, f"p1_img{img_idx}", semaphore, handler
+                    png_bytes,
+                    1,
+                    None,
+                    f"p1_img{img_idx}",
+                    semaphore,
+                    handler,
+                    client_details,
                 )
             )
             img_idx += 1
@@ -955,11 +972,14 @@ async def _read_plain_text(filebytestream: bytes) -> list[_Block]:
 
 
 async def _read_image_file(
-    filebytestream: bytes, semaphore: asyncio.Semaphore, handler
+    filebytestream: bytes,
+    semaphore: asyncio.Semaphore,
+    handler,
+    client_details: dict | None = None,
 ) -> list[_Block]:
     logger.info("[image] reading whole image via VLM ...")
     block = await _read_image_block(
-        filebytestream, 1, None, "p1_img0", semaphore, handler
+        filebytestream, 1, None, "p1_img0", semaphore, handler, client_details
     )
     return [block] if block is not None else []
 
@@ -970,6 +990,7 @@ async def _read_document(
     semaphore: asyncio.Semaphore,
     handler,
     ocr_config: OCRConfig = DEFAULT_OCR_CONFIG,
+    client_details: dict | None = None,
 ) -> list[_Block]:
     ext = _extension(filename)
     if ext not in SUPPORTED_EXTENSIONS:
@@ -984,11 +1005,11 @@ async def _read_document(
     )
 
     if ext == "pdf":
-        return await _read_pdf(filebytestream, semaphore, handler, ocr_config)
+        return await _read_pdf(filebytestream, semaphore, handler, ocr_config, client_details)
     if ext == "docx":
-        return await _read_docx(filebytestream, semaphore, handler)
+        return await _read_docx(filebytestream, semaphore, handler, client_details)
     if ext in {"jpg", "jpeg", "png"}:
-        return await _read_image_file(filebytestream, semaphore, handler)
+        return await _read_image_file(filebytestream, semaphore, handler, client_details)
     # txt, md
     return await _read_plain_text(filebytestream)
 
@@ -1037,10 +1058,7 @@ async def _extract_page_insights(
         len(blocks),
     )
 
-    # DEBUG: Show blocks being sent to the insight LLM
     formatted = _format_blocks(blocks)
-    logger.debug(f"[insights] page {page} blocks input ({len(formatted)} chars):\n{formatted}")
-    logger.debug(f"[insights] page {page} system prompt:\n{prompts.INSIGHT_SYSTEM_PROMPT}")
 
     llm = build_llm("extract_insights").with_structured_output(_PageInsights)
     template = ChatPromptTemplate.from_messages(
@@ -1200,13 +1218,10 @@ async def _consolidate(
 
     logger.info("[consolidate] grouping %d raw fact(s) ...", len(insights))
 
-    # DEBUG: Show raw facts being sent to consolidation LLM
     formatted = "\n\n".join(
         f"INDEX: {i}\nCATEGORY: {ins.category}\nPAGE: {ins.index.page}\nCONTENT: {ins.content}"
         for i, ins in enumerate(insights)
     )
-    logger.debug(f"[consolidate] raw facts ({len(formatted)} chars):\n{formatted}")
-    logger.debug(f"[consolidate] system prompt:\n{prompts.CONSOLIDATE_SYSTEM_PROMPT}")
 
     llm = build_llm("consolidate_insights").with_structured_output(_ConsolidationOutput)
     template = ChatPromptTemplate.from_messages(
@@ -1341,15 +1356,20 @@ async def _aextract_insights(
         str(client_details["client_id"]),
         strategy_name,
     ) as (handler, span):
-        result = await _run_doc_extraction(
-            doc_name,
-            filebytestream,
-            metadata,
-            client_details,
-            semaphore,
-            handler,
-            ocr_config,
-        )
+        with log_stage(
+            "extract:doc_total",
+            doc_id=str(metadata.get("doc_id")),
+            client_id=str(client_details.get("client_id", "")),
+        ):
+            result = await _run_doc_extraction(
+                doc_name,
+                filebytestream,
+                metadata,
+                client_details,
+                semaphore,
+                handler,
+                ocr_config,
+            )
         # Close out the parent trace with a compact summary of what was produced.
         if span is not None:
             try:
@@ -1384,9 +1404,13 @@ async def _run_doc_extraction(
     """OCR -> PII redaction -> per-page insight extraction -> consolidation for
     one document. All LLM/VLM calls use `handler` so they nest under the active
     parent span (see `_aextract_insights`)."""
-    blocks = await _read_document(
-        doc_name, filebytestream, semaphore, handler, ocr_config
-    )
+    doc_id = str(metadata.get("doc_id"))
+    client_id = str((client_details or {}).get("client_id", ""))
+
+    with log_stage("extract:ocr_read", doc_id=doc_id, client_id=client_id):
+        blocks = await _read_document(
+            doc_name, filebytestream, semaphore, handler, ocr_config, client_details
+        )
 
     # Redact PII before anything reaches the insight LLM.
     logger.info(
@@ -1410,14 +1434,14 @@ async def _run_doc_extraction(
     logger.info("[insights] processing %d page(s) concurrently ...", len(pages))
     logger.debug(f"[insights] page distribution: {dict(sorted((p, len(blocks)) for p, blocks in by_page.items()))}")
 
-    page_results = await asyncio.gather(
-        *(
-            _extract_page_insights(page, by_page[page], semaphore, handler)
-            for page in pages
+    with log_stage("extract:page_insights", doc_id=doc_id, client_id=client_id):
+        page_results = await asyncio.gather(
+            *(
+                _extract_page_insights(page, by_page[page], semaphore, handler)
+                for page in pages
+            )
         )
-    )
 
-    doc_id = str(metadata.get("doc_id"))
     raw_insights: list[Insight] = []
     counter = 0
     for page, items in zip(pages, page_results):
@@ -1449,9 +1473,10 @@ async def _run_doc_extraction(
         logger.debug(f"[insights] raw facts by category: {dict(categories)}")
     age = (client_details or {}).get("age", "?")
     gender = (client_details or {}).get("gender", "?")
-    insights = await _consolidate(
-        raw_insights, doc_id, semaphore, handler, age, gender
-    )
+    with log_stage("extract:consolidate", doc_id=doc_id, client_id=client_id):
+        insights = await _consolidate(
+            raw_insights, doc_id, semaphore, handler, age, gender
+        )
     logger.info("=== done: %s — %d insight(s) ===", doc_name, len(insights))
 
     # DEBUG: Show final insights
@@ -1586,28 +1611,53 @@ async def _run_reports(
     langfuse_client = build_client(LANGFUSE_ENVIRONMENT)
     try:
         semaphore = asyncio.Semaphore(max_concurrency)
-        results = await asyncio.gather(
-            *(
-                _aextract_insights(
-                    report.get("filename"),
-                    report.get("filepath"),
-                    report.get("filebytestream"),
-                    report["metadata"],
-                    report["client_details"],
-                    semaphore,
-                    langfuse_client,
-                    ocr_config,
-                    strategy_name,
-                )
-                for _idx, report in to_process
+        with log_stage("extract:batch_total", docs=len(to_process)):
+            # return_exceptions=True: a single failing document (corrupt file,
+            # unsupported type, transient LLM error) is isolated below as a
+            # SkippedFile instead of aborting the whole batch.
+            outcomes = await asyncio.gather(
+                *(
+                    _aextract_insights(
+                        report.get("filename"),
+                        report.get("filepath"),
+                        report.get("filebytestream"),
+                        report["metadata"],
+                        report["client_details"],
+                        semaphore,
+                        langfuse_client,
+                        ocr_config,
+                        strategy_name,
+                    )
+                    for _idx, report in to_process
+                ),
+                return_exceptions=True,
             )
-        )
     finally:
         if langfuse_client is not None:
             try:
                 langfuse_client.flush()
             except Exception:
                 pass
+
+    results: list = []
+    for (_idx, report), outcome in zip(to_process, outcomes):
+        if isinstance(outcome, BaseException):
+            meta = report.get("metadata") or {}
+            logger.warning(
+                "[extract] document failed (doc_id=%s): %s",
+                meta.get("doc_id"),
+                outcome,
+            )
+            skipped.append(
+                SkippedFile(
+                    doc_id=(None if meta.get("doc_id") is None else str(meta.get("doc_id"))),
+                    filename=report.get("filename"),
+                    reason="extraction_failed",
+                    detail=str(outcome),
+                )
+            )
+        else:
+            results.append(outcome)
 
     return ExtractionRunResult(results=results, skipped=skipped)
 
