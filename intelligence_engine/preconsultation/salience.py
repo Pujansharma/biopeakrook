@@ -346,9 +346,14 @@ def _render_clusters(patient: dict) -> list[str]:
 # --- Checklist seeds (objective gaps the LLM should phrase/prioritize) ----
 
 def checklist_seeds(patient: dict) -> list[str]:
-    """Deterministically detected gaps and ambiguities. These seed the checklist;
-    the LLM phrases them clinically, prioritizes, and may add follow-ups it
-    infers. Pure-LLM checklists drift generic — concrete seeds keep it specific."""
+    """Deterministically detected gaps and ambiguities, stated as plain facts.
+
+    These seed the checklist; the LLM turns each into a probe phrased in its own
+    register and priority — the seed itself carries NO directive verb ("verify",
+    "confirm", "clarify") so the model has nothing to echo/anchor on and must do
+    its own phrasing and variety work. Pure-LLM checklists drift generic —
+    concrete seeds keep it specific; the wording stays neutral so tone control
+    lives in exactly one place (the checklist system prompt's probe register)."""
     seeds: list[str] = []
 
     for concern in patient["concerns"]:
@@ -356,24 +361,21 @@ def checklist_seeds(patient: dict) -> list[str]:
         confidence = concern.get("confidence_score", 100)
         if confidence < LOW_CONFIDENCE:
             seeds.append(
-                f"Low confidence ({confidence}) on reported concern '{label}' — "
-                f"confirm or rule out."
+                f"Reported concern '{label}' carries confidence {confidence}/100, "
+                f"below the usual threshold."
             )
             logger.debug("[seed] concern %r confidence=%s (low)", label, confidence)
         if concern.get("probe_flagged") and concern.get("probe_question_count", 0) == 0:
             seeds.append(
-                f"'{label}' was flagged for probing but no probe answers were "
-                f"captured — clarify directly."
+                f"'{label}' was flagged for probing, but no probe answers were "
+                f"captured for it."
             )
             logger.debug("[seed] concern %r flagged but unprobed", label)
 
     mh = patient.get("medical_history", {})
     allergies = [a["name"] for a in mh.get("allergies", []) if a.get("name")]
     if allergies:
-        seeds.append(
-            f"Documented allergy to {', '.join(allergies)} — verify before "
-            f"prescribing."
-        )
+        seeds.append(f"Documented allergy: {', '.join(allergies)}.")
         logger.debug("[seed] allergies: %s", allergies)
 
     for cluster in patient["cluster_scores"]:
@@ -382,8 +384,8 @@ def checklist_seeds(patient: dict) -> list[str]:
             and cluster.get("validation_skip_reason") == "not_probed"
         ):
             seeds.append(
-                f"'{cluster['cluster_label']}' pattern was not validated "
-                f"(skipped: not_probed) — confirm it holds before acting on it."
+                f"'{cluster['cluster_label']}' pattern has not been validated "
+                f"(skipped: not_probed)."
             )
             logger.debug("[seed] cluster %r not_probed", cluster["cluster_label"])
 
@@ -399,10 +401,7 @@ def _notable_reproductive(mh: dict) -> list[str]:
     out: list[str] = []
     for a in mh.get("sexual_health_answers", []):
         if not _is_negative(a.get("option_id")):
-            out.append(
-                f"Reproductive finding: {a['question_label']} = {a['option_label']} "
-                f"— consider its relevance."
-            )
+            out.append(f"Reproductive finding: {a['question_label']} = {a['option_label']}.")
     return out
 
 

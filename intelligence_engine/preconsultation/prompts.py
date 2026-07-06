@@ -315,20 +315,84 @@ _CHECKLIST_PROBE_REGISTERS: dict[str, dict[str, str]] = {
             "questions with short statements so the list never reads as a form. "
             "The deference comes from the framing — these are flagged FOR the "
             "doctor to decide — NOT from a hedging word bolted onto each line, so "
-            'do not repeat "worth"/"consider"/"may want to" down the list.'
+            'do not repeat "worth"/"consider"/"may want to" down the list; treat '
+            "each probe as its own fresh sentence, not a slot filled from a "
+            "template.\n"
+            "- NEVER stack two directive verbs into one probe joined by \"and\" "
+            "(e.g. NOT \"Verify the recorded Penicillin allergy immediately and "
+            "hold or review the current Amoxicillin prescription until "
+            "reconciled\" — that reads as an order, not a flag). Say the SAME "
+            "thing as a single flagged tension instead: \"Amoxicillin against a "
+            'recorded penicillin allergy — confirm before it continues?" One '
+            "flag, one thought — even for an urgent (red_flag_escalation) item; "
+            "urgency changes the score, never the register.\n"
+            "- The 'Detected gaps' list below is raw signal, not phrasing to "
+            "reuse — if a gap's wording would read as an order lifted straight "
+            "into the probe, that is a sign to rewrite it, not copy it."
+        ),
+    },
+    # v3 — surface the tension only; the doctor owns the action entirely. No
+    # prescribed workup, no "observation — imperative" structure, no directive
+    # verbs anywhere. Each probe is either an open question or a plain flag.
+    "associate_v3": {
+        "probe_field": (
+            "a short flag that NAMES the tension, gap, or finding and, where it "
+            "reads naturally, poses it as an open question — nothing more. It must "
+            "NOT tell the doctor what to do about it: the doctor owns the workup, "
+            "the orders, and the plan entirely. State WHAT is notable and WHY it is "
+            "in tension; never append the response. Keep it plain, not jargon-"
+            "dense. Good: \"Amoxicillin on the med list against a recorded "
+            'penicillin allergy — real, or a charting slip?"; "BP still drifting up '
+            'after eight years on amlodipine 10mg — is it actually controlled?"; '
+            "\"'Erectile difficulty: yes' recorded for a 58-year-old woman — likely "
+            'a mis-entry?"; "Sleep pattern looks like the main driver of the '
+            'fatigue." Bad (these PRESCRIBE and are forbidden): "... — get recent '
+            'home and clinic BP readings and orthostatic checks"; "... — confirm '
+            'the allergy details and whether it was started intentionally"; '
+            '"Obtain an HbA1c"; "Review the antihypertensive regimen".'
+        ),
+        "extra_rule": (
+            "- The probe surfaces the tension; the DOCTOR decides the action. "
+            "Never write what to do about a finding — no prescribed test, value to "
+            "obtain, medication change, or workup. If a probe would read as an "
+            "instruction the doctor could tick off, it is wrong: strip the action "
+            "and leave only the flagged tension (as a statement or an open "
+            "question).\n"
+            "- BAN the \"observation — imperative\" shape: a clause that states a "
+            "finding, then a dash/semicolon, then a command telling the doctor what "
+            "to do (\"... — get X\", \"... — confirm Y and obtain Z\"). The part "
+            "after the dash must itself be part of the observation or an open "
+            "question, NEVER a directive.\n"
+            "- Do NOT use directive verbs aimed at the doctor anywhere in the "
+            "probe: get, obtain, order, measure, check, confirm, verify, "
+            "reconcile, review, assess, evaluate, ensure, start, stop, hold, "
+            "repeat, screen, rule out. These make it an order. An open question "
+            "(\"is it controlled?\", \"real or a charting slip?\") carries the same "
+            "intent without commanding.\n"
+            "- VARY the shape of every probe. Do NOT open successive probes with "
+            "the same word or template, and do NOT lean on a repeated hedge "
+            "(\"worth\"/\"consider\"/\"may want to\"); mix open questions with "
+            "plain flag statements so the list never reads as a form. Each probe is "
+            "its own fresh sentence.\n"
+            "- One flag, one thought — even for an urgent (red_flag_escalation) "
+            "item. Urgency changes the score, never the register; a red flag is "
+            "still surfaced as a flag, not shouted as an order.\n"
+            "- The 'Detected gaps' list below is raw signal, not phrasing to "
+            "reuse — if a gap's wording would read as an order lifted into the "
+            "probe, that is a sign to rewrite it, not copy it."
         ),
     },
 }
 
 ACTIVE_CHECKLIST_REGISTER = os.environ.get(
-    "PRECONS_CHECKLIST_REGISTER", "associate_v2"
+    "PRECONS_CHECKLIST_REGISTER", "associate_v3"
 )
 
 
 def _probe_register() -> dict[str, str]:
-    """The active checklist probe register (falls back to associate_v2)."""
+    """The active checklist probe register (falls back to associate_v3)."""
     return _CHECKLIST_PROBE_REGISTERS.get(
-        ACTIVE_CHECKLIST_REGISTER, _CHECKLIST_PROBE_REGISTERS["associate_v2"]
+        ACTIVE_CHECKLIST_REGISTER, _CHECKLIST_PROBE_REGISTERS["associate_v3"]
     )
 
 
@@ -472,7 +536,8 @@ Patient profile (findings pre-ordered by criticality):
 
 {profile}
 
-Detected gaps (use these as additional signals for probing):
+Detected gaps (raw signals only — rewrite each in your own words and register \
+below; never copy this wording into a probe verbatim):
 {seeds}
 
 Produce the probe hypotheses for this patient.\
