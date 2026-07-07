@@ -16,6 +16,33 @@ CUSTOMER_PROFILE_HEADER = OpenApiParameter(
     description="Target family profile UUID. Defaults to the customer's main profile.",
 )
 
+RESULT_LIST_SEARCH_PARAM = OpenApiParameter(
+    name="search",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description=(
+        "Filter by customer full name, phone, or contact email "
+        "(prefix match on name/phone; prefix and contains on email)."
+    ),
+)
+
+RESULT_LIST_PAGE_PARAM = OpenApiParameter(
+    name="page",
+    type=int,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Page number (default 1).",
+)
+
+RESULT_LIST_LIMIT_PARAM = OpenApiParameter(
+    name="limit",
+    type=int,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Page size (default 10, max 50).",
+)
+
 PRE_CONSULTATION_LAYER_TAG = "Pre-Consultation Layers"
 PRE_CONSULTATION_SESSION_TAG = "Pre-Consultation Session"
 PRE_CONSULTATION_RESULT_TAG = "Pre-Consultation Result"
