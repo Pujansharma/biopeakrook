@@ -28,9 +28,11 @@ from pre_consultation.result_views import (
     PreConsultationResultHealthMapView,
     PreConsultationResultLifestyleView,
     PreConsultationResultMedicalContextView,
+    PreConsultationResultMedicalReportsView,
     PreConsultationResultNotesView,
     PreConsultationResultOverviewView,
     PreConsultationResultRawDataView,
+    PreConsultationResultSurgeryView,
     PreConsultationSessionListView,
 )
 from pre_consultation.views import (
@@ -170,6 +172,16 @@ urlpatterns = [
         "result/<uuid:user_id>/medical-context/",
         PreConsultationResultMedicalContextView.as_view(),
         name="result-medical-context",
+    ),
+    path(
+        "result/<uuid:user_id>/surgery/",
+        PreConsultationResultSurgeryView.as_view(),
+        name="result-surgery",
+    ),
+    path(
+        "result/<uuid:user_id>/medical-reports/",
+        PreConsultationResultMedicalReportsView.as_view(),
+        name="result-medical-reports",
     ),
     path(
         "result/<uuid:user_id>/raw-data/",

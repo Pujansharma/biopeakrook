@@ -19,9 +19,11 @@ from pre_consultation.result_builders import (
     build_health_map_payload,
     build_lifestyle_payload,
     build_medical_context_payload,
+    build_medical_reports_payload,
     build_notes_payload,
     build_overview_payload,
     build_raw_data_payload,
+    build_surgery_payload,
     get_session_list_queryset,
     serialize_checklist_item,
     serialize_session_list_item,
@@ -206,6 +208,43 @@ class PreConsultationResultMedicalContextView(
         return pre_consultation_response(
             success=True,
             data=build_medical_context_payload(context),
+            status_code=status.HTTP_200_OK,
+        )
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=[PRE_CONSULTATION_RESULT_TAG],
+        description="Surgery history with name, performed_when, and reason.",
+    ),
+)
+class PreConsultationResultSurgeryView(PreConsultationResultBaseView, GetMethodMixin):
+    def get(self, request, user_id, *args, **kwargs):
+        context = self.load_context(user_id)
+        return pre_consultation_response(
+            success=True,
+            data=build_surgery_payload(context),
+            status_code=status.HTTP_200_OK,
+        )
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=[PRE_CONSULTATION_RESULT_TAG],
+        description=(
+            "Uploaded medical reports with download URL and generated summary metadata."
+        ),
+    ),
+)
+class PreConsultationResultMedicalReportsView(
+    PreConsultationResultBaseView,
+    GetMethodMixin,
+):
+    def get(self, request, user_id, *args, **kwargs):
+        context = self.load_context(user_id)
+        return pre_consultation_response(
+            success=True,
+            data=build_medical_reports_payload(context),
             status_code=status.HTTP_200_OK,
         )
 
