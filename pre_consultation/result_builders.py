@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from django.db.models import Prefetch
+from django.db.models import F, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models.functions import Coalesce, Concat
 
 from accounts.customers.models import CustomerProfile
 from accounts.users.utils.helper import calculate_age
+from core.utils.db.functions import ExtractPartText
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.layers.patient_baseline import customer_profile_to_payload
 from pre_consultation.layers.patient_goals_priorities import (
@@ -842,14 +844,49 @@ def serialize_session_list_item(session: PreConsultationSession) -> dict:
     }
 
 
-def get_session_list_queryset():
+def get_session_list_queryset(search: str = ""):
+    main_profile_first_name = CustomerProfile.objects.filter(
+        customer_id=OuterRef("user_id"),
+        is_main=True,
+    ).values("first_name")[:1]
+    main_profile_last_name = CustomerProfile.objects.filter(
+        customer_id=OuterRef("user_id"),
+        is_main=True,
+    ).values("last_name")[:1]
     main_profiles = CustomerProfile.objects.filter(is_main=True)
-    return PreConsultationSession.objects.select_related(
-        "user__customer",
-    ).prefetch_related(
-        Prefetch(
-            "user__customer__profiles",
-            queryset=main_profiles,
-            to_attr="main_profiles",
-        ),
-    ).order_by("-created_at")
+    queryset = (
+        PreConsultationSession.objects.select_related(
+            "user__customer",
+        )
+        .annotate(
+            profile_first_name=Subquery(main_profile_first_name),
+            profile_last_name=Subquery(main_profile_last_name),
+            full_name=Concat(
+                Coalesce(F("profile_first_name"), F("user__first_name"), Value("")),
+                Value(" "),
+                Coalesce(F("profile_last_name"), F("user__last_name"), Value("")),
+            ),
+            national_phone=ExtractPartText(
+                F("user__phone"),
+                Value("-"),
+                Value("-1"),
+            ),
+        )
+        .prefetch_related(
+            Prefetch(
+                "user__customer__profiles",
+                queryset=main_profiles,
+                to_attr="main_profiles",
+            ),
+        )
+        .order_by("-created_at")
+    )
+    if not search:
+        return queryset
+
+    search_query = Q()
+    search_query |= Q(full_name__istartswith=search)
+    search_query |= Q(national_phone__istartswith=search)
+    search_query |= Q(user__customer__contact_email__istartswith=search)
+    search_query |= Q(user__customer__contact_email__icontains=search)
+    return queryset.filter(search_query)
