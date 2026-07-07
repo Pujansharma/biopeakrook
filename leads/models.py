@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 from accounts.centers.models import Center
@@ -6,6 +7,7 @@ from accounts.users.models import Gender
 from accounts.utils.auth import get_user_model
 from core.utils.fields import PhoneNumberField
 from core.utils.models import BaseUUIDModel
+from leads.utils.constants import LeadPackages
 
 User = get_user_model()
 
@@ -20,7 +22,7 @@ class Lead(BaseUUIDModel):
     phone = PhoneNumberField()
     email = models.EmailField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
-
+    date_of_birth = models.DateField(null=True, blank=True)
     is_client = models.BooleanField(default=False)
     is_request_sent = models.BooleanField(default=False)
     is_onboarding_sent = models.BooleanField(default=False)
@@ -28,6 +30,13 @@ class Lead(BaseUUIDModel):
     home_center = models.ForeignKey(
         Center, on_delete=models.SET_NULL, null=True, blank=True
     )
+    is_invited = models.BooleanField(default=False)
+    is_joined = models.BooleanField(default=False)
+
+    packages = ArrayField(
+        models.CharField(choices=LeadPackages), null=True, blank=True, default=list
+    )
+
     customer_profile = models.OneToOneField(
         CustomerProfile,
         null=True,
