@@ -49,6 +49,7 @@ class Lead(BaseUUIDModel):
         null=True,
         blank=True,
     )
+    data = models.JSONField(editable=False, null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
