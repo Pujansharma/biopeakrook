@@ -6,19 +6,15 @@ from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.views import (
     BaseCreateAPIView,
-    BaseListAPIView,
+    BaseGenericAPIView,
     BaseListCreateAPIView,
-    BaseRetrieveUpdateDestroyAPIView, BaseGenericAPIView,
+    BaseRetrieveUpdateDestroyAPIView,
 )
 from leads.models import Lead
 from leads.serializers import (
-    LeadAssignCompositeSerializer,
-    LeadAvailableCompositeSerializer,
-    LeadCompositeAssignmentSerializer,
     LeadConvertClientSerializer,
     LeadDetailSerializer,
     LeadListCreateSerializer,
-    LeadShareOnboardingSerializer,
 )
 from leads.utils.db import (
     decrement_leads_assigned,
@@ -37,13 +33,13 @@ class LeadsView(BaseListCreateAPIView):
         search = Q()
         search_query = self.request.query_params.get("search", "").strip()
         active_query = self.request.query_params.get("active", None)
-        client_query = self.request.query_params.get("is_client", None)
+        joined_query = self.request.query_params.get("is_joined", None)
         center_query = self.request.query_params.get("center_id", None)
 
         if active_query in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query))
-        if client_query in ["0", "1"]:
-            filter_kwargs["is_client"] = bool(int(client_query))
+        if joined_query in ["0", "1"]:
+            filter_kwargs["is_joined"] = bool(int(joined_query))
         if center_query:
             filter_kwargs["home_center__pk"] = center_query
 
@@ -101,7 +97,7 @@ class LeadDetailView(BaseRetrieveUpdateDestroyAPIView):
             decrement_leads_total()
             if not instance.is_active:
                 decrement_leads_inactive()
-            if instance.is_client:
+            if instance.is_joined:
                 decrement_leads_assigned()
             if instance.customer_profile or instance.converted_on:
                 decrement_leads_converted()
@@ -125,16 +121,6 @@ class LeadActionMixin(BaseGenericAPIView):
         )
 
 
-class LeadShareOnboardingView(LeadActionMixin, BaseCreateAPIView):
-    serializer_class = LeadShareOnboardingSerializer
-
-    def perform_create(self, serializer: LeadShareOnboardingSerializer) -> None:
-        serializer.save(
-            lead=self.get_lead(),
-            created_by=self.request.user,
-        )
-
-
 class LeadConvertClientView(LeadActionMixin, BaseCreateAPIView):
     serializer_class = LeadConvertClientSerializer
 
@@ -143,28 +129,3 @@ class LeadConvertClientView(LeadActionMixin, BaseCreateAPIView):
             lead=self.get_lead(),
             updated_by=self.request.user,
         )
-
-
-class LeadAvailablePackagesView(LeadActionMixin, BaseListAPIView):
-    serializer_class = LeadAvailableCompositeSerializer
-
-    def get_queryset(self) -> list:
-        lead = self.get_lead()
-
-        return []
-
-
-class LeadAssignPackageView(LeadActionMixin, BaseCreateAPIView):
-    serializer_class = LeadAssignCompositeSerializer
-
-    def perform_create(self, serializer: LeadAssignCompositeSerializer) -> None:
-        lead = self.get_lead()
-        serializer.save(lead=lead, created_by=self.request.user)
-
-
-class LeadPackagesView(LeadActionMixin, BaseListAPIView):
-    serializer_class = LeadCompositeAssignmentSerializer
-
-    def get_queryset(self) -> list:
-        lead = self.get_lead()
-        return []
