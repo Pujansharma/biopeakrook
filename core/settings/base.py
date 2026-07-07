@@ -37,6 +37,8 @@ INSTALLED_APPS = [
     "accounts.customers",
     "accounts.audits",
     "accounts.admins",
+    "leads",
+    "integrations",
     "appointments",
     "programs",
     "programs.services",
