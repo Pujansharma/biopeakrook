@@ -1,35 +1,24 @@
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer
-from accounts.centers.utils.db import increment_customer_count
-from accounts.customers.models import (
-    Customer,
-    CustomerCenterAssignment,
-    CustomerProfile,
-)
-from accounts.customers.utils.db import (
-    create_customer_user_account,
-    increment_centers_count,
-)
-from accounts.organizations.utils.db import increment_organization_clients_count
 from accounts.users.serializers import BaseUserSerializer
 from accounts.utils.auth import get_user_model
+from accounts.utils.helper import get_date_of_birth_from_age
 from core.utils.fields import PhoneNumberSerializerField
-from core.utils.serializers import BaseModelSerializer, BaseSerializer
+from core.utils.serializers import BaseModelSerializer
+from integrations.metsights.helper import get_or_create_metsights_profile
 from leads.models import Lead
 from leads.utils.db import (
     decrement_leads_assigned,
     decrement_leads_inactive,
     generate_lead_unique_id,
     increment_leads_assigned,
-    increment_leads_converted,
     increment_leads_inactive,
     increment_leads_total,
-    share_onboarding_form,
 )
+from leads.utils.helper import create_customer_profile_from_lead
 
 User = get_user_model()
 
@@ -39,7 +28,8 @@ class BaseLeadSerializer(BaseModelSerializer):
     created_by = BaseUserSerializer(read_only=True)
     updated_by = BaseUserSerializer(read_only=True)
     home_center = BaseCenterSerializer(read_only=True)
-    home_center_id = serializers.UUIDField(required=False)
+    home_center_id = serializers.UUIDField(required=False, write_only=True)
+    age = serializers.FloatField(required=False, write_only=True)
 
     class Meta:
         model = Lead
@@ -49,14 +39,19 @@ class BaseLeadSerializer(BaseModelSerializer):
             "first_name",
             "last_name",
             "gender",
+            "age",
+            "date_of_birth",
             "phone",
             "email",
             "description",
             "is_active",
             "is_client",
+            "is_invited",
+            "is_joined",
             "is_request_sent",
             "is_onboarding_sent",
             "converted_on",
+            "packages",
             "home_center",
             "home_center_id",
             "customer_profile",
@@ -68,6 +63,8 @@ class BaseLeadSerializer(BaseModelSerializer):
         read_only_fields = [
             "id",
             "unique_id",
+            "is_client",
+            "is_joined",
             "is_request_sent",
             "is_onboarding_sent",
             "converted_on",
@@ -81,6 +78,19 @@ class BaseLeadSerializer(BaseModelSerializer):
 
 class LeadListCreateSerializer(BaseLeadSerializer):
     def create(self, validated_data: dict) -> Lead:
+        age = validated_data.pop("age", None)
+        date_of_birth = validated_data.get("date_of_birth", None)
+        phone = validated_data.get("phone")
+        email = validated_data.get("email")
+        first_name = validated_data.get("first_name")
+        last_name = validated_data.get("last_name")
+        gender = validated_data.get("gender")
+
+        is_invited = validated_data.get("is_invited")
+        if age and date_of_birth:
+            date_of_birth = get_date_of_birth_from_age(age)
+            validated_data["date_of_birth"] = date_of_birth
+
         validated_data["unique_id"] = generate_lead_unique_id()
         home_center_id = validated_data.pop("home_center_id", None)
         if home_center_id:
@@ -96,8 +106,16 @@ class LeadListCreateSerializer(BaseLeadSerializer):
             increment_leads_total()
             if not lead.is_active:
                 increment_leads_inactive()
-            if lead.is_client:
-                increment_leads_assigned()
+            if is_invited:
+                metsights_profile_id = get_or_create_metsights_profile(
+                    phone, email, first_name, last_name, gender, age, date_of_birth
+                )
+                if metsights_profile_id:
+                    lead.data = {
+                        **(lead.data or {}),
+                        "metsights_profile_id": metsights_profile_id,
+                    }
+                    lead.save(update_fields=["data"])
         return lead
 
 
@@ -106,7 +124,7 @@ class LeadDetailSerializer(BaseLeadSerializer):
 
     def update(self, instance: Lead, validated_data: dict) -> Lead:
         was_active = instance.is_active
-        was_client = instance.is_client
+        was_joined = instance.is_joined
         was_converted = bool(instance.customer_profile or instance.converted_on)
 
         home_center_id = validated_data.pop("home_center_id", None)
@@ -117,46 +135,39 @@ class LeadDetailSerializer(BaseLeadSerializer):
                     {"home_center_id": "Invalid center ID provided"}
                 )
             validated_data["home_center"] = home_center
+        age = validated_data.pop("age", None)
+        date_of_birth = validated_data.get("date_of_birth", None)
 
+        if age and date_of_birth:
+            date_of_birth = get_date_of_birth_from_age(age)
+            validated_data["date_of_birth"] = date_of_birth
         with transaction.atomic():
             lead = super().update(instance, validated_data)
+            lead_data = lead.data or {}
             if was_active and not lead.is_active:
                 increment_leads_inactive()
             if not was_active and lead.is_active:
                 decrement_leads_inactive()
-            if not was_client and lead.is_client:
+            if not was_joined and lead.is_joined:
                 increment_leads_assigned()
-            if was_client and not lead.is_client and not was_converted:
+            if was_joined and not lead.is_joined and not was_converted:
                 decrement_leads_assigned()
-
-        return lead
-
-
-class LeadShareOnboardingSerializer(BaseModelSerializer):
-    class Meta:
-        model = Lead
-        fields = [
-            "id",
-            "is_request_sent",
-            "is_onboarding_sent",
-        ]
-        read_only_fields = fields
-
-    def create(self, validated_data: dict) -> Lead:
-        lead = validated_data["lead"]
-        created_by = validated_data.get("created_by")
-        share_onboarding_form()
-        lead.is_request_sent = True
-        lead.is_onboarding_sent = True
-        lead.updated_by = created_by
-        lead.save(
-            update_fields=[
-                "is_request_sent",
-                "is_onboarding_sent",
-                "updated_by",
-                "updated_at",
-            ]
-        )
+            if lead.is_invited and not lead_data.get("metsights_profile_id"):
+                metsights_profile_id = get_or_create_metsights_profile(
+                    lead.phone,
+                    lead.email,
+                    lead.first_name,
+                    lead.last_name,
+                    lead.gender,
+                    age=None,
+                    date_of_birth=lead.date_of_birth,
+                )
+                if metsights_profile_id:
+                    lead.data = {
+                        **lead_data,
+                        "metsights_profile_id": metsights_profile_id,
+                    }
+                    lead.save(update_fields=["data"])
         return lead
 
 
@@ -166,6 +177,7 @@ class LeadConvertClientSerializer(BaseModelSerializer):
         fields = [
             "id",
             "is_client",
+            "is_joined",
             "converted_on",
             "customer_profile",
         ]
@@ -177,98 +189,16 @@ class LeadConvertClientSerializer(BaseModelSerializer):
 
         if lead.customer_profile or lead.converted_on:
             raise serializers.ValidationError("Lead is already converted to client.")
-        if not lead.is_client:
-            raise serializers.ValidationError(
-                "Lead must be marked as client before conversion."
-            )
         if not lead.home_center:
             raise serializers.ValidationError(
                 {"home_center": "Home center is required before conversion."}
             )
-        if User.objects.filter(phone__iexact=lead.phone).exists():
+        if User.objects.filter(phone=lead.phone).exists():
             raise serializers.ValidationError(
                 {"phone": "A customer user with this phone already exists."}
             )
 
-        profile_data = {
-            "first_name": lead.first_name,
-            "last_name": lead.last_name,
-            "gender": lead.gender,
-        }
-
         with transaction.atomic():
-            user = User.objects.create_user(
-                email=None,
-                password=None,
-                phone=lead.phone,
-                **profile_data,
-            )
-            customer = Customer.objects.create(
-                user=user,
-                contact_email=lead.email,
-                created_by=updated_by,
-            )
-            customer_profile = CustomerProfile.objects.create(
-                customer=customer,
-                is_main=True,
-                created_by=updated_by,
-                **profile_data,
-            )
-            CustomerCenterAssignment.objects.create(
-                customer_profile=customer_profile,
-                center=lead.home_center,
-                is_primary=True,
-                created_by=updated_by,
-            )
-            create_customer_user_account(customer)
-            increment_customer_count(lead.home_center.pk)
-            increment_centers_count(customer_profile.pk)
-            increment_organization_clients_count()
-
-            lead.customer_profile = customer_profile
-            lead.converted_on = timezone.now()
-            lead.updated_by = updated_by
-            lead.save(
-                update_fields=[
-                    "customer_profile",
-                    "converted_on",
-                    "updated_by",
-                    "updated_at",
-                ]
-            )
-            increment_leads_converted()
+            create_customer_profile_from_lead(lead, updated_by)
 
         return lead
-
-
-class LeadAvailableCompositeSerializer(BaseSerializer):
-    id = serializers.UUIDField(read_only=True)
-    name = serializers.CharField(read_only=True)
-
-
-class CompositeIDSerializer(BaseSerializer):
-    id = serializers.UUIDField(write_only=True)
-
-
-class LeadAssignCompositeSerializer(BaseSerializer):
-    add = CompositeIDSerializer(many=True, required=False, write_only=True)
-    remove = CompositeIDSerializer(many=True, required=False, write_only=True)
-
-    def create(self, validated_data: dict) -> dict:
-        add_ids = validated_data.get("add", [])
-        remove_ids = validated_data.get("remove", [])
-
-        if not add_ids and not remove_ids:
-            raise serializers.ValidationError(
-                "At least one of 'add' or 'remove' must be provided."
-            )
-
-        raise serializers.ValidationError(
-            "Composite package assignment is unavailable until composite models are implemented."
-        )
-
-
-class LeadCompositeAssignmentSerializer(BaseSerializer):
-    id = serializers.UUIDField(read_only=True)
-    composite = LeadAvailableCompositeSerializer(read_only=True)
-    created_at = serializers.DateTimeField(read_only=True)
