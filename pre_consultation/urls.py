@@ -31,6 +31,7 @@ from pre_consultation.result_views import (
     PreConsultationResultNotesView,
     PreConsultationResultOverviewView,
     PreConsultationResultRawDataView,
+    PreConsultationSessionListView,
 )
 from pre_consultation.views import (
     PreConsultationSessionCompleteView,
@@ -124,6 +125,11 @@ urlpatterns = [
         "session/patient_goals_priorities/",
         PatientGoalsPrioritiesLayerView.as_view(),
         name="session-patient-goals-priorities",
+    ),
+    path(
+        "result/list/",
+        PreConsultationSessionListView.as_view(),
+        name="result-list",
     ),
     path(
         "result/<uuid:user_id>/overview/",
