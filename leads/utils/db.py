@@ -84,7 +84,3 @@ def decrement_leads_inactive() -> None:
             default=Value(0),
         )
     )
-
-
-def share_onboarding_form() -> None:
-    pass
