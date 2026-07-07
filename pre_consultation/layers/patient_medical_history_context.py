@@ -64,7 +64,6 @@ class PatientMedicalHistoryContextMedicationRequestSerializer(serializers.Serial
 
 class PatientMedicalHistoryContextSurgeryRequestSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
-    area = serializers.CharField(max_length=255)
     performed_when = serializers.CharField(max_length=100)
     reason = serializers.CharField(max_length=255)
 
@@ -243,7 +242,6 @@ class PatientMedicalHistoryContextMedicationResponseSerializer(serializers.Seria
 
 class PatientMedicalHistoryContextSurgeryResponseSerializer(serializers.Serializer):
     name = serializers.CharField()
-    area = serializers.CharField()
     performed_when = serializers.CharField()
     reason = serializers.CharField()
 
@@ -499,7 +497,6 @@ def load_medical_history_from_db(session: PreConsultationSession) -> dict:
         "surgeries": [
             {
                 "name": surgery.name,
-                "area": surgery.area,
                 "performed_when": surgery.performed_when,
                 "reason": surgery.reason,
             }
@@ -668,7 +665,6 @@ def persist_patient_medical_history_context_payload(
             PreConsultationSurgery(
                 medical_history=medical_history,
                 name=surgery["name"],
-                area=surgery["area"],
                 performed_when=surgery["performed_when"],
                 reason=surgery["reason"],
             )

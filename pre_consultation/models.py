@@ -284,7 +284,6 @@ class PreConsultationSurgery(BaseUUIDModel):
         related_name="surgeries",
     )
     name = models.CharField(max_length=255)
-    area = models.CharField(max_length=255)
     performed_when = models.CharField(max_length=100)
     reason = models.CharField(max_length=255)
 
