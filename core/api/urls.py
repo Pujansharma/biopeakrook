@@ -1,11 +1,19 @@
+from django.conf import settings
 from django.urls import path, include
 from django.views.generic import RedirectView
+from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from core.utils.defaults import HomePageView
 
 urlpatterns = [
     path("", HomePageView.as_view()),
+    path(
+        "erd/",
+        serve,
+        {"document_root": settings.BASE_DIR / "docs", "path": "schema-erd.html"},
+        name="schema-erd",
+    ),
     path("openapi/", SpectacularAPIView.as_view(), name="openapi-schema"),
     path(
         "openapi/docs/",
