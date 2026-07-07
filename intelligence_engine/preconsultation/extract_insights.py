@@ -438,16 +438,28 @@ def _pre_read_text(ext: str, data: bytes) -> tuple[str, int]:
     """Cheaply extract text + count embedded images from a file for token estimation.
 
     No OCR / LLM calls — native text only. Returns (text, image_count).
+
+    For PDFs the image_count is the number of images the pipeline would ACTUALLY
+    OCR, not the raw count of image references. It reuses `_plan_pdf_images`
+    (geometry filters + text-layer routing) and the same dedupe `_read_pdf`
+    applies, so a text report decorated with one logo repeated hundreds of times
+    per page is not mis-estimated as hundreds of OCR targets (which previously
+    inflated the token estimate ~70x and wrongly tripped exceeds_token_limit).
     """
     if ext == "pdf":
         import fitz  # PyMuPDF
 
         parts: list[str] = []
-        images = 0
         with fitz.open(stream=data, filetype="pdf") as doc:
             for page in doc:
                 parts.append(page.get_text("text"))
-                images += len(page.get_images(full=True))
+            # Count only images that survive planning; then dedupe identical
+            # images to one OCR each, exactly as _read_pdf does.
+            jobs, _stats = _plan_pdf_images(doc, DEFAULT_OCR_CONFIG)
+            if DEFAULT_OCR_CONFIG.dedupe_images:
+                images = len({j.identity for j in jobs})
+            else:
+                images = len(jobs)
         return "\n".join(parts), images
     if ext == "docx":
         import io
