@@ -21,7 +21,7 @@ class FirebaseRegistrationToken(BaseUUIDModel):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "user_agent", "project_id", "token"],
+                fields=["user", "user_agent", "ip_address", "project_id", "token"],
                 name="unique_user_token",
             )
         ]

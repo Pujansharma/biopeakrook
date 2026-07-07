@@ -1,0 +1,4154 @@
+{
+  "schema_id": "3.0.3",
+  "max_health_goals": 3,
+  "health_goals": [
+    {
+      "id": "improve_energy",
+      "label": "Improve energy"
+    },
+    {
+      "id": "improve_sleep",
+      "label": "Improve sleep"
+    },
+    {
+      "id": "weight_loss",
+      "label": "Weight loss"
+    },
+    {
+      "id": "improve_fitness",
+      "label": "Improve fitness"
+    },
+    {
+      "id": "improve_digestion",
+      "label": "Improve digestion"
+    },
+    {
+      "id": "balance_hormones",
+      "label": "Balance hormones"
+    },
+    {
+      "id": "healthy_aging",
+      "label": "Healthy aging"
+    },
+    {
+      "id": "disease_prevention",
+      "label": "Disease prevention"
+    },
+    {
+      "id": "longevity",
+      "label": "Longevity"
+    },
+    {
+      "id": "fertility",
+      "label": "Fertility"
+    },
+    {
+      "id": "mental_performance",
+      "label": "Mental performance"
+    },
+    {
+      "id": "manage_known_condition",
+      "label": "Manage a known condition"
+    }
+  ],
+  "concern_source": [
+    {
+      "id": "symptoms",
+      "label": "I'm experiencing symptoms",
+      "effect": "Symptom signal",
+      "weight": 25,
+      "icon": "Activity",
+      "icon-class": "icon-activity"
+    },
+    {
+      "id": "lab_result",
+      "label": "A doctor / test result identified this",
+      "effect": "Opens \"What was flagged?\" chips",
+      "weight": 30,
+      "icon": "ClipboardList",
+      "icon-class": "icon-clipboard-list"
+    },
+    {
+      "id": "family",
+      "label": "It runs in my family",
+      "effect": "Opens Family History branch",
+      "icon": "UsersRound",
+      "icon-class": "icon-users-round"
+    },
+    {
+      "id": "curiosity",
+      "label": "I want to understand this area better",
+      "effect": "Curiosity signal",
+      "weight": 10,
+      "icon": "Circle",
+      "icon-class": "icon-circle"
+    }
+  ],
+  "family_relation": [
+    {
+      "id": "mother",
+      "label": "Mother",
+      "category": "first_degree",
+      "weight": 1.0
+    },
+    {
+      "id": "father",
+      "label": "Father",
+      "category": "first_degree",
+      "weight": 1.0
+    },
+    {
+      "id": "brother",
+      "label": "Brother",
+      "category": "first_degree",
+      "weight": 1.0
+    },
+    {
+      "id": "sister",
+      "label": "Sister",
+      "category": "first_degree",
+      "weight": 1.0
+    },
+    {
+      "id": "son",
+      "label": "Son",
+      "category": "first_degree",
+      "weight": 1.0
+    },
+    {
+      "id": "daughter",
+      "label": "Daughter",
+      "category": "first_degree",
+      "weight": 1.0
+    },
+    {
+      "id": "maternal_grandmother",
+      "label": "Maternal Grandmother",
+      "category": "second_degree",
+      "weight": 0.75
+    },
+    {
+      "id": "paternal_grandmother",
+      "label": "Paternal Grandmother",
+      "category": "second_degree",
+      "weight": 0.75
+    },
+    {
+      "id": "maternal_grandfather",
+      "label": "Maternal Grandfather",
+      "category": "second_degree",
+      "weight": 0.75
+    },
+    {
+      "id": "paternal_grandfather",
+      "label": "Paternal Grandfather",
+      "category": "second_degree",
+      "weight": 0.75
+    },
+    {
+      "id": "aunt",
+      "label": "Aunt",
+      "category": "extended",
+      "weight": 0.5
+    },
+    {
+      "id": "uncle",
+      "label": "Uncle",
+      "category": "extended",
+      "weight": 0.5
+    },
+    {
+      "id": "cousin",
+      "label": "Cousin",
+      "category": "extended",
+      "weight": 0.25
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "category": "extended",
+      "weight": 0.25
+    }
+  ],
+  "age_band": [
+    {
+      "id": "under_40",
+      "label": "Under 40",
+      "weight": 0.5
+    },
+    {
+      "id": "40_50",
+      "label": "40–50",
+      "weight": 0.3
+    },
+    {
+      "id": "50_60",
+      "label": "50–60",
+      "weight": 0.1
+    },
+    {
+      "id": "over_60",
+      "label": "Over 60",
+      "weight": 0.0
+    },
+    {
+      "id": "unknown",
+      "label": "Unknown",
+      "weight": 0.0
+    }
+  ],
+  "family_risk_contribution": [
+    {
+      "id": "low",
+      "label": "Low",
+      "burden_lt": 1,
+      "cluster_contribution_weight": 1
+    },
+    {
+      "id": "moderate",
+      "label": "Moderate",
+      "burden_gte": 1,
+      "burden_lte": 2,
+      "cluster_contribution_weight": 2
+    },
+    {
+      "id": "high",
+      "label": "High",
+      "burden_gt": 2,
+      "burden_lte": 3,
+      "cluster_contribution_weight": 4
+    },
+    {
+      "id": "very_high",
+      "label": "Very High",
+      "burden_gt": 3,
+      "cluster_contribution_weight": 6
+    }
+  ],
+  "functional_impact": [
+    {
+      "id": "significant",
+      "label": "Significant daily impact",
+      "weight": 35
+    },
+    {
+      "id": "regularly",
+      "label": "Regularly affects me",
+      "weight": 25
+    },
+    {
+      "id": "occasionally",
+      "label": "Occasionally affects me",
+      "weight": 15
+    },
+    {
+      "id": "minimal",
+      "label": "Minimal impact",
+      "weight": 5
+    },
+    {
+      "id": "none",
+      "label": "No impact",
+      "weight": 0
+    }
+  ],
+  "duration_impact": [
+    {
+      "id": "lt_3mo",
+      "label": "Less than 3 months",
+      "weight": 2
+    },
+    {
+      "id": "3_6mo",
+      "label": "3–6 months",
+      "weight": 5
+    },
+    {
+      "id": "6_12mo",
+      "label": "6–12 months",
+      "weight": 10
+    },
+    {
+      "id": "1_3yr",
+      "label": "1–3 years",
+      "weight": 15
+    },
+    {
+      "id": "gt_3yr",
+      "label": "More than 3 years",
+      "weight": 20
+    }
+  ],
+  "progression_impact": [
+    {
+      "id": "rapidly_worsening",
+      "label": "Rapidly worsening",
+      "weight": 15
+    },
+    {
+      "id": "gradually_worsening",
+      "label": "Gradually worsening",
+      "weight": 12
+    },
+    {
+      "id": "stable",
+      "label": "Stable",
+      "weight": 8
+    },
+    {
+      "id": "improving",
+      "label": "Improving",
+      "weight": 3
+    },
+    {
+      "id": "resolved",
+      "label": "Resolved",
+      "weight": 0
+    }
+  ],
+  "diagnosis": [
+    {
+      "id": "diabetes",
+      "label": "Diabetes",
+      "override_floor": 80,
+      "concern_id": [
+        "metabolism_blood_sugar"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "prediabetes",
+      "label": "Prediabetes",
+      "override_floor": 80,
+      "concern_id": [
+        "metabolism_blood_sugar"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "hypertension",
+      "label": "Hypertension (BP)",
+      "override_floor": 80,
+      "concern_id": [
+        "heart_bp_high_bp"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "high_cholesterol",
+      "label": "High cholesterol",
+      "override_floor": 80,
+      "concern_id": [
+        "heart_bp_high_cholesterol"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "heart_disease",
+      "label": "Heart disease (heart attack / stent / CAD)",
+      "override_floor": 80,
+      "concern_id": [
+        "heart_bp_chest_discomfort_exertion"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "stroke_tia",
+      "label": "Stroke / TIA",
+      "flag_only": true,
+      "concern_id": []
+    },
+    {
+      "id": "thyroid_disorder",
+      "label": "Thyroid disorder",
+      "override_floor": 80,
+      "concern_id": [
+        "thyroid_hormonal_thyroid"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "fatty_liver",
+      "label": "Fatty liver (NAFLD)",
+      "override_floor": 80,
+      "concern_id": [
+        "metabolism_fatty_liver"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "kidney_disease",
+      "label": "Kidney disease (CKD)",
+      "override_floor": 80,
+      "concern_id": [
+        "metabolism_kidney_swelling"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "asthma_copd",
+      "label": "Asthma / COPD",
+      "override_floor": 80,
+      "concern_id": [
+        "breathing_lungs_asthma"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "past_tb",
+      "label": "Past TB",
+      "flag_only": true,
+      "concern_id": []
+    },
+    {
+      "id": "pcos",
+      "label": "PCOS / PCOD",
+      "override_floor": 80,
+      "concern_id": [
+        "thyroid_hormonal_pcos"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "anxiety_depression",
+      "label": "Anxiety / depression",
+      "override_floor": 80,
+      "concern_id": [
+        "sleep_stress_mood_anxiety",
+        "sleep_stress_mood_low_mood"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "autoimmune",
+      "label": "Autoimmune condition",
+      "override_floor": 80,
+      "concern_id": [
+        "immunity_inflammation_autoimmune"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "arthritis",
+      "label": "Arthritis / joint condition",
+      "override_floor": 80,
+      "concern_id": [
+        "bones_joints_movement_joint_pain"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "osteoporosis",
+      "label": "Osteoporosis",
+      "override_floor": 80,
+      "concern_id": [
+        "bones_joints_movement_osteoporosis"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "ibs_ibd",
+      "label": "IBS / IBD",
+      "override_floor": 80,
+      "concern_id": [
+        "gut_digestion_ibs"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "sleep_apnea",
+      "label": "Sleep apnea",
+      "override_floor": 80,
+      "concern_id": [
+        "sleep_stress_mood_snoring_sleep_apnea"
+      ],
+      "seeds_concern": true
+    },
+    {
+      "id": "cancer",
+      "label": "Cancer",
+      "flag_only": true,
+      "concern_id": []
+    },
+    {
+      "id": "none",
+      "label": "None",
+      "exclusive": true,
+      "concern_id": []
+    }
+  ],
+  "reproductive_diagnosis": [
+    {
+      "id": "endometriosis",
+      "label": "Endometriosis",
+      "sex_gate": "female"
+    },
+    {
+      "id": "adenomyosis",
+      "label": "Adenomyosis",
+      "sex_gate": "female"
+    },
+    {
+      "id": "fibroids",
+      "label": "Fibroids",
+      "sex_gate": "female"
+    },
+    {
+      "id": "diminished_ovarian_reserve",
+      "label": "Diminished Ovarian Reserve",
+      "sex_gate": "female"
+    },
+    {
+      "id": "recurrent_pregnancy_loss",
+      "label": "Recurrent Pregnancy Loss",
+      "sex_gate": "female"
+    },
+    {
+      "id": "male_factor_infertility",
+      "label": "Male Factor Infertility",
+      "sex_gate": "male"
+    },
+    {
+      "id": "low_testosterone",
+      "label": "Low Testosterone",
+      "sex_gate": "male"
+    },
+    {
+      "id": "erectile_dysfunction",
+      "label": "Erectile Dysfunction",
+      "sex_gate": "male"
+    }
+  ],
+  "family_risk_contribution_cap": 10,
+  "lifestyle_contribution": [
+    {
+      "supporting_signal_count": 0,
+      "score": 0
+    },
+    {
+      "supporting_signal_count": 1,
+      "score": 1
+    },
+    {
+      "supporting_signal_count": 2,
+      "score": 3
+    },
+    {
+      "supporting_signal_count_min": 3,
+      "score": 5
+    }
+  ],
+  "lifestyle_field": [
+    {
+      "id": "sleep_duration",
+      "label": "Sleep",
+      "option": [
+        {
+          "value": "<5 hrs",
+          "label": "<5 hrs"
+        },
+        {
+          "value": "5-6 hrs",
+          "label": "5-6 hrs"
+        },
+        {
+          "value": "6-7 hrs",
+          "label": "6-7 hrs"
+        },
+        {
+          "value": "7-8 hrs",
+          "label": "7-8 hrs"
+        },
+        {
+          "value": "8+ hrs",
+          "label": "8+ hrs"
+        }
+      ]
+    },
+    {
+      "id": "eating_pattern",
+      "label": "Eating pattern",
+      "option": [
+        {
+          "value": "home_cooked_veg",
+          "label": "Mostly home-cooked veg"
+        },
+        {
+          "value": "mixed",
+          "label": "Mixed diet"
+        },
+        {
+          "value": "eating_out",
+          "label": "Frequent eating out"
+        },
+        {
+          "value": "high_sweets",
+          "label": "High sweets / carbs"
+        },
+        {
+          "value": "irregular_meals",
+          "label": "Irregular meals"
+        },
+        {
+          "value": "restrictive_diet",
+          "label": "Pure vegetarian / Vegan / Jain"
+        }
+      ]
+    },
+    {
+      "id": "sugary_drinks",
+      "label": "Sugary drinks / sweet tea",
+      "option": [
+        {
+          "value": "rarely",
+          "label": "Rarely"
+        },
+        {
+          "value": "sometimes",
+          "label": "Sometimes"
+        },
+        {
+          "value": "daily",
+          "label": "Daily"
+        }
+      ]
+    },
+    {
+      "id": "activity_level",
+      "label": "Activity",
+      "option": [
+        {
+          "value": "sedentary",
+          "label": "Sedentary"
+        },
+        {
+          "value": "light",
+          "label": "Light"
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate"
+        },
+        {
+          "value": "active",
+          "label": "Active"
+        },
+        {
+          "value": "very_active",
+          "label": "Very active"
+        }
+      ]
+    },
+    {
+      "id": "desk_job",
+      "label": "Desk / mostly sitting job",
+      "option": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "id": "stress_level",
+      "label": "Stress",
+      "option": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "mild",
+          "label": "Mild"
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "very_high",
+          "label": "Very high"
+        }
+      ]
+    },
+    {
+      "id": "hydration",
+      "label": "Hydration",
+      "option": [
+        {
+          "value": "lt_1L",
+          "label": "<1 L"
+        },
+        {
+          "value": "1-2L",
+          "label": "1-2 L"
+        },
+        {
+          "value": "2-3L",
+          "label": "2-3 L"
+        },
+        {
+          "value": "3L_plus",
+          "label": "3+ L"
+        }
+      ]
+    },
+    {
+      "id": "alcohol",
+      "label": "Alcohol",
+      "option": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "occasional",
+          "label": "Occasional"
+        },
+        {
+          "value": "frequent",
+          "label": "Frequent"
+        }
+      ]
+    },
+    {
+      "id": "tobacco",
+      "label": "Tobacco",
+      "option": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "smoked",
+          "label": "Smoked cigarette/bidi"
+        },
+        {
+          "value": "smokeless",
+          "label": "Smokeless gutka/khaini/paan"
+        },
+        {
+          "value": "both",
+          "label": "Both"
+        },
+        {
+          "value": "former",
+          "label": "Former"
+        }
+      ]
+    }
+  ],
+  "lifestyle_signal": [
+    {
+      "id": "SLEEP_SHORT",
+      "field_id": "sleep_duration",
+      "trigger_values": [
+        "<5 hrs",
+        "5-6 hrs"
+      ],
+      "group": "sleep"
+    },
+    {
+      "id": "SLEEP_BORDERLINE",
+      "field_id": "sleep_duration",
+      "trigger_values": [
+        "6-7 hrs"
+      ],
+      "group": "sleep"
+    },
+    {
+      "id": "DIET_HIGH_SUGAR",
+      "field_id": "eating_pattern",
+      "trigger_values": [
+        "high_sweets"
+      ],
+      "group": "sugar_load"
+    },
+    {
+      "id": "DIET_SUGARY_DRINKS",
+      "field_id": "sugary_drinks",
+      "trigger_values": [
+        "daily"
+      ],
+      "group": "sugar_load"
+    },
+    {
+      "id": "DIET_EATING_OUT",
+      "field_id": "eating_pattern",
+      "trigger_values": [
+        "eating_out"
+      ],
+      "group": "eating_out"
+    },
+    {
+      "id": "DIET_IRREGULAR",
+      "field_id": "eating_pattern",
+      "trigger_values": [
+        "irregular_meals"
+      ],
+      "group": "meal_timing"
+    },
+    {
+      "id": "DIET_RESTRICTIVE",
+      "field_id": "eating_pattern",
+      "trigger_values": [
+        "restrictive_diet"
+      ],
+      "group": "restrictive_diet"
+    },
+    {
+      "id": "ACTIVITY_SEDENTARY",
+      "field_id": "activity_level",
+      "trigger_values": [
+        "sedentary"
+      ],
+      "group": "sedentary"
+    },
+    {
+      "id": "DESK_JOB",
+      "field_id": "desk_job",
+      "trigger_values": [
+        "yes"
+      ],
+      "group": "sedentary"
+    },
+    {
+      "id": "STRESS_HIGH",
+      "field_id": "stress_level",
+      "trigger_values": [
+        "high",
+        "very_high"
+      ],
+      "group": "stress"
+    },
+    {
+      "id": "STRESS_MODERATE",
+      "field_id": "stress_level",
+      "trigger_values": [
+        "moderate"
+      ],
+      "group": "stress_mod"
+    },
+    {
+      "id": "HYDRATION_LOW",
+      "field_id": "hydration",
+      "trigger_values": [
+        "lt_1L"
+      ],
+      "group": "hydration"
+    },
+    {
+      "id": "ALCOHOL_FREQUENT",
+      "field_id": "alcohol",
+      "trigger_values": [
+        "frequent"
+      ],
+      "group": "alcohol"
+    },
+    {
+      "id": "TOBACCO_SMOKED",
+      "field_id": "tobacco",
+      "trigger_values": [
+        "smoked",
+        "both"
+      ],
+      "group": "tobacco_smoked"
+    },
+    {
+      "id": "TOBACCO_SMOKELESS",
+      "field_id": "tobacco",
+      "trigger_values": [
+        "smokeless",
+        "both"
+      ],
+      "group": "tobacco_smokeless"
+    }
+  ],
+  "lifestyle_dedup_rule": [
+    {
+      "id": "R1_sleep",
+      "groups": [
+        "sleep"
+      ],
+      "max": 1,
+      "prefer": [
+        "SLEEP_SHORT",
+        "SLEEP_BORDERLINE"
+      ]
+    },
+    {
+      "id": "R2_sedentary",
+      "groups": [
+        "sedentary"
+      ],
+      "max": 1,
+      "prefer": [
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB"
+      ]
+    },
+    {
+      "id": "R3_sugar_load",
+      "groups": [
+        "sugar_load"
+      ],
+      "max": 1,
+      "prefer": [
+        "DIET_HIGH_SUGAR",
+        "DIET_SUGARY_DRINKS"
+      ]
+    },
+    {
+      "id": "R4_stress",
+      "groups": [
+        "stress",
+        "stress_mod"
+      ],
+      "max": 1,
+      "prefer": [
+        "STRESS_HIGH",
+        "STRESS_MODERATE"
+      ]
+    },
+    {
+      "id": "R5_tobacco",
+      "groups": [
+        "tobacco_smoked",
+        "tobacco_smokeless"
+      ],
+      "max_per_group": 1,
+      "note": "Each form counts independently; 'both' yields 2 signals."
+    }
+  ],
+  "lifestyle_cluster_map": [
+    {
+      "cluster_id": "metabolic_health",
+      "eligible_signal_id": [
+        "DIET_HIGH_SUGAR",
+        "DIET_SUGARY_DRINKS",
+        "DIET_EATING_OUT",
+        "DIET_IRREGULAR",
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB",
+        "SLEEP_SHORT",
+        "SLEEP_BORDERLINE"
+      ]
+    },
+    {
+      "cluster_id": "cardiometabolic_risk",
+      "eligible_signal_id": [
+        "TOBACCO_SMOKED",
+        "TOBACCO_SMOKELESS",
+        "ALCOHOL_FREQUENT",
+        "DIET_HIGH_SUGAR",
+        "DIET_SUGARY_DRINKS",
+        "DIET_EATING_OUT",
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB",
+        "SLEEP_SHORT"
+      ]
+    },
+    {
+      "cluster_id": "hormonal_health",
+      "eligible_signal_id": [
+        "DIET_RESTRICTIVE",
+        "STRESS_HIGH",
+        "STRESS_MODERATE",
+        "SLEEP_SHORT",
+        "SLEEP_BORDERLINE",
+        "DIET_IRREGULAR",
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB"
+      ]
+    },
+    {
+      "cluster_id": "sleep_recovery",
+      "eligible_signal_id": [
+        "SLEEP_SHORT",
+        "SLEEP_BORDERLINE",
+        "STRESS_HIGH",
+        "STRESS_MODERATE",
+        "ALCOHOL_FREQUENT",
+        "DIET_IRREGULAR",
+        "ACTIVITY_SEDENTARY"
+      ]
+    },
+    {
+      "cluster_id": "mood_stress_resilience",
+      "eligible_signal_id": [
+        "STRESS_HIGH",
+        "STRESS_MODERATE",
+        "SLEEP_SHORT",
+        "SLEEP_BORDERLINE",
+        "ALCOHOL_FREQUENT",
+        "DIET_IRREGULAR",
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB"
+      ]
+    },
+    {
+      "cluster_id": "gut_brain_axis",
+      "eligible_signal_id": [
+        "DIET_IRREGULAR",
+        "DIET_EATING_OUT",
+        "DIET_HIGH_SUGAR",
+        "DIET_SUGARY_DRINKS",
+        "STRESS_HIGH",
+        "STRESS_MODERATE",
+        "ALCOHOL_FREQUENT",
+        "SLEEP_SHORT"
+      ]
+    },
+    {
+      "cluster_id": "inflammation_immune_resilience",
+      "eligible_signal_id": [
+        "TOBACCO_SMOKED",
+        "TOBACCO_SMOKELESS",
+        "STRESS_HIGH",
+        "SLEEP_SHORT",
+        "DIET_EATING_OUT",
+        "ALCOHOL_FREQUENT"
+      ]
+    },
+    {
+      "cluster_id": "musculoskeletal_bone_health",
+      "eligible_signal_id": [
+        "DIET_RESTRICTIVE",
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB",
+        "HYDRATION_LOW",
+        "SLEEP_SHORT",
+        "ALCOHOL_FREQUENT"
+      ]
+    },
+    {
+      "cluster_id": "respiratory_health",
+      "eligible_signal_id": [
+        "TOBACCO_SMOKED",
+        "TOBACCO_SMOKELESS",
+        "ACTIVITY_SEDENTARY",
+        "ALCOHOL_FREQUENT"
+      ]
+    },
+    {
+      "cluster_id": "cognitive_healthy_aging",
+      "eligible_signal_id": [
+        "SLEEP_SHORT",
+        "SLEEP_BORDERLINE",
+        "DIET_RESTRICTIVE",
+        "STRESS_HIGH",
+        "STRESS_MODERATE",
+        "ACTIVITY_SEDENTARY",
+        "DESK_JOB",
+        "ALCOHOL_FREQUENT"
+      ]
+    }
+  ],
+  "system_onboarding_map": {
+    "layer_0": "patient_baseline",
+    "layer_1": "patient_category",
+    "layer_2": "patient_concern",
+    "layer_3": "patient_symptom",
+    "layer_4": "patient_concern_probe",
+    "layer_5_5": "patient_medical_history_context",
+    "layer_6": "patient_lifestyle_environment",
+    "layer_5": "patient_cluster_probe",
+    "layer_7": "patient_goals_priorities",
+    "layer_8": "patient_health_map"
+  },
+  "category": [
+    {
+      "id": "heart_bp",
+      "label": "Heart & Blood Pressure",
+      "hint": "BP, cholesterol, palpitations",
+      "icon": "Heart",
+      "icon-class": "icon-heart",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk",
+        "respiratory_health"
+      ],
+      "concern_id": [
+        "heart_bp_high_bp",
+        "heart_bp_high_cholesterol",
+        "heart_bp_palpitations",
+        "heart_bp_chest_discomfort_exertion",
+        "heart_bp_swelling_feet"
+      ]
+    },
+    {
+      "id": "metabolism",
+      "label": "Diabetes, Weight & Metabolism",
+      "icon": "Activity",
+      "icon-class": "icon-activity",
+      "hint": "sugar, weight, fatty liver",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk",
+        "hormonal_health"
+      ],
+      "concern_id": [
+        "metabolism_blood_sugar",
+        "metabolism_weight_gain",
+        "metabolism_belly_fat",
+        "metabolism_fatty_liver",
+        "metabolism_kidney_swelling",
+        "metabolism_sugar_cravings"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal",
+      "label": "Thyroid & Hormonal Health",
+      "hint": "thyroid, periods, PCOS, menopause",
+      "icon": "RefreshCw",
+      "icon-class": "icon-refresh-cw",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "concern_id": [
+        "thyroid_hormonal_thyroid",
+        "thyroid_hormonal_pcos",
+        "thyroid_hormonal_menopause",
+        "thyroid_hormonal_fertility",
+        "thyroid_hormonal_low_testosterone",
+        "thyroid_hormonal_hormonal_imbalance"
+      ]
+    },
+    {
+      "id": "gut_digestion",
+      "label": "Gut & Digestion",
+      "hint": "acidity, gas, bloating",
+      "icon": "Leaf",
+      "icon-class": "icon-leaf",
+      "cluster_id": [
+        "hormonal_health",
+        "gut_brain_axis",
+        "inflammation_immune_resilience"
+      ],
+      "concern_id": [
+        "gut_digestion_acidity",
+        "gut_digestion_bloating",
+        "gut_digestion_constipation",
+        "gut_digestion_diarrhea",
+        "gut_digestion_ibs",
+        "gut_digestion_food_intolerance"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood",
+      "label": "Sleep, Stress & Mood",
+      "hint": "sleep, anxiety, low mood",
+      "icon": "Moon",
+      "icon-class": "icon-moon",
+      "cluster_id": [
+        "cardiometabolic_risk",
+        "sleep_recovery",
+        "mood_stress_resilience",
+        "gut_brain_axis",
+        "respiratory_health",
+        "cognitive_healthy_aging"
+      ],
+      "concern_id": [
+        "sleep_stress_mood_poor_sleep",
+        "sleep_stress_mood_insomnia",
+        "sleep_stress_mood_snoring_sleep_apnea",
+        "sleep_stress_mood_burnout",
+        "sleep_stress_mood_anxiety",
+        "sleep_stress_mood_low_mood"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality",
+      "label": "Energy, Brain & Vitality",
+      "hint": "tiredness, weakness, focus",
+      "icon": "Zap",
+      "icon-class": "icon-zap",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk",
+        "sleep_recovery",
+        "gut_brain_axis",
+        "musculoskeletal_bone_health",
+        "cognitive_healthy_aging"
+      ],
+      "concern_id": [
+        "energy_brain_vitality_low_energy",
+        "energy_brain_vitality_deficiency",
+        "energy_brain_vitality_brain_fog",
+        "energy_brain_vitality_poor_focus",
+        "energy_brain_vitality_memory",
+        "energy_brain_vitality_weakness_dizziness"
+      ]
+    },
+    {
+      "id": "breathing_lungs",
+      "label": "Breathing & Lungs",
+      "hint": "cough, breathlessness, asthma",
+      "icon": "Wind",
+      "icon-class": "icon-wind",
+      "cluster_id": [
+        "respiratory_health"
+      ],
+      "concern_id": [
+        "breathing_lungs_breathlessness",
+        "breathing_lungs_chronic_cough",
+        "breathing_lungs_asthma",
+        "breathing_lungs_chest_infections",
+        "breathing_lungs_reduced_exercise_capacity"
+      ]
+    },
+    {
+      "id": "bones_joints_movement",
+      "label": "Bones, Joints & Movement",
+      "hint": "joint pain, back, knee",
+      "icon": "Bone",
+      "icon-class": "icon-bone",
+      "cluster_id": [
+        "sleep_recovery",
+        "inflammation_immune_resilience",
+        "musculoskeletal_bone_health",
+        "cognitive_healthy_aging"
+      ],
+      "concern_id": [
+        "bones_joints_movement_joint_pain",
+        "bones_joints_movement_back_pain",
+        "bones_joints_movement_knee_pain",
+        "bones_joints_movement_reduced_mobility",
+        "bones_joints_movement_osteoporosis",
+        "bones_joints_movement_slow_recovery"
+      ]
+    },
+    {
+      "id": "immunity_inflammation",
+      "label": "Immunity, Allergy & Inflammation",
+      "hint": "frequent infections, allergies, autoimmune",
+      "icon": "Shield",
+      "icon-class": "icon-shield",
+      "cluster_id": [
+        "inflammation_immune_resilience"
+      ],
+      "concern_id": [
+        "immunity_inflammation_frequent_infections",
+        "immunity_inflammation_allergies",
+        "immunity_inflammation_autoimmune",
+        "immunity_inflammation_chronic_inflammation",
+        "immunity_inflammation_slow_wound_healing"
+      ]
+    },
+    {
+      "id": "skin_hair",
+      "label": "Skin & Hair",
+      "hint": "hair fall, acne, pigmentation",
+      "icon": "Sparkles",
+      "icon-class": "icon-sparkles",
+      "cluster_id": [
+        "hormonal_health",
+        "inflammation_immune_resilience",
+        "cognitive_healthy_aging"
+      ],
+      "concern_id": [
+        "skin_hair_hair_fall",
+        "skin_hair_acne",
+        "skin_hair_pigmentation",
+        "skin_hair_dry_skin",
+        "skin_hair_skin_aging"
+      ]
+    }
+  ],
+  "concern": [
+    {
+      "id": "heart_bp_high_bp",
+      "label": "High Blood Pressure (BP)",
+      "cluster_id": [
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [
+        "hypertension"
+      ],
+      "category_id": "heart_bp",
+      "symptom_id": [
+        "heart_bp_high_bp:high_bp_reading",
+        "heart_bp_high_bp:ecg_change",
+        "heart_bp_high_bp:2d_echo_finding",
+        "heart_bp_high_bp:kidney_test",
+        "heart_bp_high_bp:not_sure"
+      ]
+    },
+    {
+      "id": "heart_bp_high_cholesterol",
+      "label": "High Cholesterol",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [
+        "high_cholesterol"
+      ],
+      "category_id": "heart_bp",
+      "symptom_id": [
+        "heart_bp_high_cholesterol:ldl",
+        "heart_bp_high_cholesterol:total_cholesterol",
+        "heart_bp_high_cholesterol:triglycerides",
+        "heart_bp_high_cholesterol:low_hdl",
+        "heart_bp_high_cholesterol:not_sure"
+      ]
+    },
+    {
+      "id": "heart_bp_palpitations",
+      "label": "Palpitations / irregular heartbeat",
+      "cluster_id": [
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [],
+      "category_id": "heart_bp",
+      "symptom_id": [
+        "heart_bp_palpitations:ecg_abnormality",
+        "heart_bp_palpitations:holter_finding",
+        "heart_bp_palpitations:thyroid",
+        "heart_bp_palpitations:low_haemoglobin",
+        "heart_bp_palpitations:not_sure"
+      ]
+    },
+    {
+      "id": "heart_bp_chest_discomfort_exertion",
+      "label": "Breathlessness or chest discomfort on exertion",
+      "cluster_id": [
+        "cardiometabolic_risk",
+        "respiratory_health"
+      ],
+      "diagnosis": [
+        "heart_disease"
+      ],
+      "category_id": "heart_bp",
+      "symptom_id": [
+        "heart_bp_chest_discomfort_exertion:ecg_change",
+        "heart_bp_chest_discomfort_exertion:tmt_stress_test",
+        "heart_bp_chest_discomfort_exertion:2d_echo",
+        "heart_bp_chest_discomfort_exertion:not_sure"
+      ]
+    },
+    {
+      "id": "heart_bp_swelling_feet",
+      "label": "Swelling in feet / poor circulation",
+      "cluster_id": [
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [],
+      "category_id": "heart_bp",
+      "symptom_id": [
+        "heart_bp_swelling_feet:kidney",
+        "heart_bp_swelling_feet:urine_protein",
+        "heart_bp_swelling_feet:2d_echo",
+        "heart_bp_swelling_feet:thyroid",
+        "heart_bp_swelling_feet:not_sure"
+      ]
+    },
+    {
+      "id": "metabolism_blood_sugar",
+      "label": "High Blood Sugar / Diabetes / Prediabetes",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [
+        "diabetes",
+        "prediabetes"
+      ],
+      "category_id": "metabolism",
+      "symptom_id": [
+        "metabolism_blood_sugar:hba1c",
+        "metabolism_blood_sugar:fasting_sugar",
+        "metabolism_blood_sugar:post_meal_sugar",
+        "metabolism_blood_sugar:random_sugar",
+        "metabolism_blood_sugar:not_sure"
+      ]
+    },
+    {
+      "id": "metabolism_weight_gain",
+      "label": "Difficulty losing weight / weight gain",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk",
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "metabolism",
+      "symptom_id": [
+        "metabolism_weight_gain:thyroid",
+        "metabolism_weight_gain:fasting_insulin",
+        "metabolism_weight_gain:hba1c",
+        "metabolism_weight_gain:cortisol",
+        "metabolism_weight_gain:not_sure"
+      ]
+    },
+    {
+      "id": "metabolism_belly_fat",
+      "label": "Belly (central) fat",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [],
+      "category_id": "metabolism",
+      "symptom_id": [
+        "metabolism_belly_fat:lipid_profile",
+        "metabolism_belly_fat:hba1c_sugar",
+        "metabolism_belly_fat:fatty_liver",
+        "metabolism_belly_fat:not_sure"
+      ]
+    },
+    {
+      "id": "metabolism_fatty_liver",
+      "label": "Fatty liver",
+      "cluster_id": [
+        "metabolic_health"
+      ],
+      "diagnosis": [
+        "fatty_liver"
+      ],
+      "category_id": "metabolism",
+      "symptom_id": [
+        "metabolism_fatty_liver:liver_enzymes",
+        "metabolism_fatty_liver:ultrasound",
+        "metabolism_fatty_liver:triglycerides",
+        "metabolism_fatty_liver:not_sure"
+      ]
+    },
+    {
+      "id": "metabolism_kidney_swelling",
+      "label": "Kidney health / swelling",
+      "cluster_id": [
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [
+        "kidney_disease"
+      ],
+      "category_id": "metabolism",
+      "symptom_id": [
+        "metabolism_kidney_swelling:creatinine",
+        "metabolism_kidney_swelling:urea",
+        "metabolism_kidney_swelling:urine_protein_albumin",
+        "metabolism_kidney_swelling:egfr",
+        "metabolism_kidney_swelling:uric_acid",
+        "metabolism_kidney_swelling:not_sure"
+      ]
+    },
+    {
+      "id": "metabolism_sugar_cravings",
+      "label": "Constant hunger / sugar cravings",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk"
+      ],
+      "diagnosis": [],
+      "category_id": "metabolism",
+      "symptom_id": [
+        "metabolism_sugar_cravings:fasting_sugar",
+        "metabolism_sugar_cravings:hba1c",
+        "metabolism_sugar_cravings:fasting_insulin",
+        "metabolism_sugar_cravings:thyroid",
+        "metabolism_sugar_cravings:not_sure"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal_thyroid",
+      "label": "Thyroid concern",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [
+        "thyroid_disorder"
+      ],
+      "category_id": "thyroid_hormonal",
+      "symptom_id": [
+        "thyroid_hormonal_thyroid:tsh",
+        "thyroid_hormonal_thyroid:t3_t4",
+        "thyroid_hormonal_thyroid:anti_tpo_antibody",
+        "thyroid_hormonal_thyroid:not_sure"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal_pcos",
+      "label": "PCOS / irregular periods",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [
+        "pcos"
+      ],
+      "category_id": "thyroid_hormonal",
+      "symptom_id": [
+        "thyroid_hormonal_pcos:ultrasound",
+        "thyroid_hormonal_pcos:testosterone",
+        "thyroid_hormonal_pcos:lh_fsh",
+        "thyroid_hormonal_pcos:prolactin",
+        "thyroid_hormonal_pcos:insulin_hba1c",
+        "thyroid_hormonal_pcos:not_sure"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal_menopause",
+      "label": "Menopause symptoms",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "thyroid_hormonal",
+      "symptom_id": [
+        "thyroid_hormonal_menopause:fsh",
+        "thyroid_hormonal_menopause:estrogen",
+        "thyroid_hormonal_menopause:thyroid",
+        "thyroid_hormonal_menopause:vitamin_d",
+        "thyroid_hormonal_menopause:not_sure"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal_fertility",
+      "label": "Fertility concerns",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "thyroid_hormonal",
+      "symptom_id": [
+        "thyroid_hormonal_fertility:amh",
+        "thyroid_hormonal_fertility:fsh_lh",
+        "thyroid_hormonal_fertility:semen_analysis",
+        "thyroid_hormonal_fertility:thyroid",
+        "thyroid_hormonal_fertility:prolactin",
+        "thyroid_hormonal_fertility:not_sure"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal_low_testosterone",
+      "label": "Low testosterone / drive",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "thyroid_hormonal",
+      "symptom_id": [
+        "thyroid_hormonal_low_testosterone:testosterone",
+        "thyroid_hormonal_low_testosterone:fsh_lh",
+        "thyroid_hormonal_low_testosterone:prolactin",
+        "thyroid_hormonal_low_testosterone:thyroid",
+        "thyroid_hormonal_low_testosterone:not_sure"
+      ]
+    },
+    {
+      "id": "thyroid_hormonal_hormonal_imbalance",
+      "label": "General hormonal imbalance",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "thyroid_hormonal",
+      "symptom_id": [
+        "thyroid_hormonal_hormonal_imbalance:thyroid",
+        "thyroid_hormonal_hormonal_imbalance:prolactin",
+        "thyroid_hormonal_hormonal_imbalance:cortisol",
+        "thyroid_hormonal_hormonal_imbalance:vitamin_d",
+        "thyroid_hormonal_hormonal_imbalance:not_sure"
+      ]
+    },
+    {
+      "id": "gut_digestion_acidity",
+      "label": "Acidity / reflux",
+      "cluster_id": [
+        "gut_brain_axis"
+      ],
+      "diagnosis": [],
+      "category_id": "gut_digestion",
+      "symptom_id": [
+        "gut_digestion_acidity:endoscopy_finding",
+        "gut_digestion_acidity:h_pylori_test",
+        "gut_digestion_acidity:not_sure"
+      ]
+    },
+    {
+      "id": "gut_digestion_bloating",
+      "label": "Bloating & gas",
+      "cluster_id": [
+        "gut_brain_axis"
+      ],
+      "diagnosis": [],
+      "category_id": "gut_digestion",
+      "symptom_id": [
+        "gut_digestion_bloating:h_pylori",
+        "gut_digestion_bloating:stool_test",
+        "gut_digestion_bloating:food_intolerance_test",
+        "gut_digestion_bloating:not_sure"
+      ]
+    },
+    {
+      "id": "gut_digestion_constipation",
+      "label": "Constipation",
+      "cluster_id": [
+        "hormonal_health",
+        "gut_brain_axis"
+      ],
+      "diagnosis": [],
+      "category_id": "gut_digestion",
+      "symptom_id": [
+        "gut_digestion_constipation:thyroid",
+        "gut_digestion_constipation:calcium",
+        "gut_digestion_constipation:stool_test",
+        "gut_digestion_constipation:not_sure"
+      ]
+    },
+    {
+      "id": "gut_digestion_diarrhea",
+      "label": "Loose motions / diarrhea",
+      "cluster_id": [
+        "gut_brain_axis",
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "gut_digestion",
+      "symptom_id": [
+        "gut_digestion_diarrhea:stool_test",
+        "gut_digestion_diarrhea:celiac",
+        "gut_digestion_diarrhea:thyroid",
+        "gut_digestion_diarrhea:inflammation",
+        "gut_digestion_diarrhea:not_sure"
+      ]
+    },
+    {
+      "id": "gut_digestion_ibs",
+      "label": "IBS / sensitive gut",
+      "cluster_id": [
+        "gut_brain_axis"
+      ],
+      "diagnosis": [
+        "ibs_ibd"
+      ],
+      "category_id": "gut_digestion",
+      "symptom_id": [
+        "gut_digestion_ibs:stool_test",
+        "gut_digestion_ibs:celiac",
+        "gut_digestion_ibs:calprotectin",
+        "gut_digestion_ibs:not_sure"
+      ]
+    },
+    {
+      "id": "gut_digestion_food_intolerance",
+      "label": "Food intolerance",
+      "cluster_id": [
+        "gut_brain_axis",
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "gut_digestion",
+      "symptom_id": [
+        "gut_digestion_food_intolerance:celiac",
+        "gut_digestion_food_intolerance:lactose_test",
+        "gut_digestion_food_intolerance:allergy_panel",
+        "gut_digestion_food_intolerance:not_sure"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood_poor_sleep",
+      "label": "Poor sleep / waking unrefreshed",
+      "cluster_id": [
+        "sleep_recovery",
+        "mood_stress_resilience",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "sleep_stress_mood",
+      "symptom_id": [
+        "sleep_stress_mood_poor_sleep:sleep_study",
+        "sleep_stress_mood_poor_sleep:thyroid",
+        "sleep_stress_mood_poor_sleep:vitamin_d",
+        "sleep_stress_mood_poor_sleep:iron_ferritin",
+        "sleep_stress_mood_poor_sleep:not_sure"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood_insomnia",
+      "label": "Difficulty falling asleep / night waking",
+      "cluster_id": [
+        "sleep_recovery"
+      ],
+      "diagnosis": [],
+      "category_id": "sleep_stress_mood",
+      "symptom_id": [
+        "sleep_stress_mood_insomnia:thyroid",
+        "sleep_stress_mood_insomnia:vitamin_d",
+        "sleep_stress_mood_insomnia:cortisol",
+        "sleep_stress_mood_insomnia:not_sure"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood_snoring_sleep_apnea",
+      "label": "Snoring / disturbed breathing in sleep",
+      "cluster_id": [
+        "cardiometabolic_risk",
+        "sleep_recovery",
+        "respiratory_health"
+      ],
+      "diagnosis": [
+        "sleep_apnea"
+      ],
+      "category_id": "sleep_stress_mood",
+      "symptom_id": [
+        "sleep_stress_mood_snoring_sleep_apnea:sleep_study",
+        "sleep_stress_mood_snoring_sleep_apnea:oxygen_level",
+        "sleep_stress_mood_snoring_sleep_apnea:not_sure"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood_burnout",
+      "label": "Stress / burnout",
+      "cluster_id": [
+        "sleep_recovery",
+        "mood_stress_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "sleep_stress_mood",
+      "symptom_id": [
+        "sleep_stress_mood_burnout:cortisol",
+        "sleep_stress_mood_burnout:thyroid",
+        "sleep_stress_mood_burnout:vitamin_d",
+        "sleep_stress_mood_burnout:not_sure"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood_anxiety",
+      "label": "Anxiety",
+      "cluster_id": [
+        "mood_stress_resilience"
+      ],
+      "diagnosis": [
+        "anxiety_depression"
+      ],
+      "category_id": "sleep_stress_mood",
+      "symptom_id": [
+        "sleep_stress_mood_anxiety:thyroid",
+        "sleep_stress_mood_anxiety:vitamin_b12",
+        "sleep_stress_mood_anxiety:vitamin_d",
+        "sleep_stress_mood_anxiety:not_sure"
+      ]
+    },
+    {
+      "id": "sleep_stress_mood_low_mood",
+      "label": "Low mood / loss of interest",
+      "cluster_id": [
+        "mood_stress_resilience",
+        "gut_brain_axis"
+      ],
+      "diagnosis": [
+        "anxiety_depression"
+      ],
+      "category_id": "sleep_stress_mood",
+      "symptom_id": [
+        "sleep_stress_mood_low_mood:thyroid",
+        "sleep_stress_mood_low_mood:vitamin_d",
+        "sleep_stress_mood_low_mood:vitamin_b12",
+        "sleep_stress_mood_low_mood:not_sure"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality_low_energy",
+      "label": "Low energy / constant tiredness",
+      "cluster_id": [
+        "metabolic_health",
+        "sleep_recovery",
+        "gut_brain_axis",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "energy_brain_vitality",
+      "symptom_id": [
+        "energy_brain_vitality_low_energy:vitamin_b12",
+        "energy_brain_vitality_low_energy:vitamin_d",
+        "energy_brain_vitality_low_energy:thyroid",
+        "energy_brain_vitality_low_energy:iron_ferritin",
+        "energy_brain_vitality_low_energy:haemoglobin",
+        "energy_brain_vitality_low_energy:hba1c",
+        "energy_brain_vitality_low_energy:not_sure"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality_deficiency",
+      "label": "Suspected deficiency (Vit-D / B12 / iron)",
+      "cluster_id": [
+        "musculoskeletal_bone_health",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "energy_brain_vitality",
+      "symptom_id": [
+        "energy_brain_vitality_deficiency:vitamin_d",
+        "energy_brain_vitality_deficiency:vitamin_b12",
+        "energy_brain_vitality_deficiency:iron_ferritin",
+        "energy_brain_vitality_deficiency:haemoglobin",
+        "energy_brain_vitality_deficiency:calcium",
+        "energy_brain_vitality_deficiency:not_sure"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality_brain_fog",
+      "label": "Brain fog",
+      "cluster_id": [
+        "gut_brain_axis",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "energy_brain_vitality",
+      "symptom_id": [
+        "energy_brain_vitality_brain_fog:vitamin_b12",
+        "energy_brain_vitality_brain_fog:thyroid",
+        "energy_brain_vitality_brain_fog:vitamin_d",
+        "energy_brain_vitality_brain_fog:haemoglobin",
+        "energy_brain_vitality_brain_fog:not_sure"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality_poor_focus",
+      "label": "Poor focus",
+      "cluster_id": [
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "energy_brain_vitality",
+      "symptom_id": [
+        "energy_brain_vitality_poor_focus:vitamin_b12",
+        "energy_brain_vitality_poor_focus:thyroid",
+        "energy_brain_vitality_poor_focus:vitamin_d",
+        "energy_brain_vitality_poor_focus:not_sure"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality_memory",
+      "label": "Memory concerns",
+      "cluster_id": [
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "energy_brain_vitality",
+      "symptom_id": [
+        "energy_brain_vitality_memory:vitamin_b12",
+        "energy_brain_vitality_memory:thyroid",
+        "energy_brain_vitality_memory:vitamin_d",
+        "energy_brain_vitality_memory:not_sure"
+      ]
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness",
+      "label": "Frequent weakness / dizziness",
+      "cluster_id": [
+        "metabolic_health",
+        "cardiometabolic_risk",
+        "musculoskeletal_bone_health",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "energy_brain_vitality",
+      "symptom_id": [
+        "energy_brain_vitality_weakness_dizziness:haemoglobin",
+        "energy_brain_vitality_weakness_dizziness:iron_ferritin",
+        "energy_brain_vitality_weakness_dizziness:vitamin_b12",
+        "energy_brain_vitality_weakness_dizziness:sugar",
+        "energy_brain_vitality_weakness_dizziness:bp",
+        "energy_brain_vitality_weakness_dizziness:not_sure"
+      ]
+    },
+    {
+      "id": "breathing_lungs_breathlessness",
+      "label": "Breathlessness",
+      "cluster_id": [
+        "respiratory_health"
+      ],
+      "diagnosis": [],
+      "category_id": "breathing_lungs",
+      "symptom_id": [
+        "breathing_lungs_breathlessness:chest_x_ray",
+        "breathing_lungs_breathlessness:lung_function",
+        "breathing_lungs_breathlessness:haemoglobin",
+        "breathing_lungs_breathlessness:oxygen_level",
+        "breathing_lungs_breathlessness:not_sure"
+      ]
+    },
+    {
+      "id": "breathing_lungs_chronic_cough",
+      "label": "Chronic / recurrent cough",
+      "cluster_id": [
+        "respiratory_health"
+      ],
+      "diagnosis": [],
+      "category_id": "breathing_lungs",
+      "symptom_id": [
+        "breathing_lungs_chronic_cough:chest_x_ray",
+        "breathing_lungs_chronic_cough:sputum_tb_test",
+        "breathing_lungs_chronic_cough:allergy",
+        "breathing_lungs_chronic_cough:not_sure"
+      ]
+    },
+    {
+      "id": "breathing_lungs_asthma",
+      "label": "Asthma / wheezing",
+      "cluster_id": [
+        "respiratory_health"
+      ],
+      "diagnosis": [
+        "asthma_copd"
+      ],
+      "category_id": "breathing_lungs",
+      "symptom_id": [
+        "breathing_lungs_asthma:lung_function",
+        "breathing_lungs_asthma:allergy",
+        "breathing_lungs_asthma:eosinophils",
+        "breathing_lungs_asthma:not_sure"
+      ]
+    },
+    {
+      "id": "breathing_lungs_chest_infections",
+      "label": "Frequent chest infections",
+      "cluster_id": [
+        "respiratory_health"
+      ],
+      "diagnosis": [],
+      "category_id": "breathing_lungs",
+      "symptom_id": [
+        "breathing_lungs_chest_infections:chest_x_ray",
+        "breathing_lungs_chest_infections:cbc",
+        "breathing_lungs_chest_infections:sputum_tb_test",
+        "breathing_lungs_chest_infections:not_sure"
+      ]
+    },
+    {
+      "id": "breathing_lungs_reduced_exercise_capacity",
+      "label": "Reduced exercise capacity",
+      "cluster_id": [
+        "respiratory_health"
+      ],
+      "diagnosis": [],
+      "category_id": "breathing_lungs",
+      "symptom_id": [
+        "breathing_lungs_reduced_exercise_capacity:lung_function",
+        "breathing_lungs_reduced_exercise_capacity:haemoglobin",
+        "breathing_lungs_reduced_exercise_capacity:ecg",
+        "breathing_lungs_reduced_exercise_capacity:not_sure"
+      ]
+    },
+    {
+      "id": "bones_joints_movement_joint_pain",
+      "label": "Joint pain / stiffness",
+      "cluster_id": [
+        "inflammation_immune_resilience",
+        "musculoskeletal_bone_health"
+      ],
+      "diagnosis": [
+        "arthritis"
+      ],
+      "category_id": "bones_joints_movement",
+      "symptom_id": [
+        "bones_joints_movement_joint_pain:uric_acid",
+        "bones_joints_movement_joint_pain:ra_factor_anti_ccp",
+        "bones_joints_movement_joint_pain:vitamin_d",
+        "bones_joints_movement_joint_pain:inflammation",
+        "bones_joints_movement_joint_pain:not_sure"
+      ]
+    },
+    {
+      "id": "bones_joints_movement_back_pain",
+      "label": "Back pain",
+      "cluster_id": [
+        "musculoskeletal_bone_health"
+      ],
+      "diagnosis": [],
+      "category_id": "bones_joints_movement",
+      "symptom_id": [
+        "bones_joints_movement_back_pain:vitamin_d",
+        "bones_joints_movement_back_pain:x_ray_mri_finding",
+        "bones_joints_movement_back_pain:calcium",
+        "bones_joints_movement_back_pain:not_sure"
+      ]
+    },
+    {
+      "id": "bones_joints_movement_knee_pain",
+      "label": "Knee pain",
+      "cluster_id": [
+        "musculoskeletal_bone_health"
+      ],
+      "diagnosis": [],
+      "category_id": "bones_joints_movement",
+      "symptom_id": [
+        "bones_joints_movement_knee_pain:x_ray_finding",
+        "bones_joints_movement_knee_pain:uric_acid",
+        "bones_joints_movement_knee_pain:vitamin_d",
+        "bones_joints_movement_knee_pain:not_sure"
+      ]
+    },
+    {
+      "id": "bones_joints_movement_reduced_mobility",
+      "label": "Reduced mobility",
+      "cluster_id": [
+        "musculoskeletal_bone_health"
+      ],
+      "diagnosis": [],
+      "category_id": "bones_joints_movement",
+      "symptom_id": [
+        "bones_joints_movement_reduced_mobility:vitamin_d",
+        "bones_joints_movement_reduced_mobility:x_ray_mri",
+        "bones_joints_movement_reduced_mobility:inflammation",
+        "bones_joints_movement_reduced_mobility:not_sure"
+      ]
+    },
+    {
+      "id": "bones_joints_movement_osteoporosis",
+      "label": "Bone health / osteoporosis risk",
+      "cluster_id": [
+        "musculoskeletal_bone_health",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [
+        "osteoporosis"
+      ],
+      "category_id": "bones_joints_movement",
+      "symptom_id": [
+        "bones_joints_movement_osteoporosis:bone_density",
+        "bones_joints_movement_osteoporosis:vitamin_d",
+        "bones_joints_movement_osteoporosis:calcium",
+        "bones_joints_movement_osteoporosis:not_sure"
+      ]
+    },
+    {
+      "id": "bones_joints_movement_slow_recovery",
+      "label": "Slow recovery after activity",
+      "cluster_id": [
+        "sleep_recovery",
+        "musculoskeletal_bone_health"
+      ],
+      "diagnosis": [],
+      "category_id": "bones_joints_movement",
+      "symptom_id": [
+        "bones_joints_movement_slow_recovery:vitamin_d",
+        "bones_joints_movement_slow_recovery:cpk",
+        "bones_joints_movement_slow_recovery:thyroid",
+        "bones_joints_movement_slow_recovery:not_sure"
+      ]
+    },
+    {
+      "id": "immunity_inflammation_frequent_infections",
+      "label": "Frequent infections",
+      "cluster_id": [
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "immunity_inflammation",
+      "symptom_id": [
+        "immunity_inflammation_frequent_infections:cbc",
+        "immunity_inflammation_frequent_infections:hba1c_sugar",
+        "immunity_inflammation_frequent_infections:vitamin_d",
+        "immunity_inflammation_frequent_infections:immunoglobulins",
+        "immunity_inflammation_frequent_infections:not_sure"
+      ]
+    },
+    {
+      "id": "immunity_inflammation_allergies",
+      "label": "Allergies (skin / nasal / food)",
+      "cluster_id": [
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "immunity_inflammation",
+      "symptom_id": [
+        "immunity_inflammation_allergies:allergy_panel",
+        "immunity_inflammation_allergies:eosinophils",
+        "immunity_inflammation_allergies:specific_allergen_test",
+        "immunity_inflammation_allergies:not_sure"
+      ]
+    },
+    {
+      "id": "immunity_inflammation_autoimmune",
+      "label": "Autoimmune condition or concern",
+      "cluster_id": [
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [
+        "autoimmune"
+      ],
+      "category_id": "immunity_inflammation",
+      "symptom_id": [
+        "immunity_inflammation_autoimmune:ana",
+        "immunity_inflammation_autoimmune:ra_factor",
+        "immunity_inflammation_autoimmune:thyroid_antibody",
+        "immunity_inflammation_autoimmune:crp_esr",
+        "immunity_inflammation_autoimmune:not_sure"
+      ]
+    },
+    {
+      "id": "immunity_inflammation_chronic_inflammation",
+      "label": "Chronic inflammation",
+      "cluster_id": [
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "immunity_inflammation",
+      "symptom_id": [
+        "immunity_inflammation_chronic_inflammation:crp",
+        "immunity_inflammation_chronic_inflammation:esr",
+        "immunity_inflammation_chronic_inflammation:not_sure"
+      ]
+    },
+    {
+      "id": "immunity_inflammation_slow_wound_healing",
+      "label": "Slow wound healing",
+      "cluster_id": [
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "immunity_inflammation",
+      "symptom_id": [
+        "immunity_inflammation_slow_wound_healing:hba1c_sugar",
+        "immunity_inflammation_slow_wound_healing:vitamin_d",
+        "immunity_inflammation_slow_wound_healing:haemoglobin",
+        "immunity_inflammation_slow_wound_healing:not_sure"
+      ]
+    },
+    {
+      "id": "skin_hair_hair_fall",
+      "label": "Hair fall / thinning",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "skin_hair",
+      "symptom_id": [
+        "skin_hair_hair_fall:iron_ferritin",
+        "skin_hair_hair_fall:vitamin_d",
+        "skin_hair_hair_fall:vitamin_b12",
+        "skin_hair_hair_fall:thyroid",
+        "skin_hair_hair_fall:not_sure"
+      ]
+    },
+    {
+      "id": "skin_hair_acne",
+      "label": "Acne",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "skin_hair",
+      "symptom_id": [
+        "skin_hair_acne:testosterone",
+        "skin_hair_acne:pcos_panel",
+        "skin_hair_acne:thyroid",
+        "skin_hair_acne:not_sure"
+      ]
+    },
+    {
+      "id": "skin_hair_pigmentation",
+      "label": "Pigmentation",
+      "cluster_id": [
+        "hormonal_health"
+      ],
+      "diagnosis": [],
+      "category_id": "skin_hair",
+      "symptom_id": [
+        "skin_hair_pigmentation:vitamin_b12",
+        "skin_hair_pigmentation:vitamin_d",
+        "skin_hair_pigmentation:thyroid",
+        "skin_hair_pigmentation:not_sure"
+      ]
+    },
+    {
+      "id": "skin_hair_dry_skin",
+      "label": "Dry / sensitive skin",
+      "cluster_id": [
+        "hormonal_health",
+        "inflammation_immune_resilience"
+      ],
+      "diagnosis": [],
+      "category_id": "skin_hair",
+      "symptom_id": [
+        "skin_hair_dry_skin:thyroid",
+        "skin_hair_dry_skin:vitamin_d",
+        "skin_hair_dry_skin:not_sure"
+      ]
+    },
+    {
+      "id": "skin_hair_skin_aging",
+      "label": "Skin aging",
+      "cluster_id": [
+        "hormonal_health",
+        "cognitive_healthy_aging"
+      ],
+      "diagnosis": [],
+      "category_id": "skin_hair",
+      "symptom_id": [
+        "skin_hair_skin_aging:vitamin_d",
+        "skin_hair_skin_aging:no_specific_test_done",
+        "skin_hair_skin_aging:not_sure"
+      ]
+    }
+  ],
+  "symptom": [
+    {
+      "id": "heart_bp_high_bp:high_bp_reading",
+      "label": "High BP reading",
+      "concern_id": "heart_bp_high_bp"
+    },
+    {
+      "id": "heart_bp_high_bp:ecg_change",
+      "label": "ECG change",
+      "concern_id": "heart_bp_high_bp"
+    },
+    {
+      "id": "heart_bp_high_bp:2d_echo_finding",
+      "label": "2D Echo finding",
+      "concern_id": "heart_bp_high_bp"
+    },
+    {
+      "id": "heart_bp_high_bp:kidney_test",
+      "label": "Kidney test",
+      "concern_id": "heart_bp_high_bp"
+    },
+    {
+      "id": "heart_bp_high_bp:not_sure",
+      "label": "Not sure",
+      "concern_id": "heart_bp_high_bp"
+    },
+    {
+      "id": "heart_bp_high_cholesterol:ldl",
+      "label": "LDL (\"bad\")",
+      "concern_id": "heart_bp_high_cholesterol"
+    },
+    {
+      "id": "heart_bp_high_cholesterol:total_cholesterol",
+      "label": "Total cholesterol",
+      "concern_id": "heart_bp_high_cholesterol"
+    },
+    {
+      "id": "heart_bp_high_cholesterol:triglycerides",
+      "label": "Triglycerides",
+      "concern_id": "heart_bp_high_cholesterol"
+    },
+    {
+      "id": "heart_bp_high_cholesterol:low_hdl",
+      "label": "Low HDL (\"good\")",
+      "concern_id": "heart_bp_high_cholesterol"
+    },
+    {
+      "id": "heart_bp_high_cholesterol:not_sure",
+      "label": "Not sure",
+      "concern_id": "heart_bp_high_cholesterol"
+    },
+    {
+      "id": "heart_bp_palpitations:ecg_abnormality",
+      "label": "ECG abnormality",
+      "concern_id": "heart_bp_palpitations"
+    },
+    {
+      "id": "heart_bp_palpitations:holter_finding",
+      "label": "Holter finding",
+      "concern_id": "heart_bp_palpitations"
+    },
+    {
+      "id": "heart_bp_palpitations:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "heart_bp_palpitations"
+    },
+    {
+      "id": "heart_bp_palpitations:low_haemoglobin",
+      "label": "Low haemoglobin",
+      "concern_id": "heart_bp_palpitations"
+    },
+    {
+      "id": "heart_bp_palpitations:not_sure",
+      "label": "Not sure",
+      "concern_id": "heart_bp_palpitations"
+    },
+    {
+      "id": "heart_bp_chest_discomfort_exertion:ecg_change",
+      "label": "ECG change",
+      "concern_id": "heart_bp_chest_discomfort_exertion"
+    },
+    {
+      "id": "heart_bp_chest_discomfort_exertion:tmt_stress_test",
+      "label": "TMT / stress test",
+      "concern_id": "heart_bp_chest_discomfort_exertion"
+    },
+    {
+      "id": "heart_bp_chest_discomfort_exertion:2d_echo",
+      "label": "2D Echo",
+      "concern_id": "heart_bp_chest_discomfort_exertion"
+    },
+    {
+      "id": "heart_bp_chest_discomfort_exertion:not_sure",
+      "label": "Not sure",
+      "concern_id": "heart_bp_chest_discomfort_exertion"
+    },
+    {
+      "id": "heart_bp_swelling_feet:kidney",
+      "label": "Kidney (creatinine/urea)",
+      "concern_id": "heart_bp_swelling_feet"
+    },
+    {
+      "id": "heart_bp_swelling_feet:urine_protein",
+      "label": "Urine protein",
+      "concern_id": "heart_bp_swelling_feet"
+    },
+    {
+      "id": "heart_bp_swelling_feet:2d_echo",
+      "label": "2D Echo",
+      "concern_id": "heart_bp_swelling_feet"
+    },
+    {
+      "id": "heart_bp_swelling_feet:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "heart_bp_swelling_feet"
+    },
+    {
+      "id": "heart_bp_swelling_feet:not_sure",
+      "label": "Not sure",
+      "concern_id": "heart_bp_swelling_feet"
+    },
+    {
+      "id": "metabolism_blood_sugar:hba1c",
+      "label": "HbA1c",
+      "concern_id": "metabolism_blood_sugar"
+    },
+    {
+      "id": "metabolism_blood_sugar:fasting_sugar",
+      "label": "Fasting sugar",
+      "concern_id": "metabolism_blood_sugar"
+    },
+    {
+      "id": "metabolism_blood_sugar:post_meal_sugar",
+      "label": "Post-meal (PP) sugar",
+      "concern_id": "metabolism_blood_sugar"
+    },
+    {
+      "id": "metabolism_blood_sugar:random_sugar",
+      "label": "Random sugar",
+      "concern_id": "metabolism_blood_sugar"
+    },
+    {
+      "id": "metabolism_blood_sugar:not_sure",
+      "label": "Not sure",
+      "concern_id": "metabolism_blood_sugar"
+    },
+    {
+      "id": "metabolism_weight_gain:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "metabolism_weight_gain"
+    },
+    {
+      "id": "metabolism_weight_gain:fasting_insulin",
+      "label": "Fasting insulin",
+      "concern_id": "metabolism_weight_gain"
+    },
+    {
+      "id": "metabolism_weight_gain:hba1c",
+      "label": "HbA1c",
+      "concern_id": "metabolism_weight_gain"
+    },
+    {
+      "id": "metabolism_weight_gain:cortisol",
+      "label": "Cortisol",
+      "concern_id": "metabolism_weight_gain"
+    },
+    {
+      "id": "metabolism_weight_gain:not_sure",
+      "label": "Not sure",
+      "concern_id": "metabolism_weight_gain"
+    },
+    {
+      "id": "metabolism_belly_fat:lipid_profile",
+      "label": "Lipid profile",
+      "concern_id": "metabolism_belly_fat"
+    },
+    {
+      "id": "metabolism_belly_fat:hba1c_sugar",
+      "label": "HbA1c / sugar",
+      "concern_id": "metabolism_belly_fat"
+    },
+    {
+      "id": "metabolism_belly_fat:fatty_liver",
+      "label": "Fatty liver (ultrasound)",
+      "concern_id": "metabolism_belly_fat"
+    },
+    {
+      "id": "metabolism_belly_fat:not_sure",
+      "label": "Not sure",
+      "concern_id": "metabolism_belly_fat"
+    },
+    {
+      "id": "metabolism_fatty_liver:liver_enzymes",
+      "label": "Liver enzymes (SGPT/SGOT)",
+      "concern_id": "metabolism_fatty_liver"
+    },
+    {
+      "id": "metabolism_fatty_liver:ultrasound",
+      "label": "Ultrasound (fatty liver)",
+      "concern_id": "metabolism_fatty_liver"
+    },
+    {
+      "id": "metabolism_fatty_liver:triglycerides",
+      "label": "Triglycerides",
+      "concern_id": "metabolism_fatty_liver"
+    },
+    {
+      "id": "metabolism_fatty_liver:not_sure",
+      "label": "Not sure",
+      "concern_id": "metabolism_fatty_liver"
+    },
+    {
+      "id": "metabolism_kidney_swelling:creatinine",
+      "label": "Creatinine",
+      "concern_id": "metabolism_kidney_swelling"
+    },
+    {
+      "id": "metabolism_kidney_swelling:urea",
+      "label": "Urea",
+      "concern_id": "metabolism_kidney_swelling"
+    },
+    {
+      "id": "metabolism_kidney_swelling:urine_protein_albumin",
+      "label": "Urine protein/albumin",
+      "concern_id": "metabolism_kidney_swelling"
+    },
+    {
+      "id": "metabolism_kidney_swelling:egfr",
+      "label": "eGFR",
+      "concern_id": "metabolism_kidney_swelling"
+    },
+    {
+      "id": "metabolism_kidney_swelling:uric_acid",
+      "label": "Uric acid",
+      "concern_id": "metabolism_kidney_swelling"
+    },
+    {
+      "id": "metabolism_kidney_swelling:not_sure",
+      "label": "Not sure",
+      "concern_id": "metabolism_kidney_swelling"
+    },
+    {
+      "id": "metabolism_sugar_cravings:fasting_sugar",
+      "label": "Fasting sugar",
+      "concern_id": "metabolism_sugar_cravings"
+    },
+    {
+      "id": "metabolism_sugar_cravings:hba1c",
+      "label": "HbA1c",
+      "concern_id": "metabolism_sugar_cravings"
+    },
+    {
+      "id": "metabolism_sugar_cravings:fasting_insulin",
+      "label": "Fasting insulin",
+      "concern_id": "metabolism_sugar_cravings"
+    },
+    {
+      "id": "metabolism_sugar_cravings:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "metabolism_sugar_cravings"
+    },
+    {
+      "id": "metabolism_sugar_cravings:not_sure",
+      "label": "Not sure",
+      "concern_id": "metabolism_sugar_cravings"
+    },
+    {
+      "id": "thyroid_hormonal_thyroid:tsh",
+      "label": "TSH",
+      "concern_id": "thyroid_hormonal_thyroid"
+    },
+    {
+      "id": "thyroid_hormonal_thyroid:t3_t4",
+      "label": "T3 / T4",
+      "concern_id": "thyroid_hormonal_thyroid"
+    },
+    {
+      "id": "thyroid_hormonal_thyroid:anti_tpo_antibody",
+      "label": "Anti-TPO antibody",
+      "concern_id": "thyroid_hormonal_thyroid"
+    },
+    {
+      "id": "thyroid_hormonal_thyroid:not_sure",
+      "label": "Not sure",
+      "concern_id": "thyroid_hormonal_thyroid"
+    },
+    {
+      "id": "thyroid_hormonal_pcos:ultrasound",
+      "label": "Ultrasound (ovaries)",
+      "concern_id": "thyroid_hormonal_pcos"
+    },
+    {
+      "id": "thyroid_hormonal_pcos:testosterone",
+      "label": "Testosterone",
+      "concern_id": "thyroid_hormonal_pcos"
+    },
+    {
+      "id": "thyroid_hormonal_pcos:lh_fsh",
+      "label": "LH/FSH",
+      "concern_id": "thyroid_hormonal_pcos"
+    },
+    {
+      "id": "thyroid_hormonal_pcos:prolactin",
+      "label": "Prolactin",
+      "concern_id": "thyroid_hormonal_pcos"
+    },
+    {
+      "id": "thyroid_hormonal_pcos:insulin_hba1c",
+      "label": "Insulin/HbA1c",
+      "concern_id": "thyroid_hormonal_pcos"
+    },
+    {
+      "id": "thyroid_hormonal_pcos:not_sure",
+      "label": "Not sure",
+      "concern_id": "thyroid_hormonal_pcos"
+    },
+    {
+      "id": "thyroid_hormonal_menopause:fsh",
+      "label": "FSH",
+      "concern_id": "thyroid_hormonal_menopause"
+    },
+    {
+      "id": "thyroid_hormonal_menopause:estrogen",
+      "label": "Estrogen (estradiol)",
+      "concern_id": "thyroid_hormonal_menopause"
+    },
+    {
+      "id": "thyroid_hormonal_menopause:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "thyroid_hormonal_menopause"
+    },
+    {
+      "id": "thyroid_hormonal_menopause:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "thyroid_hormonal_menopause"
+    },
+    {
+      "id": "thyroid_hormonal_menopause:not_sure",
+      "label": "Not sure",
+      "concern_id": "thyroid_hormonal_menopause"
+    },
+    {
+      "id": "thyroid_hormonal_fertility:amh",
+      "label": "AMH",
+      "concern_id": "thyroid_hormonal_fertility"
+    },
+    {
+      "id": "thyroid_hormonal_fertility:fsh_lh",
+      "label": "FSH/LH",
+      "concern_id": "thyroid_hormonal_fertility"
+    },
+    {
+      "id": "thyroid_hormonal_fertility:semen_analysis",
+      "label": "Semen analysis (men)",
+      "concern_id": "thyroid_hormonal_fertility"
+    },
+    {
+      "id": "thyroid_hormonal_fertility:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "thyroid_hormonal_fertility"
+    },
+    {
+      "id": "thyroid_hormonal_fertility:prolactin",
+      "label": "Prolactin",
+      "concern_id": "thyroid_hormonal_fertility"
+    },
+    {
+      "id": "thyroid_hormonal_fertility:not_sure",
+      "label": "Not sure",
+      "concern_id": "thyroid_hormonal_fertility"
+    },
+    {
+      "id": "thyroid_hormonal_low_testosterone:testosterone",
+      "label": "Testosterone",
+      "concern_id": "thyroid_hormonal_low_testosterone"
+    },
+    {
+      "id": "thyroid_hormonal_low_testosterone:fsh_lh",
+      "label": "FSH/LH",
+      "concern_id": "thyroid_hormonal_low_testosterone"
+    },
+    {
+      "id": "thyroid_hormonal_low_testosterone:prolactin",
+      "label": "Prolactin",
+      "concern_id": "thyroid_hormonal_low_testosterone"
+    },
+    {
+      "id": "thyroid_hormonal_low_testosterone:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "thyroid_hormonal_low_testosterone"
+    },
+    {
+      "id": "thyroid_hormonal_low_testosterone:not_sure",
+      "label": "Not sure",
+      "concern_id": "thyroid_hormonal_low_testosterone"
+    },
+    {
+      "id": "thyroid_hormonal_hormonal_imbalance:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "thyroid_hormonal_hormonal_imbalance"
+    },
+    {
+      "id": "thyroid_hormonal_hormonal_imbalance:prolactin",
+      "label": "Prolactin",
+      "concern_id": "thyroid_hormonal_hormonal_imbalance"
+    },
+    {
+      "id": "thyroid_hormonal_hormonal_imbalance:cortisol",
+      "label": "Cortisol",
+      "concern_id": "thyroid_hormonal_hormonal_imbalance"
+    },
+    {
+      "id": "thyroid_hormonal_hormonal_imbalance:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "thyroid_hormonal_hormonal_imbalance"
+    },
+    {
+      "id": "thyroid_hormonal_hormonal_imbalance:not_sure",
+      "label": "Not sure",
+      "concern_id": "thyroid_hormonal_hormonal_imbalance"
+    },
+    {
+      "id": "gut_digestion_acidity:endoscopy_finding",
+      "label": "Endoscopy finding",
+      "concern_id": "gut_digestion_acidity"
+    },
+    {
+      "id": "gut_digestion_acidity:h_pylori_test",
+      "label": "H. pylori test",
+      "concern_id": "gut_digestion_acidity"
+    },
+    {
+      "id": "gut_digestion_acidity:not_sure",
+      "label": "Not sure",
+      "concern_id": "gut_digestion_acidity"
+    },
+    {
+      "id": "gut_digestion_bloating:h_pylori",
+      "label": "H. pylori",
+      "concern_id": "gut_digestion_bloating"
+    },
+    {
+      "id": "gut_digestion_bloating:stool_test",
+      "label": "Stool test",
+      "concern_id": "gut_digestion_bloating"
+    },
+    {
+      "id": "gut_digestion_bloating:food_intolerance_test",
+      "label": "Food intolerance test",
+      "concern_id": "gut_digestion_bloating"
+    },
+    {
+      "id": "gut_digestion_bloating:not_sure",
+      "label": "Not sure",
+      "concern_id": "gut_digestion_bloating"
+    },
+    {
+      "id": "gut_digestion_constipation:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "gut_digestion_constipation"
+    },
+    {
+      "id": "gut_digestion_constipation:calcium",
+      "label": "Calcium",
+      "concern_id": "gut_digestion_constipation"
+    },
+    {
+      "id": "gut_digestion_constipation:stool_test",
+      "label": "Stool test",
+      "concern_id": "gut_digestion_constipation"
+    },
+    {
+      "id": "gut_digestion_constipation:not_sure",
+      "label": "Not sure",
+      "concern_id": "gut_digestion_constipation"
+    },
+    {
+      "id": "gut_digestion_diarrhea:stool_test",
+      "label": "Stool test",
+      "concern_id": "gut_digestion_diarrhea"
+    },
+    {
+      "id": "gut_digestion_diarrhea:celiac",
+      "label": "Celiac (anti-tTG)",
+      "concern_id": "gut_digestion_diarrhea"
+    },
+    {
+      "id": "gut_digestion_diarrhea:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "gut_digestion_diarrhea"
+    },
+    {
+      "id": "gut_digestion_diarrhea:inflammation",
+      "label": "Inflammation (CRP)",
+      "concern_id": "gut_digestion_diarrhea"
+    },
+    {
+      "id": "gut_digestion_diarrhea:not_sure",
+      "label": "Not sure",
+      "concern_id": "gut_digestion_diarrhea"
+    },
+    {
+      "id": "gut_digestion_ibs:stool_test",
+      "label": "Stool test",
+      "concern_id": "gut_digestion_ibs"
+    },
+    {
+      "id": "gut_digestion_ibs:celiac",
+      "label": "Celiac (anti-tTG)",
+      "concern_id": "gut_digestion_ibs"
+    },
+    {
+      "id": "gut_digestion_ibs:calprotectin",
+      "label": "Calprotectin",
+      "concern_id": "gut_digestion_ibs"
+    },
+    {
+      "id": "gut_digestion_ibs:not_sure",
+      "label": "Not sure",
+      "concern_id": "gut_digestion_ibs"
+    },
+    {
+      "id": "gut_digestion_food_intolerance:celiac",
+      "label": "Celiac (anti-tTG)",
+      "concern_id": "gut_digestion_food_intolerance"
+    },
+    {
+      "id": "gut_digestion_food_intolerance:lactose_test",
+      "label": "Lactose test",
+      "concern_id": "gut_digestion_food_intolerance"
+    },
+    {
+      "id": "gut_digestion_food_intolerance:allergy_panel",
+      "label": "Allergy (IgE) panel",
+      "concern_id": "gut_digestion_food_intolerance"
+    },
+    {
+      "id": "gut_digestion_food_intolerance:not_sure",
+      "label": "Not sure",
+      "concern_id": "gut_digestion_food_intolerance"
+    },
+    {
+      "id": "sleep_stress_mood_poor_sleep:sleep_study",
+      "label": "Sleep study",
+      "concern_id": "sleep_stress_mood_poor_sleep"
+    },
+    {
+      "id": "sleep_stress_mood_poor_sleep:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "sleep_stress_mood_poor_sleep"
+    },
+    {
+      "id": "sleep_stress_mood_poor_sleep:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "sleep_stress_mood_poor_sleep"
+    },
+    {
+      "id": "sleep_stress_mood_poor_sleep:iron_ferritin",
+      "label": "Iron / ferritin",
+      "concern_id": "sleep_stress_mood_poor_sleep"
+    },
+    {
+      "id": "sleep_stress_mood_poor_sleep:not_sure",
+      "label": "Not sure",
+      "concern_id": "sleep_stress_mood_poor_sleep"
+    },
+    {
+      "id": "sleep_stress_mood_insomnia:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "sleep_stress_mood_insomnia"
+    },
+    {
+      "id": "sleep_stress_mood_insomnia:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "sleep_stress_mood_insomnia"
+    },
+    {
+      "id": "sleep_stress_mood_insomnia:cortisol",
+      "label": "Cortisol",
+      "concern_id": "sleep_stress_mood_insomnia"
+    },
+    {
+      "id": "sleep_stress_mood_insomnia:not_sure",
+      "label": "Not sure",
+      "concern_id": "sleep_stress_mood_insomnia"
+    },
+    {
+      "id": "sleep_stress_mood_snoring_sleep_apnea:sleep_study",
+      "label": "Sleep study (apnea)",
+      "concern_id": "sleep_stress_mood_snoring_sleep_apnea"
+    },
+    {
+      "id": "sleep_stress_mood_snoring_sleep_apnea:oxygen_level",
+      "label": "Oxygen level",
+      "concern_id": "sleep_stress_mood_snoring_sleep_apnea"
+    },
+    {
+      "id": "sleep_stress_mood_snoring_sleep_apnea:not_sure",
+      "label": "Not sure",
+      "concern_id": "sleep_stress_mood_snoring_sleep_apnea"
+    },
+    {
+      "id": "sleep_stress_mood_burnout:cortisol",
+      "label": "Cortisol",
+      "concern_id": "sleep_stress_mood_burnout"
+    },
+    {
+      "id": "sleep_stress_mood_burnout:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "sleep_stress_mood_burnout"
+    },
+    {
+      "id": "sleep_stress_mood_burnout:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "sleep_stress_mood_burnout"
+    },
+    {
+      "id": "sleep_stress_mood_burnout:not_sure",
+      "label": "Not sure",
+      "concern_id": "sleep_stress_mood_burnout"
+    },
+    {
+      "id": "sleep_stress_mood_anxiety:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "sleep_stress_mood_anxiety"
+    },
+    {
+      "id": "sleep_stress_mood_anxiety:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "sleep_stress_mood_anxiety"
+    },
+    {
+      "id": "sleep_stress_mood_anxiety:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "sleep_stress_mood_anxiety"
+    },
+    {
+      "id": "sleep_stress_mood_anxiety:not_sure",
+      "label": "Not sure",
+      "concern_id": "sleep_stress_mood_anxiety"
+    },
+    {
+      "id": "sleep_stress_mood_low_mood:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "sleep_stress_mood_low_mood"
+    },
+    {
+      "id": "sleep_stress_mood_low_mood:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "sleep_stress_mood_low_mood"
+    },
+    {
+      "id": "sleep_stress_mood_low_mood:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "sleep_stress_mood_low_mood"
+    },
+    {
+      "id": "sleep_stress_mood_low_mood:not_sure",
+      "label": "Not sure",
+      "concern_id": "sleep_stress_mood_low_mood"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:iron_ferritin",
+      "label": "Iron / ferritin",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:haemoglobin",
+      "label": "Haemoglobin (anaemia)",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:hba1c",
+      "label": "HbA1c",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_low_energy:not_sure",
+      "label": "Not sure",
+      "concern_id": "energy_brain_vitality_low_energy"
+    },
+    {
+      "id": "energy_brain_vitality_deficiency:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "energy_brain_vitality_deficiency"
+    },
+    {
+      "id": "energy_brain_vitality_deficiency:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "energy_brain_vitality_deficiency"
+    },
+    {
+      "id": "energy_brain_vitality_deficiency:iron_ferritin",
+      "label": "Iron / ferritin",
+      "concern_id": "energy_brain_vitality_deficiency"
+    },
+    {
+      "id": "energy_brain_vitality_deficiency:haemoglobin",
+      "label": "Haemoglobin",
+      "concern_id": "energy_brain_vitality_deficiency"
+    },
+    {
+      "id": "energy_brain_vitality_deficiency:calcium",
+      "label": "Calcium",
+      "concern_id": "energy_brain_vitality_deficiency"
+    },
+    {
+      "id": "energy_brain_vitality_deficiency:not_sure",
+      "label": "Not sure",
+      "concern_id": "energy_brain_vitality_deficiency"
+    },
+    {
+      "id": "energy_brain_vitality_brain_fog:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "energy_brain_vitality_brain_fog"
+    },
+    {
+      "id": "energy_brain_vitality_brain_fog:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "energy_brain_vitality_brain_fog"
+    },
+    {
+      "id": "energy_brain_vitality_brain_fog:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "energy_brain_vitality_brain_fog"
+    },
+    {
+      "id": "energy_brain_vitality_brain_fog:haemoglobin",
+      "label": "Haemoglobin",
+      "concern_id": "energy_brain_vitality_brain_fog"
+    },
+    {
+      "id": "energy_brain_vitality_brain_fog:not_sure",
+      "label": "Not sure",
+      "concern_id": "energy_brain_vitality_brain_fog"
+    },
+    {
+      "id": "energy_brain_vitality_poor_focus:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "energy_brain_vitality_poor_focus"
+    },
+    {
+      "id": "energy_brain_vitality_poor_focus:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "energy_brain_vitality_poor_focus"
+    },
+    {
+      "id": "energy_brain_vitality_poor_focus:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "energy_brain_vitality_poor_focus"
+    },
+    {
+      "id": "energy_brain_vitality_poor_focus:not_sure",
+      "label": "Not sure",
+      "concern_id": "energy_brain_vitality_poor_focus"
+    },
+    {
+      "id": "energy_brain_vitality_memory:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "energy_brain_vitality_memory"
+    },
+    {
+      "id": "energy_brain_vitality_memory:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "energy_brain_vitality_memory"
+    },
+    {
+      "id": "energy_brain_vitality_memory:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "energy_brain_vitality_memory"
+    },
+    {
+      "id": "energy_brain_vitality_memory:not_sure",
+      "label": "Not sure",
+      "concern_id": "energy_brain_vitality_memory"
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness:haemoglobin",
+      "label": "Haemoglobin (anaemia)",
+      "concern_id": "energy_brain_vitality_weakness_dizziness"
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness:iron_ferritin",
+      "label": "Iron / ferritin",
+      "concern_id": "energy_brain_vitality_weakness_dizziness"
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "energy_brain_vitality_weakness_dizziness"
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness:sugar",
+      "label": "Sugar",
+      "concern_id": "energy_brain_vitality_weakness_dizziness"
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness:bp",
+      "label": "BP",
+      "concern_id": "energy_brain_vitality_weakness_dizziness"
+    },
+    {
+      "id": "energy_brain_vitality_weakness_dizziness:not_sure",
+      "label": "Not sure",
+      "concern_id": "energy_brain_vitality_weakness_dizziness"
+    },
+    {
+      "id": "breathing_lungs_breathlessness:chest_x_ray",
+      "label": "Chest X-ray",
+      "concern_id": "breathing_lungs_breathlessness"
+    },
+    {
+      "id": "breathing_lungs_breathlessness:lung_function",
+      "label": "Lung function (spirometry/PFT)",
+      "concern_id": "breathing_lungs_breathlessness"
+    },
+    {
+      "id": "breathing_lungs_breathlessness:haemoglobin",
+      "label": "Haemoglobin",
+      "concern_id": "breathing_lungs_breathlessness"
+    },
+    {
+      "id": "breathing_lungs_breathlessness:oxygen_level",
+      "label": "Oxygen level",
+      "concern_id": "breathing_lungs_breathlessness"
+    },
+    {
+      "id": "breathing_lungs_breathlessness:not_sure",
+      "label": "Not sure",
+      "concern_id": "breathing_lungs_breathlessness"
+    },
+    {
+      "id": "breathing_lungs_chronic_cough:chest_x_ray",
+      "label": "Chest X-ray",
+      "concern_id": "breathing_lungs_chronic_cough"
+    },
+    {
+      "id": "breathing_lungs_chronic_cough:sputum_tb_test",
+      "label": "Sputum / TB test",
+      "concern_id": "breathing_lungs_chronic_cough"
+    },
+    {
+      "id": "breathing_lungs_chronic_cough:allergy",
+      "label": "Allergy (IgE)",
+      "concern_id": "breathing_lungs_chronic_cough"
+    },
+    {
+      "id": "breathing_lungs_chronic_cough:not_sure",
+      "label": "Not sure",
+      "concern_id": "breathing_lungs_chronic_cough"
+    },
+    {
+      "id": "breathing_lungs_asthma:lung_function",
+      "label": "Lung function (PFT)",
+      "concern_id": "breathing_lungs_asthma"
+    },
+    {
+      "id": "breathing_lungs_asthma:allergy",
+      "label": "Allergy (IgE)",
+      "concern_id": "breathing_lungs_asthma"
+    },
+    {
+      "id": "breathing_lungs_asthma:eosinophils",
+      "label": "Eosinophils",
+      "concern_id": "breathing_lungs_asthma"
+    },
+    {
+      "id": "breathing_lungs_asthma:not_sure",
+      "label": "Not sure",
+      "concern_id": "breathing_lungs_asthma"
+    },
+    {
+      "id": "breathing_lungs_chest_infections:chest_x_ray",
+      "label": "Chest X-ray",
+      "concern_id": "breathing_lungs_chest_infections"
+    },
+    {
+      "id": "breathing_lungs_chest_infections:cbc",
+      "label": "CBC (white cells)",
+      "concern_id": "breathing_lungs_chest_infections"
+    },
+    {
+      "id": "breathing_lungs_chest_infections:sputum_tb_test",
+      "label": "Sputum / TB test",
+      "concern_id": "breathing_lungs_chest_infections"
+    },
+    {
+      "id": "breathing_lungs_chest_infections:not_sure",
+      "label": "Not sure",
+      "concern_id": "breathing_lungs_chest_infections"
+    },
+    {
+      "id": "breathing_lungs_reduced_exercise_capacity:lung_function",
+      "label": "Lung function (PFT)",
+      "concern_id": "breathing_lungs_reduced_exercise_capacity"
+    },
+    {
+      "id": "breathing_lungs_reduced_exercise_capacity:haemoglobin",
+      "label": "Haemoglobin",
+      "concern_id": "breathing_lungs_reduced_exercise_capacity"
+    },
+    {
+      "id": "breathing_lungs_reduced_exercise_capacity:ecg",
+      "label": "ECG",
+      "concern_id": "breathing_lungs_reduced_exercise_capacity"
+    },
+    {
+      "id": "breathing_lungs_reduced_exercise_capacity:not_sure",
+      "label": "Not sure",
+      "concern_id": "breathing_lungs_reduced_exercise_capacity"
+    },
+    {
+      "id": "bones_joints_movement_joint_pain:uric_acid",
+      "label": "Uric acid",
+      "concern_id": "bones_joints_movement_joint_pain"
+    },
+    {
+      "id": "bones_joints_movement_joint_pain:ra_factor_anti_ccp",
+      "label": "RA factor / anti-CCP",
+      "concern_id": "bones_joints_movement_joint_pain"
+    },
+    {
+      "id": "bones_joints_movement_joint_pain:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "bones_joints_movement_joint_pain"
+    },
+    {
+      "id": "bones_joints_movement_joint_pain:inflammation",
+      "label": "Inflammation (CRP/ESR)",
+      "concern_id": "bones_joints_movement_joint_pain"
+    },
+    {
+      "id": "bones_joints_movement_joint_pain:not_sure",
+      "label": "Not sure",
+      "concern_id": "bones_joints_movement_joint_pain"
+    },
+    {
+      "id": "bones_joints_movement_back_pain:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "bones_joints_movement_back_pain"
+    },
+    {
+      "id": "bones_joints_movement_back_pain:x_ray_mri_finding",
+      "label": "X-ray / MRI finding",
+      "concern_id": "bones_joints_movement_back_pain"
+    },
+    {
+      "id": "bones_joints_movement_back_pain:calcium",
+      "label": "Calcium",
+      "concern_id": "bones_joints_movement_back_pain"
+    },
+    {
+      "id": "bones_joints_movement_back_pain:not_sure",
+      "label": "Not sure",
+      "concern_id": "bones_joints_movement_back_pain"
+    },
+    {
+      "id": "bones_joints_movement_knee_pain:x_ray_finding",
+      "label": "X-ray finding",
+      "concern_id": "bones_joints_movement_knee_pain"
+    },
+    {
+      "id": "bones_joints_movement_knee_pain:uric_acid",
+      "label": "Uric acid",
+      "concern_id": "bones_joints_movement_knee_pain"
+    },
+    {
+      "id": "bones_joints_movement_knee_pain:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "bones_joints_movement_knee_pain"
+    },
+    {
+      "id": "bones_joints_movement_knee_pain:not_sure",
+      "label": "Not sure",
+      "concern_id": "bones_joints_movement_knee_pain"
+    },
+    {
+      "id": "bones_joints_movement_reduced_mobility:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "bones_joints_movement_reduced_mobility"
+    },
+    {
+      "id": "bones_joints_movement_reduced_mobility:x_ray_mri",
+      "label": "X-ray / MRI",
+      "concern_id": "bones_joints_movement_reduced_mobility"
+    },
+    {
+      "id": "bones_joints_movement_reduced_mobility:inflammation",
+      "label": "Inflammation (CRP/ESR)",
+      "concern_id": "bones_joints_movement_reduced_mobility"
+    },
+    {
+      "id": "bones_joints_movement_reduced_mobility:not_sure",
+      "label": "Not sure",
+      "concern_id": "bones_joints_movement_reduced_mobility"
+    },
+    {
+      "id": "bones_joints_movement_osteoporosis:bone_density",
+      "label": "Bone density (DEXA)",
+      "concern_id": "bones_joints_movement_osteoporosis"
+    },
+    {
+      "id": "bones_joints_movement_osteoporosis:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "bones_joints_movement_osteoporosis"
+    },
+    {
+      "id": "bones_joints_movement_osteoporosis:calcium",
+      "label": "Calcium",
+      "concern_id": "bones_joints_movement_osteoporosis"
+    },
+    {
+      "id": "bones_joints_movement_osteoporosis:not_sure",
+      "label": "Not sure",
+      "concern_id": "bones_joints_movement_osteoporosis"
+    },
+    {
+      "id": "bones_joints_movement_slow_recovery:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "bones_joints_movement_slow_recovery"
+    },
+    {
+      "id": "bones_joints_movement_slow_recovery:cpk",
+      "label": "CPK",
+      "concern_id": "bones_joints_movement_slow_recovery"
+    },
+    {
+      "id": "bones_joints_movement_slow_recovery:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "bones_joints_movement_slow_recovery"
+    },
+    {
+      "id": "bones_joints_movement_slow_recovery:not_sure",
+      "label": "Not sure",
+      "concern_id": "bones_joints_movement_slow_recovery"
+    },
+    {
+      "id": "immunity_inflammation_frequent_infections:cbc",
+      "label": "CBC (white cells)",
+      "concern_id": "immunity_inflammation_frequent_infections"
+    },
+    {
+      "id": "immunity_inflammation_frequent_infections:hba1c_sugar",
+      "label": "HbA1c / sugar",
+      "concern_id": "immunity_inflammation_frequent_infections"
+    },
+    {
+      "id": "immunity_inflammation_frequent_infections:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "immunity_inflammation_frequent_infections"
+    },
+    {
+      "id": "immunity_inflammation_frequent_infections:immunoglobulins",
+      "label": "Immunoglobulins",
+      "concern_id": "immunity_inflammation_frequent_infections"
+    },
+    {
+      "id": "immunity_inflammation_frequent_infections:not_sure",
+      "label": "Not sure",
+      "concern_id": "immunity_inflammation_frequent_infections"
+    },
+    {
+      "id": "immunity_inflammation_allergies:allergy_panel",
+      "label": "Allergy (IgE) panel",
+      "concern_id": "immunity_inflammation_allergies"
+    },
+    {
+      "id": "immunity_inflammation_allergies:eosinophils",
+      "label": "Eosinophils",
+      "concern_id": "immunity_inflammation_allergies"
+    },
+    {
+      "id": "immunity_inflammation_allergies:specific_allergen_test",
+      "label": "Specific allergen test",
+      "concern_id": "immunity_inflammation_allergies"
+    },
+    {
+      "id": "immunity_inflammation_allergies:not_sure",
+      "label": "Not sure",
+      "concern_id": "immunity_inflammation_allergies"
+    },
+    {
+      "id": "immunity_inflammation_autoimmune:ana",
+      "label": "ANA",
+      "concern_id": "immunity_inflammation_autoimmune"
+    },
+    {
+      "id": "immunity_inflammation_autoimmune:ra_factor",
+      "label": "RA factor",
+      "concern_id": "immunity_inflammation_autoimmune"
+    },
+    {
+      "id": "immunity_inflammation_autoimmune:thyroid_antibody",
+      "label": "Thyroid antibody (anti-TPO)",
+      "concern_id": "immunity_inflammation_autoimmune"
+    },
+    {
+      "id": "immunity_inflammation_autoimmune:crp_esr",
+      "label": "CRP/ESR",
+      "concern_id": "immunity_inflammation_autoimmune"
+    },
+    {
+      "id": "immunity_inflammation_autoimmune:not_sure",
+      "label": "Not sure",
+      "concern_id": "immunity_inflammation_autoimmune"
+    },
+    {
+      "id": "immunity_inflammation_chronic_inflammation:crp",
+      "label": "CRP",
+      "concern_id": "immunity_inflammation_chronic_inflammation"
+    },
+    {
+      "id": "immunity_inflammation_chronic_inflammation:esr",
+      "label": "ESR",
+      "concern_id": "immunity_inflammation_chronic_inflammation"
+    },
+    {
+      "id": "immunity_inflammation_chronic_inflammation:not_sure",
+      "label": "Not sure",
+      "concern_id": "immunity_inflammation_chronic_inflammation"
+    },
+    {
+      "id": "immunity_inflammation_slow_wound_healing:hba1c_sugar",
+      "label": "HbA1c / sugar",
+      "concern_id": "immunity_inflammation_slow_wound_healing"
+    },
+    {
+      "id": "immunity_inflammation_slow_wound_healing:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "immunity_inflammation_slow_wound_healing"
+    },
+    {
+      "id": "immunity_inflammation_slow_wound_healing:haemoglobin",
+      "label": "Haemoglobin",
+      "concern_id": "immunity_inflammation_slow_wound_healing"
+    },
+    {
+      "id": "immunity_inflammation_slow_wound_healing:not_sure",
+      "label": "Not sure",
+      "concern_id": "immunity_inflammation_slow_wound_healing"
+    },
+    {
+      "id": "skin_hair_hair_fall:iron_ferritin",
+      "label": "Iron / ferritin",
+      "concern_id": "skin_hair_hair_fall"
+    },
+    {
+      "id": "skin_hair_hair_fall:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "skin_hair_hair_fall"
+    },
+    {
+      "id": "skin_hair_hair_fall:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "skin_hair_hair_fall"
+    },
+    {
+      "id": "skin_hair_hair_fall:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "skin_hair_hair_fall"
+    },
+    {
+      "id": "skin_hair_hair_fall:not_sure",
+      "label": "Not sure",
+      "concern_id": "skin_hair_hair_fall"
+    },
+    {
+      "id": "skin_hair_acne:testosterone",
+      "label": "Testosterone",
+      "concern_id": "skin_hair_acne"
+    },
+    {
+      "id": "skin_hair_acne:pcos_panel",
+      "label": "PCOS panel",
+      "concern_id": "skin_hair_acne"
+    },
+    {
+      "id": "skin_hair_acne:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "skin_hair_acne"
+    },
+    {
+      "id": "skin_hair_acne:not_sure",
+      "label": "Not sure",
+      "concern_id": "skin_hair_acne"
+    },
+    {
+      "id": "skin_hair_pigmentation:vitamin_b12",
+      "label": "Vitamin B12",
+      "concern_id": "skin_hair_pigmentation"
+    },
+    {
+      "id": "skin_hair_pigmentation:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "skin_hair_pigmentation"
+    },
+    {
+      "id": "skin_hair_pigmentation:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "skin_hair_pigmentation"
+    },
+    {
+      "id": "skin_hair_pigmentation:not_sure",
+      "label": "Not sure",
+      "concern_id": "skin_hair_pigmentation"
+    },
+    {
+      "id": "skin_hair_dry_skin:thyroid",
+      "label": "Thyroid (TSH)",
+      "concern_id": "skin_hair_dry_skin"
+    },
+    {
+      "id": "skin_hair_dry_skin:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "skin_hair_dry_skin"
+    },
+    {
+      "id": "skin_hair_dry_skin:not_sure",
+      "label": "Not sure",
+      "concern_id": "skin_hair_dry_skin"
+    },
+    {
+      "id": "skin_hair_skin_aging:vitamin_d",
+      "label": "Vitamin D",
+      "concern_id": "skin_hair_skin_aging"
+    },
+    {
+      "id": "skin_hair_skin_aging:no_specific_test_done",
+      "label": "No specific test done",
+      "concern_id": "skin_hair_skin_aging"
+    },
+    {
+      "id": "skin_hair_skin_aging:not_sure",
+      "label": "Not sure",
+      "concern_id": "skin_hair_skin_aging"
+    }
+  ],
+  "cluster": [
+    {
+      "id": "metabolic_health",
+      "label": "Metabolic Health",
+      "concern_id": [
+        "metabolism_blood_sugar",
+        "metabolism_sugar_cravings",
+        "metabolism_weight_gain",
+        "metabolism_belly_fat",
+        "metabolism_fatty_liver",
+        "heart_bp_high_cholesterol",
+        "energy_brain_vitality_low_energy",
+        "energy_brain_vitality_weakness_dizziness"
+      ],
+      "icon": "Activity",
+      "icon-class": "icon-activity"
+    },
+    {
+      "id": "cardiometabolic_risk",
+      "label": "Cardiometabolic Risk",
+      "concern_id": [
+        "heart_bp_high_bp",
+        "heart_bp_high_cholesterol",
+        "heart_bp_palpitations",
+        "heart_bp_chest_discomfort_exertion",
+        "heart_bp_swelling_feet",
+        "metabolism_blood_sugar",
+        "metabolism_weight_gain",
+        "metabolism_belly_fat",
+        "metabolism_kidney_swelling",
+        "metabolism_sugar_cravings",
+        "energy_brain_vitality_weakness_dizziness",
+        "sleep_stress_mood_snoring_sleep_apnea"
+      ],
+      "icon": "Heart",
+      "icon-class": "icon-heart"
+    },
+    {
+      "id": "hormonal_health",
+      "label": "Hormonal Health",
+      "concern_id": [
+        "thyroid_hormonal_thyroid",
+        "thyroid_hormonal_pcos",
+        "thyroid_hormonal_menopause",
+        "thyroid_hormonal_fertility",
+        "thyroid_hormonal_low_testosterone",
+        "thyroid_hormonal_hormonal_imbalance",
+        "metabolism_weight_gain",
+        "skin_hair_hair_fall",
+        "skin_hair_acne",
+        "skin_hair_pigmentation",
+        "skin_hair_dry_skin",
+        "skin_hair_skin_aging",
+        "gut_digestion_constipation"
+      ],
+      "icon": "RefreshCw",
+      "icon-class": "icon-refresh-cw"
+    },
+    {
+      "id": "sleep_recovery",
+      "label": "Sleep & Recovery",
+      "concern_id": [
+        "sleep_stress_mood_poor_sleep",
+        "sleep_stress_mood_insomnia",
+        "sleep_stress_mood_snoring_sleep_apnea",
+        "sleep_stress_mood_burnout",
+        "energy_brain_vitality_low_energy",
+        "bones_joints_movement_slow_recovery"
+      ],
+      "icon": "Moon",
+      "icon-class": "icon-moon"
+    },
+    {
+      "id": "mood_stress_resilience",
+      "label": "Mood & Stress Resilience",
+      "concern_id": [
+        "sleep_stress_mood_burnout",
+        "sleep_stress_mood_anxiety",
+        "sleep_stress_mood_low_mood",
+        "sleep_stress_mood_poor_sleep"
+      ],
+      "icon": "Brain",
+      "icon-class": "icon-brain"
+    },
+    {
+      "id": "gut_brain_axis",
+      "label": "Gut–Brain Axis",
+      "concern_id": [
+        "gut_digestion_acidity",
+        "gut_digestion_bloating",
+        "gut_digestion_constipation",
+        "gut_digestion_diarrhea",
+        "gut_digestion_ibs",
+        "gut_digestion_food_intolerance",
+        "energy_brain_vitality_brain_fog",
+        "sleep_stress_mood_low_mood",
+        "energy_brain_vitality_low_energy"
+      ],
+      "icon": "Leaf",
+      "icon-class": "icon-leaf"
+    },
+    {
+      "id": "inflammation_immune_resilience",
+      "label": "Inflammation & Immune Resilience",
+      "concern_id": [
+        "immunity_inflammation_frequent_infections",
+        "immunity_inflammation_allergies",
+        "immunity_inflammation_autoimmune",
+        "immunity_inflammation_chronic_inflammation",
+        "immunity_inflammation_slow_wound_healing",
+        "bones_joints_movement_joint_pain",
+        "gut_digestion_diarrhea",
+        "gut_digestion_food_intolerance",
+        "skin_hair_dry_skin"
+      ],
+      "icon": "Shield",
+      "icon-class": "icon-shield"
+    },
+    {
+      "id": "musculoskeletal_bone_health",
+      "label": "Musculoskeletal & Bone Health",
+      "concern_id": [
+        "bones_joints_movement_joint_pain",
+        "bones_joints_movement_back_pain",
+        "bones_joints_movement_knee_pain",
+        "bones_joints_movement_reduced_mobility",
+        "bones_joints_movement_osteoporosis",
+        "bones_joints_movement_slow_recovery",
+        "energy_brain_vitality_deficiency",
+        "energy_brain_vitality_weakness_dizziness"
+      ],
+      "icon": "Bone",
+      "icon-class": "icon-bone"
+    },
+    {
+      "id": "respiratory_health",
+      "label": "Respiratory Health",
+      "concern_id": [
+        "breathing_lungs_breathlessness",
+        "breathing_lungs_chronic_cough",
+        "breathing_lungs_asthma",
+        "breathing_lungs_chest_infections",
+        "breathing_lungs_reduced_exercise_capacity",
+        "heart_bp_chest_discomfort_exertion",
+        "sleep_stress_mood_snoring_sleep_apnea"
+      ],
+      "icon": "Wind",
+      "icon-class": "icon-wind"
+    },
+    {
+      "id": "cognitive_healthy_aging",
+      "label": "Cognitive & Healthy Aging",
+      "concern_id": [
+        "energy_brain_vitality_brain_fog",
+        "energy_brain_vitality_poor_focus",
+        "energy_brain_vitality_memory",
+        "sleep_stress_mood_poor_sleep",
+        "energy_brain_vitality_low_energy",
+        "bones_joints_movement_osteoporosis",
+        "energy_brain_vitality_deficiency",
+        "energy_brain_vitality_weakness_dizziness",
+        "skin_hair_skin_aging"
+      ],
+      "icon": "Sparkles",
+      "icon-class": "icon-sparkles"
+    }
+  ],
+  "concern_confidence": {
+    "component_max": {
+      "functional_impact": 35,
+      "duration": 20,
+      "progression": 15,
+      "total": 100,
+      "concern_source": 30
+    },
+    "medical_override_floor": 80,
+    "concern_source_multi_select": {
+      "additional_source_bonus": 3,
+      "cap": 30
+    }
+  },
+  "concern_bucket": [
+    {
+      "id": "low",
+      "label": "Low",
+      "score_min": 0,
+      "score_max": 39
+    },
+    {
+      "id": "moderate",
+      "label": "Moderate",
+      "score_min": 40,
+      "score_max": 59
+    },
+    {
+      "id": "high",
+      "label": "High",
+      "score_min": 60,
+      "score_max": 79
+    },
+    {
+      "id": "very_high",
+      "label": "Very High",
+      "score_min": 80,
+      "score_max": 100
+    }
+  ],
+  "cluster_confidence": {
+    "component_max": {
+      "family_risk": 10,
+      "lifestyle": 5,
+      "validation": 10,
+      "provisional": 90,
+      "final": 100,
+      "base_concern": 75
+    },
+    "family_risk_level_score": [
+      {
+        "risk_level_id": "low",
+        "score": 2
+      },
+      {
+        "risk_level_id": "moderate",
+        "score": 5
+      },
+      {
+        "risk_level_id": "high",
+        "score": 8
+      },
+      {
+        "risk_level_id": "very_high",
+        "score": 10
+      }
+    ],
+    "validation": {
+      "max": 10,
+      "formula": "round((positive_answers / questions_asked) * 10)"
+    },
+    "base_concern": {
+      "scale": 0.75,
+      "highest_concern_weight": 0.6,
+      "average_concern_weight": 0.4
+    }
+  },
+  "cluster_bucket": [
+    {
+      "id": "weak_signal",
+      "label": "Weak Signal",
+      "score_min": 0,
+      "score_max": 39
+    },
+    {
+      "id": "possible_pattern",
+      "label": "Possible Pattern",
+      "score_min": 40,
+      "score_max": 59
+    },
+    {
+      "id": "strong_pattern",
+      "label": "Strong Pattern",
+      "score_min": 60,
+      "score_max": 79
+    },
+    {
+      "id": "very_strong_pattern",
+      "label": "Very Strong Pattern",
+      "score_min": 80,
+      "score_max": 100
+    }
+  ],
+  "cluster_probe_config": {
+    "eligibility": [
+      {
+        "id": "settled",
+        "label": "Settled",
+        "provisional_score_gte": 80,
+        "action": "skip"
+      },
+      {
+        "id": "eligible",
+        "label": "Eligible",
+        "provisional_score_min": 50,
+        "provisional_score_max": 79,
+        "action": "probe"
+      },
+      {
+        "id": "weak",
+        "label": "Weak",
+        "provisional_score_lt": 50,
+        "action": "skip"
+      }
+    ],
+    "max_clusters": 2,
+    "questions_per_cluster": {
+      "min": 3,
+      "max": 5
+    }
+  },
+  "cluster_probe": [
+    {
+      "id": "metabolic_health_sleepy_after_meals",
+      "label": "Sleepy after meals?",
+      "cluster_id": "metabolic_health"
+    },
+    {
+      "id": "metabolic_health_crave_sweets_often",
+      "label": "Crave sweets often?",
+      "cluster_id": "metabolic_health"
+    },
+    {
+      "id": "metabolic_health_energy_crashes_mid_day",
+      "label": "Energy crashes mid-day?",
+      "cluster_id": "metabolic_health"
+    },
+    {
+      "id": "metabolic_health_hungry_soon_after_eating",
+      "label": "Hungry soon after eating?",
+      "cluster_id": "metabolic_health"
+    },
+    {
+      "id": "metabolic_health_waist_increased_recently",
+      "label": "Waist increased recently?",
+      "cluster_id": "metabolic_health"
+    },
+    {
+      "id": "cardiometabolic_risk_breathless_climbing_stairs",
+      "label": "Breathless climbing stairs?",
+      "cluster_id": "cardiometabolic_risk"
+    },
+    {
+      "id": "cardiometabolic_risk_bp_ever_found_high",
+      "label": "BP ever found high?",
+      "cluster_id": "cardiometabolic_risk"
+    },
+    {
+      "id": "cardiometabolic_risk_salty_fried_food_often",
+      "label": "Salty/fried food often?",
+      "cluster_id": "cardiometabolic_risk"
+    },
+    {
+      "id": "cardiometabolic_risk_swelling_in_feet",
+      "label": "Swelling in feet?",
+      "cluster_id": "cardiometabolic_risk"
+    },
+    {
+      "id": "cardiometabolic_risk_get_tired_on_exertion",
+      "label": "Get tired on exertion?",
+      "cluster_id": "cardiometabolic_risk"
+    },
+    {
+      "id": "hormonal_health_unexplained_weight_change",
+      "label": "Unexplained weight change?",
+      "cluster_id": "hormonal_health"
+    },
+    {
+      "id": "hormonal_health_feel_unusually_cold_hot",
+      "label": "Feel unusually cold/hot?",
+      "cluster_id": "hormonal_health"
+    },
+    {
+      "id": "hormonal_health_hair_changes",
+      "label": "Hair changes?",
+      "cluster_id": "hormonal_health"
+    },
+    {
+      "id": "hormonal_health_mood_swings_with_cycle",
+      "label": "Mood swings with cycle?",
+      "cluster_id": "hormonal_health"
+    },
+    {
+      "id": "hormonal_health_low_drive_libido",
+      "label": "Low drive/libido?",
+      "cluster_id": "hormonal_health"
+    },
+    {
+      "id": "sleep_recovery_wake_refreshed",
+      "label": "Wake refreshed?",
+      "cluster_id": "sleep_recovery"
+    },
+    {
+      "id": "sleep_recovery_wake_during_the_night",
+      "label": "Wake during the night?",
+      "cluster_id": "sleep_recovery"
+    },
+    {
+      "id": "sleep_recovery_screens_before_bed",
+      "label": "Screens before bed?",
+      "cluster_id": "sleep_recovery"
+    },
+    {
+      "id": "sleep_recovery_tired_despite_sleeping",
+      "label": "Tired despite sleeping?",
+      "cluster_id": "sleep_recovery"
+    },
+    {
+      "id": "sleep_recovery_need_caffeine_to_function",
+      "label": "Need caffeine to function?",
+      "cluster_id": "sleep_recovery"
+    },
+    {
+      "id": "mood_stress_resilience_feel_overwhelmed_often",
+      "label": "Feel overwhelmed often?",
+      "cluster_id": "mood_stress_resilience"
+    },
+    {
+      "id": "mood_stress_resilience_trouble_switching_off",
+      "label": "Trouble switching off?",
+      "cluster_id": "mood_stress_resilience"
+    },
+    {
+      "id": "mood_stress_resilience_low_motivation",
+      "label": "Low motivation?",
+      "cluster_id": "mood_stress_resilience"
+    },
+    {
+      "id": "mood_stress_resilience_irritable",
+      "label": "Irritable?",
+      "cluster_id": "mood_stress_resilience"
+    },
+    {
+      "id": "mood_stress_resilience_enjoy_things_less_than_before",
+      "label": "Enjoy things less than before?",
+      "cluster_id": "mood_stress_resilience"
+    },
+    {
+      "id": "gut_brain_axis_bloating_after_meals",
+      "label": "Bloating after meals?",
+      "cluster_id": "gut_brain_axis"
+    },
+    {
+      "id": "gut_brain_axis_bowels_change_with_stress",
+      "label": "Bowels change with stress?",
+      "cluster_id": "gut_brain_axis"
+    },
+    {
+      "id": "gut_brain_axis_brain_fog_after_eating",
+      "label": "Brain fog after eating?",
+      "cluster_id": "gut_brain_axis"
+    },
+    {
+      "id": "gut_brain_axis_certain_foods_trigger_symptoms",
+      "label": "Certain foods trigger symptoms?",
+      "cluster_id": "gut_brain_axis"
+    },
+    {
+      "id": "gut_brain_axis_gut_reacts_to_mood",
+      "label": "Gut reacts to mood?",
+      "cluster_id": "gut_brain_axis"
+    },
+    {
+      "id": "inflammation_immune_resilience_fall_sick_often",
+      "label": "Fall sick often?",
+      "cluster_id": "inflammation_immune_resilience"
+    },
+    {
+      "id": "inflammation_immune_resilience_slow_to_recover",
+      "label": "Slow to recover?",
+      "cluster_id": "inflammation_immune_resilience"
+    },
+    {
+      "id": "inflammation_immune_resilience_frequent_allergies",
+      "label": "Frequent allergies?",
+      "cluster_id": "inflammation_immune_resilience"
+    },
+    {
+      "id": "inflammation_immune_resilience_body_joint_aches",
+      "label": "Body/joint aches?",
+      "cluster_id": "inflammation_immune_resilience"
+    },
+    {
+      "id": "inflammation_immune_resilience_recurrent_ulcers_skin_flares",
+      "label": "Recurrent ulcers/skin flares?",
+      "cluster_id": "inflammation_immune_resilience"
+    },
+    {
+      "id": "musculoskeletal_bone_health_pain_limits_movement",
+      "label": "Pain limits movement?",
+      "cluster_id": "musculoskeletal_bone_health"
+    },
+    {
+      "id": "musculoskeletal_bone_health_morning_stiffness",
+      "label": "Morning stiffness?",
+      "cluster_id": "musculoskeletal_bone_health"
+    },
+    {
+      "id": "musculoskeletal_bone_health_pain_worse_with_activity",
+      "label": "Pain worse with activity?",
+      "cluster_id": "musculoskeletal_bone_health"
+    },
+    {
+      "id": "musculoskeletal_bone_health_past_fractures",
+      "label": "Past fractures?",
+      "cluster_id": "musculoskeletal_bone_health"
+    },
+    {
+      "id": "musculoskeletal_bone_health_low_sun_exposure",
+      "label": "Low sun exposure?",
+      "cluster_id": "musculoskeletal_bone_health"
+    },
+    {
+      "id": "respiratory_health_breathless_on_exertion",
+      "label": "Breathless on exertion?",
+      "cluster_id": "respiratory_health"
+    },
+    {
+      "id": "respiratory_health_cough_lasting_over_2_weeks",
+      "label": "Cough lasting >2 weeks?",
+      "cluster_id": "respiratory_health"
+    },
+    {
+      "id": "respiratory_health_wheeze_at_night",
+      "label": "Wheeze at night?",
+      "cluster_id": "respiratory_health"
+    },
+    {
+      "id": "respiratory_health_worse_in_pollution_winter",
+      "label": "Worse in pollution/winter?",
+      "cluster_id": "respiratory_health"
+    },
+    {
+      "id": "respiratory_health_colds_settle_in_chest",
+      "label": "Colds settle in chest?",
+      "cluster_id": "respiratory_health"
+    },
+    {
+      "id": "cognitive_healthy_aging_forget_recent_things",
+      "label": "Forget recent things?",
+      "cluster_id": "cognitive_healthy_aging"
+    },
+    {
+      "id": "cognitive_healthy_aging_lose_focus_quickly",
+      "label": "Lose focus quickly?",
+      "cluster_id": "cognitive_healthy_aging"
+    },
+    {
+      "id": "cognitive_healthy_aging_word_finding_difficulty",
+      "label": "Word-finding difficulty?",
+      "cluster_id": "cognitive_healthy_aging"
+    },
+    {
+      "id": "cognitive_healthy_aging_mentally_fatigued_by_evening",
+      "label": "Mentally fatigued by evening?",
+      "cluster_id": "cognitive_healthy_aging"
+    },
+    {
+      "id": "cognitive_healthy_aging_feel_slower_than_before",
+      "label": "Feel slower than before?",
+      "cluster_id": "cognitive_healthy_aging"
+    }
+  ],
+  "sexual_health": [
+    {
+      "id": "womens_health",
+      "label": "Women's health",
+      "sex_gate": "female",
+      "question": [
+        {
+          "id": "periods",
+          "label": "Periods",
+          "option": [
+            {
+              "id": "regular",
+              "label": "Regular"
+            },
+            {
+              "id": "irregular",
+              "label": "Irregular"
+            },
+            {
+              "id": "stopped",
+              "label": "Stopped (menopause)"
+            },
+            {
+              "id": "contraception",
+              "label": "On hormonal contraception"
+            }
+          ]
+        },
+        {
+          "id": "heavy_bleeding",
+          "label": "Heavy bleeding / fibroids?",
+          "option": [
+            {
+              "id": "yes",
+              "label": "Yes"
+            },
+            {
+              "id": "no",
+              "label": "No"
+            },
+            {
+              "id": "not_sure",
+              "label": "Not sure"
+            }
+          ]
+        },
+        {
+          "id": "pregnancy",
+          "label": "Pregnancies",
+          "type": "number",
+          "option": [
+            {
+              "id": "yes",
+              "label": "Yes"
+            },
+            {
+              "id": "no",
+              "label": "No"
+            }
+          ]
+        },
+        {
+          "id": "menopause_stage",
+          "label": "Menopause stage",
+          "option": [
+            {
+              "id": "premenopausal",
+              "label": "Premenopausal"
+            },
+            {
+              "id": "perimenopausal",
+              "label": "Perimenopausal"
+            },
+            {
+              "id": "postmenopausal",
+              "label": "Postmenopausal"
+            }
+          ]
+        },
+        {
+          "id": "trying_to_conceive",
+          "label": "Trying to conceive?",
+          "gate": "fertility_intent",
+          "option": [
+            {
+              "id": "yes",
+              "label": "Yes"
+            },
+            {
+              "id": "no",
+              "label": "No"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mens_health",
+      "label": "Men's health",
+      "sex_gate": "male",
+      "question": [
+        {
+          "id": "energy_drive_libido",
+          "label": "Energy / drive / libido changes?",
+          "option": [
+            {
+              "id": "yes",
+              "label": "Yes"
+            },
+            {
+              "id": "no",
+              "label": "No"
+            },
+            {
+              "id": "not_sure",
+              "label": "Not sure"
+            }
+          ]
+        },
+        {
+          "id": "erectile_difficulty",
+          "label": "Erectile difficulty?",
+          "skippable": true,
+          "option": [
+            {
+              "id": "yes",
+              "label": "Yes"
+            },
+            {
+              "id": "no",
+              "label": "No"
+            },
+            {
+              "id": "prefer_not_to_say",
+              "label": "Prefer not to say"
+            }
+          ]
+        },
+        {
+          "id": "urinary_changes",
+          "label": "Urinary changes (flow/frequency, age 45+)",
+          "age_min": 45,
+          "option": [
+            {
+              "id": "yes",
+              "label": "Yes"
+            },
+            {
+              "id": "no",
+              "label": "No"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

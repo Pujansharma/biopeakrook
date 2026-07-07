@@ -64,6 +64,21 @@ class LoginOTPSerializer(BaseSerializer):
         return perform_login_for_user(user)
 
 
+class DirectPhoneLoginSerializer(BaseSerializer):
+    """Temporary: phone-only login without OTP. Remove in a future release."""
+
+    phone = PhoneNumberSerializerField()
+
+    def validate(self, attrs):
+        phone = attrs.get("phone")
+        user = User.objects.filter(phone__iexact=phone, is_active=True).first()
+        if not user:
+            raise serializers.ValidationError(
+                {"phone": ["Phone number is not registered."]}
+            )
+        return perform_login_for_user(user)
+
+
 class VerifyOTPSerializer(BaseSerializer):
     phone = PhoneNumberSerializerField()
     otp = serializers.CharField(required=True, min_length=6, max_length=6)

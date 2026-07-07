@@ -92,6 +92,8 @@ def send_multicast_firebase_notification(
         image: str | None = None,
         data: dict[str, Any] | None = None,
 ):
+    if not tokens:
+        return None
     app = get_app_for_project_id(project_id)
 
     multicast_message = messaging.MulticastMessage(

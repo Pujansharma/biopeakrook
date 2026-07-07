@@ -46,7 +46,7 @@ class CustomerAccountSerializer(BaseModelSerializer):
 
     phone = PhoneNumberSerializerField(source="user.phone", read_only=True)
     phone_otp = serializers.CharField(write_only=True, required=False)
-    # email = serializers.EmailField(source="", required=False, allow_null=True)
+    # email = serializers.EmailField(source="user.email", required=False, allow_null=True)
     email_otp = serializers.CharField(write_only=True, required=False)
 
     class Meta:
@@ -112,6 +112,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "date_of_birth",
             "image",
             "is_main",
+            "is_legacy",
             "is_onboarding_complete",
             "created_at",
             "updated_at",
@@ -156,7 +157,7 @@ class CustomerProfileSerializer(BaseModelSerializer):
             "gender",
             "date_of_birth",
             "image",
-            "is_primary",
+            "is_main",
             "is_onboarding_complete",
             "created_at",
             "updated_at",
@@ -280,7 +281,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."
@@ -414,7 +415,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             create_customer_user_account(customer)
 
             if CustomerCenterAssignment.objects.filter(
-                customer_profile=profile, is_primary=True
+                    customer_profile=profile, is_primary=True
             ).exists():
                 raise serializers.ValidationError(
                     "This profile already has a primary center assigned."

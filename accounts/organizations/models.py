@@ -1,6 +1,8 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from accounts.organizations.utils.constants import FeatureTabOptions
 from core.utils.models import BaseUUIDModel
 
 
@@ -28,6 +30,32 @@ class Organization(BaseUUIDModel):
     inactive_staff_count = models.PositiveBigIntegerField(default=0, editable=False)
     customer_count = models.PositiveBigIntegerField(default=0, editable=False)
     inactive_customer_count = models.PositiveBigIntegerField(default=0, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class PlatformFeature(BaseUUIDModel):
+    organization = models.OneToOneField(
+        Organization, on_delete=models.CASCADE, related_name="feature"
+    )
+
+    is_copilot_chat_enabled = models.BooleanField(
+        default=False,
+        help_text=_("Enables the Copilot Chat feature for this organization."),
+    )
+    is_stable = models.BooleanField(
+        default=False, help_text=_("Indicates if the app is stable or not")
+    )
+    enabled_tabs = ArrayField(
+        base_field=models.CharField(choices=FeatureTabOptions),
+        default=list,
+        blank=True,
+        help_text=_("List of tabs visible to profiles in this organization."),
+    )
 
     class Meta:
         ordering = ["-created_at"]

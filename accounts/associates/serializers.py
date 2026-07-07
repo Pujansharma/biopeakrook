@@ -530,7 +530,6 @@ class AssociateCenterSerializer(CenterSerializer):
             "contact_person",
             "modes",
             "status",
-            "status_code",
             "created_at",
             "updated_at",
             "is_active",
