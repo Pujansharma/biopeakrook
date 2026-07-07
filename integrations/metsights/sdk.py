@@ -1,9 +1,10 @@
 import requests
 from django.conf import settings
 
+from accounts.users.utils.constants import Gender
 from core.utils.log import logger
 
-METSIGHTS_BASE_URL = getattr(settings, 'METSIGHTS_BASE_URL', "https://api.metsights.com/")
+METSIGHTS_BASE_URL = getattr(settings, 'METSIGHTS_BASE_URL', "https://api.metsights.com")
 
 METSIGHTS_API_KEY = getattr(settings, "METSIGHTS_API_KEY", None)
 
@@ -16,8 +17,14 @@ class Session(requests.Session):
         })
 
 
+GENDER_MAPPING = {
+    Gender.MALE: "0",
+    Gender.FEMALE: "1"
+}
+
+
 def get_metsights_profile(phone):
-    url = METSIGHTS_BASE_URL + "profiles/"
+    url = METSIGHTS_BASE_URL + "/profiles/"
     session = Session()
     response = session.get(url, params={
         'search': phone,
@@ -31,24 +38,24 @@ def get_metsights_profile(phone):
     if not data:
         logger.warning("No profiles exist")
         return None
-    return data
+    return data[0].get('id')
 
 
 def create_metsights_profile(
         phone, email, first_name, last_name, gender, age, date_of_birth
 ):
-    profile_data = get_metsights_profile(phone)
-    if profile_data:
-        _profile_id = profile_data.get('id')
-        return _profile_id
-    url = METSIGHTS_BASE_URL + "profiles/"
+    profile_id = get_metsights_profile(phone)
+    if profile_id:
+        return {"data": {"id": profile_id}}
+    url = METSIGHTS_BASE_URL + "/profiles/"
     session = Session()
+    gender_value = GENDER_MAPPING.get(gender)
     payload = {
         'phone': phone,
         'email': email,
         "first_name": first_name,
         "last_name": last_name,
-        "gender": gender,
+        "gender": gender_value,
         "age": age,
         "date_of_birth": date_of_birth,
     }
@@ -56,5 +63,5 @@ def create_metsights_profile(
     if not response.ok:
         logger.warning(f"Invalid response received, {response.status_code}: {response.json()}")
         return None
-    _response_data = response.json()
-    return _response_data
+    response_data = response.json()
+    return response_data
