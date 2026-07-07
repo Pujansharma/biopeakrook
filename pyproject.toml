@@ -26,6 +26,7 @@ dependencies = [
     "django-storages[s3]",
     "arrow",
     "firebase-admin",
+    "drf-spectacular>=0.29.0",
     "ruff",
 ]
 

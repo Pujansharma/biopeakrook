@@ -1,7 +1,12 @@
 from django.urls import path
 
 from accounts import views
-from accounts.verifications.views import RequestOTPView, LoginOTPView, ValidateTOTPView
+from accounts.verifications.views import (
+    DirectPhoneLoginView,
+    RequestOTPView,
+    LoginOTPView,
+    ValidateTOTPView,
+)
 
 app_name = "accounts"
 
@@ -28,5 +33,11 @@ urlpatterns = [
     # OTP Flow
     path("request-otp/", RequestOTPView.as_view(), name="request_otp"),
     path("login-otp/", LoginOTPView.as_view(), name="login_otp"),
+    # Temporary: remove in a future release
+    path(
+        "login-phone-direct/",
+        DirectPhoneLoginView.as_view(),
+        name="login_phone_direct",
+    ),
     path("verify-totp/", ValidateTOTPView.as_view()),
 ]

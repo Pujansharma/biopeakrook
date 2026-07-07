@@ -1,9 +1,25 @@
 from django.urls import path, include
+from django.views.generic import RedirectView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from core.utils.defaults import HomePageView
 
 urlpatterns = [
     path("", HomePageView.as_view()),
+    path("openapi/", SpectacularAPIView.as_view(), name="openapi-schema"),
+    path(
+        "openapi/docs/",
+        SpectacularSwaggerView.as_view(url_name="openapi-schema"),
+        name="openapi-docs",
+    ),
+    path(
+        "schema/",
+        RedirectView.as_view(pattern_name="openapi-schema", permanent=True),
+    ),
+    path(
+        "docs/",
+        RedirectView.as_view(pattern_name="openapi-docs", permanent=True),
+    ),
     path("auth/", include("accounts.urls")),
     path("users/", include("accounts.users.urls")),
     path("notifications/", include("accounts.notifications.urls")),
@@ -23,4 +39,5 @@ urlpatterns = [
     path("programs/", include("programs.urls")),
     path("services/", include("programs.services.urls")),
     path("webhooks/", include("webhooks.urls")),
+    path("pre-consultation/", include("pre_consultation.urls")),
 ]

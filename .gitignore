@@ -15,6 +15,8 @@ modules/utils/pdf_engine/build
 # Backup files #
 *.bak
 *.json
+!pre_consultation/data/pre_consultation_directive.json
+sim.html
 
 # If you are using PyCharm #
 # User-specific stuff
@@ -155,3 +157,4 @@ GitHub.sublime-settings
 .aider
 .windsurf
 .continue
+postman
