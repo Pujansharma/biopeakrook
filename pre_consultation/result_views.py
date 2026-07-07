@@ -3,8 +3,7 @@
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.pagination import BasePageNumberPagination
 from core.utils.view_types import GetMethodMixin, PatchMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
@@ -44,7 +43,7 @@ from pre_consultation.utils.schema import (
 
 
 class PreConsultationResultBaseView(BaseGenericAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser | IsAssociateUser]
 
     def load_context(self, user_id: str):
         return get_result_session_context(user_id)
