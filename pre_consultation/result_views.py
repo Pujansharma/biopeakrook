@@ -1,10 +1,11 @@
 """Staff-facing pre-consultation result endpoints keyed by customer user_id."""
 
-from drf_spectacular.utils import extend_schema, extend_schema_view
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
+from core.utils.pagination import BasePageNumberPagination
 from core.utils.view_types import GetMethodMixin, PatchMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
 from pre_consultation.models import (
@@ -21,14 +22,17 @@ from pre_consultation.result_builders import (
     build_notes_payload,
     build_overview_payload,
     build_raw_data_payload,
+    get_session_list_queryset,
     serialize_checklist_item,
+    serialize_session_list_item,
 )
 from pre_consultation.result_serializers import (
     PreConsultationChecklistItemPatchSerializer,
+    PreConsultationSessionListItemSerializer,
     PreConsultationSessionNoteCreateSerializer,
 )
 from pre_consultation.result_session import get_result_session_context
-from pre_consultation.utils.api import pre_consultation_response
+from pre_consultation.utils.api import pre_consultation_paginated_response, pre_consultation_response
 from pre_consultation.utils.schema import PRE_CONSULTATION_RESULT_TAG
 
 
@@ -37,6 +41,47 @@ class PreConsultationResultBaseView(BaseGenericAPIView):
 
     def load_context(self, user_id: str):
         return get_result_session_context(user_id)
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=[PRE_CONSULTATION_RESULT_TAG],
+        description=(
+            "Paginated list of all pre-consultation sessions with customer profile "
+            "fields for staff result workflows."
+        ),
+        responses={200: PreConsultationSessionListItemSerializer(many=True)},
+    ),
+)
+class PreConsultationSessionListView(PreConsultationResultBaseView, GetMethodMixin):
+    pagination_class = BasePageNumberPagination
+
+    def get_queryset(self):
+        return get_session_list_queryset()
+
+    def get(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is None:
+            results = [serialize_session_list_item(session) for session in queryset]
+            return pre_consultation_paginated_response(
+                success=True,
+                status_code=status.HTTP_200_OK,
+                count=len(results),
+                next_link=None,
+                previous_link=None,
+                results=results,
+            )
+
+        results = [serialize_session_list_item(session) for session in page]
+        return pre_consultation_paginated_response(
+            success=True,
+            status_code=status.HTTP_200_OK,
+            count=self.paginator.page.paginator.count,
+            next_link=self.paginator.get_next_link(),
+            previous_link=self.paginator.get_previous_link(),
+            results=results,
+        )
 
 
 @extend_schema_view(

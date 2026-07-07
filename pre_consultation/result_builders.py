@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from django.db.models import Prefetch
+
+from accounts.customers.models import CustomerProfile
 from accounts.users.utils.helper import calculate_age
+from pre_consultation.models import PreConsultationSession
 from pre_consultation.layers.patient_baseline import customer_profile_to_payload
 from pre_consultation.layers.patient_goals_priorities import (
     build_health_goals_response,
@@ -800,3 +804,52 @@ def build_notes_payload(context: ResultSessionContext) -> dict:
             for note in context.session.notes.order_by("-created_at")
         ]
     }
+
+
+def _session_list_profile_fields(
+    session: PreConsultationSession,
+    profile: CustomerProfile | None,
+) -> dict:
+    if profile is not None:
+        return {
+            "first_name": profile.first_name,
+            "last_name": profile.last_name,
+            "gender": profile.get_gender_display() if profile.gender else None,
+            "date_of_birth": profile.date_of_birth,
+        }
+
+    user = session.user
+    return {
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "gender": user.get_gender_display() if user.gender else None,
+        "date_of_birth": user.date_of_birth,
+    }
+
+
+def serialize_session_list_item(session: PreConsultationSession) -> dict:
+    customer = getattr(session.user, "customer", None)
+    main_profiles = getattr(customer, "main_profiles", None) if customer else None
+    profile = main_profiles[0] if main_profiles else None
+    phone = session.user.phone
+    return {
+        "user_id": str(session.user_id),
+        "id": str(session.pk),
+        "contact_email": customer.contact_email if customer else None,
+        "phone": str(phone) if phone else None,
+        "status": session.get_status_display(),
+        **_session_list_profile_fields(session, profile),
+    }
+
+
+def get_session_list_queryset():
+    main_profiles = CustomerProfile.objects.filter(is_main=True)
+    return PreConsultationSession.objects.select_related(
+        "user__customer",
+    ).prefetch_related(
+        Prefetch(
+            "user__customer__profiles",
+            queryset=main_profiles,
+            to_attr="main_profiles",
+        ),
+    ).order_by("-created_at")

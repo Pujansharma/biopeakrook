@@ -39,6 +39,13 @@ from core.utils.views.main import (
 )
 
 
+def get_customer_for_request(request):
+    qs = Customer.objects.select_related("user")
+    return get_object_or_404(
+        qs, detail="Invalid Customer profile", pk=request.user.pk
+    )
+
+
 class CustomerAccountProfileView(BaseRetrieveUpdateAPIView):
     """Views for customers to update their profiles"""
 
@@ -46,10 +53,7 @@ class CustomerAccountProfileView(BaseRetrieveUpdateAPIView):
     serializer_class = CustomerAccountSerializer
 
     def get_object(self):
-        qs = Customer.objects.select_related("user")
-        return get_object_or_404(
-            qs, detail="Invalid Customer profile", pk=self.kwargs.get("pk")
-        )
+        return get_customer_for_request(self.request)
 
 
 class CustomerProfilesListView(BaseListAPIView):
@@ -59,10 +63,7 @@ class CustomerProfilesListView(BaseListAPIView):
     serializer_class = CustomerProfileSerializer
 
     def get_customer(self):
-        qs = Customer.objects.select_related("user")
-        return get_object_or_404(
-            qs, detail="Invalid Customer profile", pk=self.kwargs.get("pk")
-        )
+        return get_customer_for_request(self.request)
 
     def get_queryset(self):
         filter_kwargs = {}
