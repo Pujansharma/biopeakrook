@@ -808,6 +808,52 @@ def build_notes_payload(context: ResultSessionContext) -> dict:
     }
 
 
+def build_surgery_payload(context: ResultSessionContext) -> dict:
+    surgeries: list[dict[str, str]] = []
+    if context.medical_history is not None:
+        surgeries = [
+            {
+                "name": surgery.name,
+                "performed_when": surgery.performed_when,
+                "reason": surgery.reason,
+            }
+            for surgery in context.medical_history.surgeries.order_by("created_at")
+        ]
+    return {"surgeries": surgeries}
+
+
+def _medical_report_download_url(medical_report) -> str:
+    if not medical_report.file:
+        return ""
+    return medical_report.file.url
+
+
+def build_medical_reports_payload(context: ResultSessionContext) -> dict:
+    medical_reports: list[dict] = []
+    if context.medical_history is not None:
+        for medical_report in context.medical_history.medical_reports.order_by(
+            "created_at"
+        ):
+            report_summary = getattr(medical_report, "summary", None)
+            medical_reports.append(
+                {
+                    "name": medical_report.original_filename,
+                    "download_url": _medical_report_download_url(medical_report),
+                    "report_summary": report_summary.summary if report_summary else "",
+                    "testing_location": (
+                        report_summary.testing_location if report_summary else ""
+                    ),
+                    "testing_date": (
+                        report_summary.testing_date if report_summary else None
+                    ),
+                    "is_flagged": (
+                        report_summary.is_flagged if report_summary else False
+                    ),
+                }
+            )
+    return {"medical_reports": medical_reports}
+
+
 def _session_list_profile_fields(
     session: PreConsultationSession,
     profile: CustomerProfile | None,

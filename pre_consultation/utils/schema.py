@@ -81,6 +81,8 @@ PRE_CONSULTATION_PATH_ORDER: tuple[str, ...] = (
     "/pre-consultation/result/{user_id}/clusters/",
     "/pre-consultation/result/{user_id}/lifestyle/",
     "/pre-consultation/result/{user_id}/medical-context/",
+    "/pre-consultation/result/{user_id}/surgery/",
+    "/pre-consultation/result/{user_id}/medical-reports/",
     "/pre-consultation/result/{user_id}/raw-data/",
     "/pre-consultation/result/{user_id}/notes/",
 )

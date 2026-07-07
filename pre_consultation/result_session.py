@@ -50,6 +50,7 @@ def get_result_session_context(user_id: str) -> ResultSessionContext:
             "medications",
             "surgeries",
             "sexual_health_answers",
+            "medical_reports__summary",
         )
         .first()
     )
