@@ -46,7 +46,7 @@ class CustomerAccountSerializer(BaseModelSerializer):
 
     phone = PhoneNumberSerializerField(source="user.phone", read_only=True)
     phone_otp = serializers.CharField(write_only=True, required=False)
-    # email = serializers.EmailField(source="", required=False, allow_null=True)
+    # email = serializers.EmailField(source="user.email", required=False, allow_null=True)
     email_otp = serializers.CharField(write_only=True, required=False)
 
     class Meta:
@@ -157,7 +157,7 @@ class CustomerProfileSerializer(BaseModelSerializer):
             "gender",
             "date_of_birth",
             "image",
-            "is_primary",
+            "is_main",
             "is_onboarding_complete",
             "created_at",
             "updated_at",
