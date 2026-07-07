@@ -33,7 +33,12 @@ from pre_consultation.result_serializers import (
 )
 from pre_consultation.result_session import get_result_session_context
 from pre_consultation.utils.api import pre_consultation_paginated_response, pre_consultation_response
-from pre_consultation.utils.schema import PRE_CONSULTATION_RESULT_TAG
+from pre_consultation.utils.schema import (
+    PRE_CONSULTATION_RESULT_TAG,
+    RESULT_LIST_LIMIT_PARAM,
+    RESULT_LIST_PAGE_PARAM,
+    RESULT_LIST_SEARCH_PARAM,
+)
 
 
 class PreConsultationResultBaseView(BaseGenericAPIView):
@@ -50,6 +55,11 @@ class PreConsultationResultBaseView(BaseGenericAPIView):
             "Paginated list of all pre-consultation sessions with customer profile "
             "fields for staff result workflows."
         ),
+        parameters=[
+            RESULT_LIST_SEARCH_PARAM,
+            RESULT_LIST_PAGE_PARAM,
+            RESULT_LIST_LIMIT_PARAM,
+        ],
         responses={200: PreConsultationSessionListItemSerializer(many=True)},
     ),
 )
@@ -57,7 +67,8 @@ class PreConsultationSessionListView(PreConsultationResultBaseView, GetMethodMix
     pagination_class = BasePageNumberPagination
 
     def get_queryset(self):
-        return get_session_list_queryset()
+        search = self.request.query_params.get("search", "").strip()
+        return get_session_list_queryset(search)
 
     def get(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
