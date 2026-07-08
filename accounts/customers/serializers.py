@@ -117,7 +117,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "is_main",
             "is_legacy",
             "is_onboarding_sent",
-            "is_onboarding_complete",
+            "is_onboarding_completed",
             "created_at",
             "updated_at",
         ]
@@ -163,7 +163,7 @@ class CustomerProfileSerializer(BaseModelSerializer):
             "image",
             "is_main",
             "is_onboarding_sent",
-            "is_onboarding_complete",
+            "is_onboarding_completed",
             "created_at",
             "updated_at",
         ]
@@ -968,7 +968,7 @@ def build_customer_lead_profile_fallback(
         "is_invited": False,
         "is_joined": True,
         "is_onboarding_sent": customer_profile.is_onboarding_sent,
-        "is_onboarding_completed": customer_profile.is_onboarding_complete,
+        "is_onboarding_completed": customer_profile.is_onboarding_completed,
         "converted_on": None,
         "packages": [],
         "home_center": home_center_data,
