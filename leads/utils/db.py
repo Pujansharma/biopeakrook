@@ -9,7 +9,7 @@ LEAD_SUMMARY_KEY = "GLOBAL"
 def generate_lead_unique_id() -> str:
     name = "LEADS"
     prefix = "L"
-    sequence = get_next_sequence(name)
+    sequence = get_next_sequence(name, fill_length=4)
     return f"{prefix}-{sequence}"
 
 
