@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path("addresses/", include("accounts.customers.addresses.urls")),
+    path("v2/", views.CustomerLeadProfileView.as_view()),
     path("", views.CustomerProfilesListView.as_view()),
     path("account/", views.CustomerAccountProfileView.as_view()),
     path("<uuid:pk>/", views.CustomerProfileDetailView.as_view()),

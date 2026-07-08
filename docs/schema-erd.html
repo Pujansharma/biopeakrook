@@ -57,7 +57,7 @@
 const groups = [
   "accounts.admins", "accounts.associates", "accounts.audits", "accounts.centers",
   "accounts.customers", "accounts", "accounts.notifications", "accounts.organizations",
-  "accounts.users", "accounts.verifications", "appointments", "inventory",
+  "accounts.users", "accounts.verifications", "appointments", "inventory", "leads",
   "pre_consultation", "products", "programs", "programs.services",
   "sequences", "webhooks.bugspeaks", "webhooks.strand_genomics"
 ];
@@ -99,6 +99,8 @@ const nodes = [
   { id: "EquipmentSchedule", group: "inventory" },
   { id: "EquipmentBooking", group: "inventory" },
   { id: "EquipmentMaintenance", group: "inventory" },
+  { id: "Lead", group: "leads" },
+  { id: "LeadSummary", group: "leads" },
   { id: "PreConsultationSession", group: "pre_consultation" },
   { id: "PreConsultationCategorySelection", group: "pre_consultation" },
   { id: "PreConsultationConcern", group: "pre_consultation" },
@@ -202,6 +204,10 @@ const links = [
   ["EquipmentMaintenance", "Equipment", "equipment", "many"],
   ["EquipmentMaintenance", "User", "performed_by", "many"],
   ["EquipmentMaintenance", "User", "created_by", "many"],
+  ["Lead", "CustomerProfile", "customer_profile", "one"],
+  ["Lead", "Center", "home_center", "many"],
+  ["Lead", "User", "created_by", "many"],
+  ["Lead", "User", "updated_by", "many"],
   ["PreConsultationSession", "User", "user", "one"],
   ["PreConsultationCategorySelection", "PreConsultationSession", "session", "many"],
   ["PreConsultationConcern", "PreConsultationSession", "session", "many"],
@@ -287,6 +293,8 @@ const fieldDefs = {
   EquipmentSchedule: { pk: "id", rows: [["id","UUID"],["equipment","FK → Equipment"],["day_of_week","Char"],["start_time","Time"],["end_time","Time"],["schedule_type","Char"],["created_by","FK → User"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
   EquipmentBooking: { pk: "id", rows: [["id","UUID"],["equipment","FK → Equipment"],["appointment","FK → Appointment"],["start_datetime","DateTime"],["end_datetime","DateTime"],["booked_by","FK → User"],["purpose","Text"],["created_by","FK → User"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
   EquipmentMaintenance: { pk: "id", rows: [["id","UUID"],["equipment","FK → Equipment"],["maintenance_type","Char"],["scheduled_start","DateTime"],["scheduled_end","DateTime"],["actual_start","DateTime"],["actual_end","DateTime"],["status","Char"],["performed_by","FK → User"],["notes","Text"],["cost","Decimal"],["created_by","FK → User"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
+  Lead: { pk: "id", rows: [["id","UUID"],["unique_id","Char"],["first_name","Char"],["last_name","Char"],["gender","Char"],["phone","PhoneNumber"],["email","Email"],["description","Text"],["date_of_birth","Date"],["is_client","Boolean"],["is_request_sent","Boolean"],["is_onboarding_sent","Boolean"],["is_onboarding_completed","Boolean"],["converted_on","DateTime"],["home_center","FK → Center"],["is_invited","Boolean"],["is_joined","Boolean"],["packages","Array"],["customer_profile","O2O → CustomerProfile"],["created_by","FK → User"],["updated_by","FK → User"],["data","JSON"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
+  LeadSummary: { pk: "id", rows: [["id","UUID"],["key","Char"],["leads_total","+BigInt"],["leads_converted","+BigInt"],["leads_assigned","+BigInt"],["leads_inactive","+BigInt"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
   PreConsultationSession: { pk: "id", rows: [["id","UUID"],["user","O2O → User"],["completed_at","DateTime"],["directive_schema_id","Char"],["status","Char"],["current_layer","Char"],["interface","Char"],["app_version","Char"],["locale","Char"],["device","Char"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
   PreConsultationCategorySelection: { pk: "id", rows: [["id","UUID"],["session","FK → PreConsultationSession"],["category_id","Char"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },
   PreConsultationConcern: { pk: "id", rows: [["id","UUID"],["session","FK → PreConsultationSession"],["concern_id","Char"],["functional_impact_id","Char"],["duration_impact_id","Char"],["progression_impact_id","Char"],["probe_flagged","Boolean"],["confidence_score","Int"],["probe_question_count","Int"],["probe_positive_count","Int"],["is_active","Boolean"],["created_at","DateTime"],["updated_at","DateTime"]] },

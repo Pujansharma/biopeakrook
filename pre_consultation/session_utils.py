@@ -5,6 +5,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 
 from core.utils.request import Request
+from leads.utils.db import is_lead_ready_for_onboarding_session_for_user
 from pre_consultation.customer_profile import resolve_customer_profile_for_request
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.serializers import PreConsultationSessionResponseSerializer
@@ -54,5 +55,14 @@ def guard_onboarding_incomplete_for_mutation(
     session: PreConsultationSession | None = None,
 ) -> Response | None:
     if not is_customer_onboarding_complete(request):
+        return None
+    return build_onboarding_complete_conflict_response(request.user, session)
+
+
+def guard_lead_onboarding_complete_for_start(
+    request: Request,
+    session: PreConsultationSession | None = None,
+) -> Response | None:
+    if is_lead_ready_for_onboarding_session_for_user(request.user):
         return None
     return build_onboarding_complete_conflict_response(request.user, session)
