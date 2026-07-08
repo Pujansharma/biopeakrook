@@ -50,6 +50,7 @@ class BaseLeadSerializer(BaseModelSerializer):
             "is_client",
             "is_invited",
             "is_joined",
+            "is_onboarding_completed",
             "converted_on",
             "packages",
             "home_center",

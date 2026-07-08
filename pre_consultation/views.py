@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 
+from accounts.customers.models import Customer
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
 from pre_consultation.models import PreConsultationSession
@@ -21,7 +22,7 @@ from pre_consultation.serializers import (
 from pre_consultation.customer_profile import resolve_customer_profile_for_request
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
-    guard_onboarding_incomplete_for_mutation,
+    guard_lead_onboarding_complete_for_start,
     is_session_completed,
 )
 from pre_consultation.utils.api import pre_consultation_response
@@ -35,6 +36,7 @@ from pre_consultation.utils.schema import (
     PreConsultationSessionConflictEnvelope,
     pre_consultation_data_envelope,
 )
+from leads.utils.db import mark_lead_onboarding_completed_for_user
 
 SESSION_CONFLICT_ENVELOPE = PreConsultationSessionConflictEnvelope
 SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
@@ -65,7 +67,7 @@ class PreConsultationSessionStartView(BaseGenericAPIView, PostMethodMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        onboarding_conflict = guard_onboarding_incomplete_for_mutation(request)
+        onboarding_conflict = guard_lead_onboarding_complete_for_start(request)
         if onboarding_conflict is not None:
             return onboarding_conflict
 
@@ -169,14 +171,17 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
             session.completed_at = timezone.now()
             session.save(update_fields=["status", "completed_at", "updated_at"])
 
-            customer_profile = resolve_customer_profile_for_request(
-                request.user,
-                getattr(request, "customer_profile_id", None),
-            )
-            customer_profile.is_onboarding_complete = True
-            customer_profile.save(
-                update_fields=["is_onboarding_complete", "updated_at"]
-            )
+            if Customer.objects.filter(user=request.user).exists():
+                customer_profile = resolve_customer_profile_for_request(
+                    request.user,
+                    getattr(request, "customer_profile_id", None),
+                )
+                customer_profile.is_onboarding_complete = True
+                customer_profile.save(
+                    update_fields=["is_onboarding_complete", "updated_at"]
+                )
+
+            mark_lead_onboarding_completed_for_user(request.user)
 
         return pre_consultation_response(
             success=True,

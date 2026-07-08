@@ -1,7 +1,11 @@
 from django.db.models import Case, F, Value, When
+from django.utils import timezone
 
-from leads.models import LeadSummary
+from accounts.utils.auth import get_user_model
+from leads.models import Lead, LeadSummary
 from sequences.utils import get_next_sequence
+
+User = get_user_model()
 
 LEAD_SUMMARY_KEY = "GLOBAL"
 
@@ -84,3 +88,31 @@ def decrement_leads_inactive() -> None:
             default=Value(0),
         )
     )
+
+
+def mark_lead_onboarding_completed_for_user(user: User) -> int:
+    if not user.phone:
+        return 0
+    return Lead.objects.filter(phone=user.phone, is_onboarding_completed=False).update(
+        is_onboarding_completed=True,
+        updated_at=timezone.now(),
+    )
+
+
+def is_lead_onboarding_completed_for_user(user: User) -> bool:
+    if not user.phone:
+        return False
+    return Lead.objects.filter(
+        phone=user.phone,
+        is_onboarding_completed=True,
+    ).exists()
+
+
+def is_lead_ready_for_onboarding_session_for_user(user: User) -> bool:
+    if not user.phone:
+        return False
+    return Lead.objects.filter(
+        phone=user.phone,
+        is_onboarding_sent=True,
+        is_onboarding_completed=False,
+    ).exists()
