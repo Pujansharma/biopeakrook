@@ -2,7 +2,7 @@ from .sdk import create_metsights_profile, get_metsights_profile
 
 
 def get_or_create_metsights_profile(
-    phone, email, first_name, last_name, gender, age, date_of_birth
+        phone, email, first_name, last_name, gender, age=None, date_of_birth=None
 ) -> str | None:
     profile_id = get_metsights_profile(phone)
     if profile_id:
