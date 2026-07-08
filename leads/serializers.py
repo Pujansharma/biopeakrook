@@ -48,8 +48,6 @@ class BaseLeadSerializer(BaseModelSerializer):
             "is_client",
             "is_invited",
             "is_joined",
-            "is_request_sent",
-            "is_onboarding_sent",
             "converted_on",
             "packages",
             "home_center",
@@ -63,7 +61,6 @@ class BaseLeadSerializer(BaseModelSerializer):
         read_only_fields = [
             "id",
             "unique_id",
-            "is_client",
             "is_joined",
             "is_request_sent",
             "is_onboarding_sent",
