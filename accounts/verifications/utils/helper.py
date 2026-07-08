@@ -26,7 +26,6 @@ from accounts.verifications.utils.emails import (
 )
 from accounts.verifications.utils.sms import send_login_otp_sms
 from accounts.verifications.utils.whatsapp import send_verification_code_whatsapp
-from core.utils.log import logger
 
 PASSWORD_URL = getattr(settings, "PASSWORD_BASE_URL", "") + "/create-password?code={}"
 
@@ -48,7 +47,7 @@ def set_values_for_phone_verification(instance):
 def perform_otp_generation(phone, code):
     if settings.DEBUG:
         send_verification_phone_email(phone, code)
-        logger.info(f"OTP FOR {phone} --> {code}")
+        print(f"OTP FOR {phone} --> {code}", flush=True)
         return None
 
     send_verification_code_whatsapp(phone, code)

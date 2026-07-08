@@ -108,6 +108,12 @@ def is_lead_onboarding_completed_for_user(user: User) -> bool:
     ).exists()
 
 
+def user_has_lead_for_phone(user: User) -> bool:
+    if not user.phone:
+        return False
+    return Lead.objects.filter(phone=user.phone).exists()
+
+
 def is_lead_ready_for_onboarding_session_for_user(user: User) -> bool:
     if not user.phone:
         return False

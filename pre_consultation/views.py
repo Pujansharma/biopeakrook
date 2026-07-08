@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 
-from accounts.customers.models import Customer
+from accounts.customers.utils.db import mark_customer_profile_onboarding_completed_for_user
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
 from pre_consultation.models import (
@@ -23,7 +23,6 @@ from pre_consultation.serializers import (
     PreConsultationSessionResponseSerializer,
     PreConsultationSessionStartSerializer,
 )
-from pre_consultation.customer_profile import resolve_customer_profile_for_request
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
     guard_lead_onboarding_complete_for_start,
@@ -178,16 +177,10 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
             session.completed_at = timezone.now()
             session.save(update_fields=["status", "completed_at", "updated_at"])
 
-            if Customer.objects.filter(user=request.user).exists():
-                customer_profile = resolve_customer_profile_for_request(
-                    request.user,
-                    getattr(request, "customer_profile_id", None),
-                )
-                customer_profile.is_onboarding_complete = True
-                customer_profile.save(
-                    update_fields=["is_onboarding_complete", "updated_at"]
-                )
-
+            mark_customer_profile_onboarding_completed_for_user(
+                request.user,
+                getattr(request, "customer_profile_id", None),
+            )
             mark_lead_onboarding_completed_for_user(request.user)
 
             PreConsultationSessionArtifacts.objects.update_or_create(
