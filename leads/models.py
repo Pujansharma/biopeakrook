@@ -19,7 +19,7 @@ class Lead(BaseUUIDModel):
     gender = models.CharField(
         max_length=1, choices=Gender.CHOICES, null=True, blank=True
     )
-    phone = PhoneNumberField()
+    phone = PhoneNumberField(unique=True)
     email = models.EmailField(null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
