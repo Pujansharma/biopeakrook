@@ -581,6 +581,29 @@ with connection.cursor() as cursor:
 
 ---
 
+## 13. No Migration Generation
+
+### ⚠️ CRITICAL: Never create Django migration files
+
+Migration generation is owned by the user.
+
+### ❌ DON'T:
+
+- Do not run `makemigrations`.
+- Do not create migration files manually.
+- Do not edit migration files unless the user explicitly asks for a specific migration-file edit.
+- Do not add migration plans that require Codex to generate migrations.
+
+### ✅ DO:
+
+- Change models and application code only.
+- Tell the user when model changes require a migration.
+- Let the user generate and review migrations.
+
+### Rule: Codex must never create Django migrations, either manually or by command.
+
+---
+
 ## 12. Documentation & Organization
 
 ### ✅ DO: Keep documentation organized
@@ -651,6 +674,7 @@ def process_orders(orders, user_id, apply_discount=False):
 Before committing code, verify:
 
 - [ ] **Documentation in `docs/` folder** - All .md files belong in docs/
+- [ ] **No migration generation** - Never create migration files manually and never run `makemigrations`
 - [ ] **No unnecessary try/except blocks** - Only use exceptions when ABSOLUTELY needed
 - [ ] **No raw SQL** - Use the Django ORM exclusively (`raw()`, `RawSQL`, and cursor execution are forbidden)
 - [ ] **No imports inside functions** - All imports at the top of the file

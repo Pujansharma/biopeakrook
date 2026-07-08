@@ -37,8 +37,9 @@ from external.serializers import (
     CustomerServiceDetailSerializer,
     ExternalCustomerAssociateSerializer,
     CustomerFirebaseTokenSerializer,
-    CustomerFirebaseTokenDeregisterSerializer,
+    CustomerFirebaseTokenDeregisterSerializer, ExternalCustomerLeadSerializer,
 )
+from leads.models import Lead
 from programs.models import (
     Program,
     RedemptionHistory,
@@ -400,4 +401,25 @@ class CustomerNotificationDetailView(BaseRetrieveAPIView):
         if not instance.seen_at:
             instance.seen_at = timezone.localtime()
             instance.save(update_fields=["seen_at"])
+        return instance
+
+
+class CustomerLeadDetailView(BaseRetrieveAPIView):
+    serializer_class = ExternalCustomerLeadSerializer
+
+    def get_queryset(self):
+        phone_query = self.request.query_params.get("phone", None)
+        phone_formatter = PhoneNumberFormat(phone_query)
+        phone_cleaned = phone_formatter.clean(raise_exception=False)
+
+        qs = Lead.objects.select_related(
+            'customer_profile__customer__user'
+        ).filter(
+            customer_profile__customer__user__phone=phone_cleaned
+        )
+        return qs
+
+    def get_object(self):
+        qs = self.get_queryset()
+        instance = get_object_or_404(qs, "Lead not found")
         return instance
