@@ -1,9 +1,57 @@
 from django.db.models import Case, F, Value, When, Count, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
-from accounts.customers.models import CustomerProfile, CustomerCenterAssignment
+from accounts.customers.models import Customer, CustomerProfile, CustomerCenterAssignment
 from accounts.models import UserAccount
+from accounts.utils.auth import get_user_model
 from accounts.utils.constants import UserType
+
+User = get_user_model()
+
+
+def get_customer_profile_for_user(
+    user: User,
+    customer_profile_id: str | None = None,
+) -> CustomerProfile | None:
+    customer = Customer.objects.filter(user=user).first()
+    if customer is None:
+        return None
+    if customer_profile_id:
+        return CustomerProfile.objects.filter(
+            pk=customer_profile_id,
+            customer=customer,
+        ).first()
+    return CustomerProfile.objects.filter(customer=customer, is_main=True).first()
+
+
+def is_customer_profile_ready_for_onboarding_session_for_user(
+    user: User,
+    customer_profile_id: str | None = None,
+) -> bool:
+    customer_profile = get_customer_profile_for_user(user, customer_profile_id)
+    if customer_profile is None:
+        return False
+    return (
+        customer_profile.is_onboarding_sent
+        and not customer_profile.is_onboarding_complete
+    )
+
+
+def mark_customer_profile_onboarding_completed_for_user(
+    user: User,
+    customer_profile_id: str | None = None,
+) -> int:
+    customer_profile = get_customer_profile_for_user(user, customer_profile_id)
+    if customer_profile is None:
+        return 0
+    return CustomerProfile.objects.filter(
+        pk=customer_profile.pk,
+        is_onboarding_complete=False,
+    ).update(
+        is_onboarding_complete=True,
+        updated_at=timezone.now(),
+    )
 
 
 def create_customer_user_account(customer):
