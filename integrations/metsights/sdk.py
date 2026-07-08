@@ -53,15 +53,18 @@ def create_metsights_profile(
     date_of_birth_value = None
     if date_of_birth:
         date_of_birth_value = str(date_of_birth)
+
     payload = {
         'phone': phone,
-        'email': email,
         "first_name": first_name,
         "last_name": last_name,
         "gender": gender_value,
-        "age": age,
         "date_of_birth": date_of_birth_value,
     }
+    if age:
+        payload['age'] = age
+    if email:
+        payload['email'] = email
     response = session.post(url, json=payload)
     if not response.ok:
         logger.warning(f"Invalid response received, {response.status_code}: {response.json()}")
