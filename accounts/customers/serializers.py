@@ -37,6 +37,7 @@ from accounts.utils.db import get_user_account_type
 from accounts.verifications.models import PhoneVerification
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+from integrations.metsights.helper import get_or_create_metsights_profile
 
 PROFILE_FIELDS = ["first_name", "last_name", "gender", "date_of_birth", "image"]
 
@@ -426,6 +427,16 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             increment_customer_count(center_id)
             increment_centers_count(profile.pk)
             increment_organization_clients_count()
+            metsights_profile_id = get_or_create_metsights_profile(
+                phone,
+                profile.customer.contact_email,
+                profile.first_name,
+                profile.last_name,
+                profile.gender,
+                profile.date_of_birth
+            )
+            profile.data = {**profile.data, "metsights_profile_id": metsights_profile_id}
+            profile.save(update_fields=['data'])
 
         return assignment
 
