@@ -32,16 +32,21 @@ class LeadsView(BaseListCreateAPIView):
         filter_kwargs = {}
         search = Q()
         search_query = self.request.query_params.get("search", "").strip()
-        active_query = self.request.query_params.get("active", None)
-        joined_query = self.request.query_params.get("is_joined", None)
-        center_query = self.request.query_params.get("center_id", None)
+        client_query = self.request.query_params.get("client", None)
+        joined_query = self.request.query_params.get("joined", None)
+        invited_query = self.request.query_params.get("invited", None)
+        profile_query = self.request.query_params.get("profile", None)
 
-        if active_query in ["0", "1"]:
-            filter_kwargs["is_active"] = bool(int(active_query))
+        if client_query in ["0", "1"]:
+            filter_kwargs["is_client"] = bool(int(client_query))
+        if invited_query in ["0", "1"]:
+            filter_kwargs["is_invited"] = bool(int(invited_query))
         if joined_query in ["0", "1"]:
             filter_kwargs["is_joined"] = bool(int(joined_query))
-        if center_query:
-            filter_kwargs["home_center__pk"] = center_query
+
+        if profile_query in ["0", "1"]:
+            _status = bool(int(profile_query))
+            filter_kwargs['customer_profile__isnull'] = not _status
 
         if search_query:
             search |= Q(first_name__istartswith=search_query)
