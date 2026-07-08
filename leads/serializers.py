@@ -85,6 +85,12 @@ class LeadListCreateSerializer(BaseLeadSerializer):
         last_name = validated_data.get("last_name")
         gender = validated_data.get("gender")
 
+        exists = Lead.objects.filter(phone=phone).exists()
+        if exists:
+            raise serializers.ValidationError({
+                "phone": "Lead with this phone number already exists"
+            })
+
         if age and not date_of_birth:
             date_of_birth = get_date_of_birth_from_age(age)
             validated_data["date_of_birth"] = date_of_birth
@@ -123,6 +129,12 @@ class LeadDetailSerializer(BaseLeadSerializer):
         was_active = instance.is_active
         was_joined = instance.is_joined
         was_converted = bool(instance.customer_profile or instance.converted_on)
+        phone = validated_data.get('phone', instance.phone)
+        exists = Lead.objects.exclude(pk=instance.pk).filter(phone=phone).exists()
+        if exists:
+            raise serializers.ValidationError({
+                "phone": "Lead with this phone number already exists"
+            })
 
         home_center_id = validated_data.pop("home_center_id", None)
         if home_center_id:
