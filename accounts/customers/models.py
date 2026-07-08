@@ -65,6 +65,7 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
     external_centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     emergency_contact_name = models.CharField(blank=True, default="", max_length=100)
     emergency_contact_phone = PhoneNumberField(blank=True, null=True)
+    data = models.JSONField(default=dict, null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
