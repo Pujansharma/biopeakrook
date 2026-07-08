@@ -18,8 +18,8 @@ class Session(requests.Session):
 
 
 GENDER_MAPPING = {
-    Gender.MALE: "0",
-    Gender.FEMALE: "1"
+    Gender.MALE: "1",
+    Gender.FEMALE: "2"
 }
 
 
@@ -57,7 +57,7 @@ def create_metsights_profile(
         "last_name": last_name,
         "gender": gender_value,
         "age": age,
-        "date_of_birth": date_of_birth,
+        "date_of_birth": str(date_of_birth),
     }
     response = session.post(url, json=payload)
     if not response.ok:
