@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer
+from accounts.customers.serializers import BaseCustomerProfileSerializer
 from accounts.users.serializers import BaseUserSerializer
 from accounts.utils.auth import get_user_model
 from accounts.utils.helper import get_date_of_birth_from_age
@@ -25,6 +26,7 @@ User = get_user_model()
 
 class BaseLeadSerializer(BaseModelSerializer):
     phone = PhoneNumberSerializerField()
+    customer_profile = BaseCustomerProfileSerializer(read_only=True)
     created_by = BaseUserSerializer(read_only=True)
     updated_by = BaseUserSerializer(read_only=True)
     home_center = BaseCenterSerializer(read_only=True)
