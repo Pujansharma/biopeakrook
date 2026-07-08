@@ -34,7 +34,7 @@ def is_customer_profile_ready_for_onboarding_session_for_user(
         return False
     return (
         customer_profile.is_onboarding_sent
-        and not customer_profile.is_onboarding_complete
+        and not customer_profile.is_onboarding_completed
     )
 
 
@@ -47,9 +47,9 @@ def mark_customer_profile_onboarding_completed_for_user(
         return 0
     return CustomerProfile.objects.filter(
         pk=customer_profile.pk,
-        is_onboarding_complete=False,
+        is_onboarding_completed=False,
     ).update(
-        is_onboarding_complete=True,
+        is_onboarding_completed=True,
         updated_at=timezone.now(),
     )
 

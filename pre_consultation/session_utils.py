@@ -35,7 +35,7 @@ def is_customer_onboarding_complete(request: Request) -> bool:
         request.user,
         getattr(request, "customer_profile_id", None),
     )
-    return customer_profile.is_onboarding_complete
+    return customer_profile.is_onboarding_completed
 
 
 def build_onboarding_complete_conflict_response(

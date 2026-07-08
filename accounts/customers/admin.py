@@ -24,7 +24,7 @@ class CustomerProfileAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "is_main",
-        "is_onboarding_complete",
+        "is_onboarding_completed",
         "centers_count",
         "external_centers_count",
     ]
@@ -36,7 +36,7 @@ class CustomerProfileAdmin(admin.ModelAdmin):
         "is_main",
         "created_at",
     ]
-    list_filter = ["is_main", "is_onboarding_complete"]
+    list_filter = ["is_main", "is_onboarding_completed"]
     raw_id_fields = ["customer", "created_by"]
     list_select_related = True
     list_per_page = 25
