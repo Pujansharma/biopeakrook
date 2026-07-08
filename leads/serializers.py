@@ -86,8 +86,7 @@ class LeadListCreateSerializer(BaseLeadSerializer):
         last_name = validated_data.get("last_name")
         gender = validated_data.get("gender")
 
-        is_invited = validated_data.get("is_invited")
-        if age and date_of_birth:
+        if age and not date_of_birth:
             date_of_birth = get_date_of_birth_from_age(age)
             validated_data["date_of_birth"] = date_of_birth
 
@@ -106,16 +105,15 @@ class LeadListCreateSerializer(BaseLeadSerializer):
             increment_leads_total()
             if not lead.is_active:
                 increment_leads_inactive()
-            if is_invited:
-                metsights_profile_id = get_or_create_metsights_profile(
-                    phone, email, first_name, last_name, gender, age, date_of_birth
-                )
-                if metsights_profile_id:
-                    lead.data = {
-                        **(lead.data or {}),
-                        "metsights_profile_id": metsights_profile_id,
-                    }
-                    lead.save(update_fields=["data"])
+            metsights_profile_id = get_or_create_metsights_profile(
+                phone, email, first_name, last_name, gender, age, date_of_birth
+            )
+            if metsights_profile_id:
+                lead.data = {
+                    **(lead.data or {}),
+                    "metsights_profile_id": metsights_profile_id,
+                }
+                lead.save(update_fields=["data"])
         return lead
 
 
@@ -138,7 +136,7 @@ class LeadDetailSerializer(BaseLeadSerializer):
         age = validated_data.pop("age", None)
         date_of_birth = validated_data.get("date_of_birth", None)
 
-        if age and date_of_birth:
+        if age and not date_of_birth:
             date_of_birth = get_date_of_birth_from_age(age)
             validated_data["date_of_birth"] = date_of_birth
         with transaction.atomic():
@@ -152,7 +150,7 @@ class LeadDetailSerializer(BaseLeadSerializer):
                 increment_leads_assigned()
             if was_joined and not lead.is_joined and not was_converted:
                 decrement_leads_assigned()
-            if lead.is_invited and not lead_data.get("metsights_profile_id"):
+            if not lead_data.get("metsights_profile_id"):
                 metsights_profile_id = get_or_create_metsights_profile(
                     lead.phone,
                     lead.email,
