@@ -362,7 +362,6 @@ class ExternalCustomerLeadSerializer(BaseModelSerializer):
             "first_name",
             "last_name",
             "gender",
-            "age",
             "date_of_birth",
             "phone",
             "email",
