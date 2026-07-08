@@ -311,6 +311,17 @@ def _render_lifestyle(answers: list[dict]) -> list[str]:
     ]
 
 
+def _humanize_label(label: str) -> str:
+    """Convert an internal code-like token to plain words so it never leaks into
+    the profile (and from there into a probe): 'ACTIVITY_SEDENTARY' -> 'activity
+    sedentary'. Human labels that already contain spaces pass through unchanged."""
+    if not label:
+        return label
+    if " " not in label and ("_" in label or label.isupper()):
+        return label.replace("_", " ").strip().lower()
+    return label
+
+
 def _render_clusters(patient: dict) -> list[str]:
     """Health patterns (clusters), strongest first. Weak-signal clusters are
     collapsed to a single context line so they inform without diluting focus."""
@@ -329,7 +340,8 @@ def _render_clusters(patient: dict) -> list[str]:
     for cluster in strong:
         out.append(f"- {cluster['cluster_label']} [{cluster.get('bucket_label', '?')}]")
         drivers = [
-            s["signal_label"] for s in cluster.get("lifestyle_signals_triggered", [])
+            _humanize_label(s["signal_label"])
+            for s in cluster.get("lifestyle_signals_triggered", [])
         ]
         if drivers:
             out.append(f"        lifestyle drivers: {', '.join(drivers)}")

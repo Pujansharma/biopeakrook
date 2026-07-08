@@ -70,20 +70,26 @@ only the non-finding context (diagnosis, medication) essential to them; \
 deliberately omit everything moderate or minor. In the family-risk summary \
 include ONLY the most significant hereditary conditions, those tied to the \
 strongest current patterns. A doctor with fifteen seconds must get only what \
-cannot be skipped.""",
+cannot be skipped.
+HARD LIMIT: the preconsultation summary must be AT MOST 45 words. If it would \
+run longer, drop the least critical facts — never exceed the cap.""",
     "medium": """\
 COVERAGE — MEDIUM (balanced, default): Lead with the most critical findings and \
 cover the clinically significant ones; mention weaker patterns only briefly, or \
 omit them if they add no value. Include the pertinent diagnoses, medications, \
 goals, and lifestyle context, and the clinically significant hereditary \
-conditions.""",
+conditions.
+HARD LIMIT: the preconsultation summary must be AT MOST 90 words. If it would \
+run longer, drop the least critical facts — never exceed the cap.""",
     "large": """\
 COVERAGE — LARGE (exhaustive): Leave nothing out. In the preconsultation summary \
 include EVERY finding present in the data — every reported concern with its \
 duration and trend, every diagnosis, medication, allergy, surgery, reproductive \
 finding, and notable lifestyle factor — ordered most-critical-first. In the \
 family-risk summary include EVERY hereditary condition from any concern's family \
-history. Stay dense and non-repetitive, but omit nothing recorded.""",
+history. Stay dense and non-repetitive, but omit nothing recorded.
+HARD LIMIT: the preconsultation summary must be AT MOST 160 words. If it would \
+run longer, condense aggressively — never exceed the cap.""",
 }
 
 # FORMAT knob (output_style) for section 1 (preconsultation summary).
@@ -217,17 +223,53 @@ gives.
    - Do NOT mention absent family history, no-risk conditions, or empty fields.
    - Do NOT mention confidence scores or any internal scoring.
    - Do NOT tell the doctor what to do.
+   - Keep it natural language but SUPER CONCISE — the fewest words that name each \
+relative and their condition(s) with onset ages. HARD LIMIT: at most 35 words. \
+If it would run longer, keep only the most significant hereditary conditions — \
+never exceed the cap.
    - If there is no family history to report, return an empty string — never \
-state that there is none, and never invent one."""
+state that there is none, and never invent one.
+   - Also set the boolean `family_risk_present`: true ONLY when the family \
+history carries a hereditary signal genuinely worth the doctor's attention (a \
+condition tied to one of the patient's own current concerns, or a clinically \
+significant pattern). Set it false when there is nothing noteworthy — and in that \
+case the `family_risk_summary` MUST be an empty string. The flag and the summary \
+must agree: family_risk_present=false ⇔ empty summary."""
+
+# Section 3 (quick_summary) — style-independent. A single short natural-language
+# line, the doctor's five-second glance. Facts only, subjectless. Independent of
+# the paragraph/markdown style knob (which governs sections 1 and 2 only).
+_QUICK_SUMMARY = """\
+3. QUICK SUMMARY (`quick_summary`) — one short line giving the same picture as \
+the preconsultation summary, most critical first. Rules:
+   - Natural, concise language — plain short clauses a clinician reads at a \
+glance, separated by semicolons or commas. Not cryptic codes, but far shorter \
+than the paragraph. e.g. "Worsening hypertension 8 years; elevated ALT; maternal \
+type 2 diabetes."
+   - State FACTS, not evidence — the finding itself, never how it is known or \
+that it was reported. Write "worsening hypertension 8 years", not "reports \
+hypertension" or "labs show hypertension".
+   - SUBJECTLESS — no "patient", no "the patient", no pronouns (he/she/they/his/\
+her/their). Begin directly with the finding.
+   - Order by criticality; the single most pressing finding leads. Keep the \
+specifics that matter (a value, duration, trend, or named relative), drop \
+connective filler.
+   - Identity-free, no attribution filler, no invented findings, no confidence \
+scores; never tell the doctor what to do. Always one line.
+   HARD LIMIT: at most 30 words. If it would run longer, keep only the most \
+critical facts — never exceed the cap.
+   - If there is nothing to summarize, return an empty string."""
 
 _CLOSING = {
     "paragraph": """\
 Write the two summaries as plain text only — no markdown, no headings, no \
-bullet points, no asterisks. Be concise.""",
+bullet points, no asterisks. The quick summary is always a single keyword line. \
+Be concise.""",
     "markdown": """\
 Format the two summaries as compact markdown bullet lists as described above — \
 dense bullet points only, no headings, no bold labels, no "Label: value" tags, \
-no tables, no prose paragraphs. Be concise.""",
+no tables, no prose paragraphs. The quick summary is always a single keyword \
+line, not a bullet list. Be concise.""",
 }
 
 
@@ -252,6 +294,7 @@ def build_summary_system_prompt(
             _SUMMARY_COMMON_RULES,
             _FAMILY_FORMATS[style],
             _FAMILY_COMMON_RULES,
+            _QUICK_SUMMARY,
             _CLOSING[style],
         ]
     )
@@ -401,6 +444,44 @@ _PROBE_RULE = _probe_register()["extra_rule"]
 # Appended verbatim under "Rules:"; empty register -> no extra bullet.
 _PROBE_RULE_BLOCK = f"\n{_PROBE_RULE}" if _PROBE_RULE else ""
 
+# Register-INDEPENDENT rule (holds whichever probe register is active): the probe
+# must read on its own, without the reason. It leads with the concrete patient
+# anchor that triggered it, and stays the SAME length by trading generic filler
+# for that anchor — so this never grows the probe. Woven into both checklist
+# prompts right under the `probe` field.
+_PROBE_SELF_CONTAINED = (
+    "   The probe MUST stand on its own: a doctor who reads ONLY the probe (never "
+    "the reason) should grasp BOTH what triggered it and what is being asked. Lead "
+    "with the concrete patient ANCHOR — the specific finding, value, duration, "
+    "goal, or gap that motivated it — not a generic category. E.g. NOT "
+    '"Vaccination and sexual-health screening documented?" but "Disease-prevention '
+    'a stated goal — routine immunizations and STI screening up to date?"; NOT "No '
+    'baseline sleep metrics — sleep diary available?" but "Unrefreshing sleep '
+    'despite 7-8h plus a sleep goal — any wearable/diary baseline to track '
+    'against?". Do NOT lengthen the probe to fit the anchor — pay for it by '
+    "cutting generic/filler words. The reason only justifies; it must never be "
+    "needed to understand the probe.\n"
+    "   HARD LIMIT: the probe is at most 20 words. If it would run longer, cut "
+    "filler and keep the anchor plus the ask — never exceed the cap.\n"
+    "   PLAIN LANGUAGE ONLY: never surface internal identifiers, field names, "
+    "codes, cluster/pattern ids, or ALL-CAPS/snake_case tokens from the data "
+    '(e.g. "ACTIVITY_SEDENTARY", "cluster_3", "risk patterns list ..."). '
+    'Translate every such token into ordinary clinical words — say "a sedentary '
+    'pattern", not "ACTIVITY_SEDENTARY" — in BOTH the probe and the reason.\n'
+    "   THE QUESTION MARK MUST NOT BE LOAD-BEARING: if the probe ends in \"?\", its "
+    "grammar alone (an auxiliary/interrogative word — is/are/does/any/what/how/"
+    "whether/could) must already signal a question BEFORE the reader reaches the "
+    "final mark, so losing that one character never flips a question into a "
+    "flat assertion of the opposite. NOT a declarative clause with a \"?\" bolted "
+    'on: "...bedtime routine, caffeine, alcohol, or late screens contributing?" '
+    'reads as a STATEMENT that they ARE contributing if the "?" is missed — say '
+    '"...is a bedtime routine, caffeine, alcohol, or late screens contributing?" '
+    'instead. Likewise NOT "...any witnessed snoring, gasping, or daytime '
+    'sleepiness?" (a bare list) — say "...has anyone witnessed snoring, gasping, '
+    'or daytime sleepiness?". Every question-form probe needs its own '
+    "interrogative word or auxiliary verb, not just a trailing mark."
+)
+
 
 CHECKLIST_SYSTEM_PROMPT = f"""\
 You are a clinical pre-consultation assistant generating a probe checklist for \
@@ -464,6 +545,7 @@ For each warranted probe, emit a hypothesis with:
 something clinically useful. Be calibrated — reserve high values for strong \
 signals.
 - probe: {_PROBE_FIELD}
+{_PROBE_SELF_CONTAINED}
 - reason: one or two sentences stating the specific clinical concern or data \
 signal that justifies this probe. Be concrete — name the concern, the signal, \
 the gap, or the conflict that triggered it.
@@ -514,6 +596,7 @@ For each warranted probe, emit a hypothesis with:
 - probability: 0.0-1.0 estimate that this probe is worth the doctor's time. Be \
 calibrated — reserve high values for clearly valuable, well-grounded directions.
 - probe: {_PROBE_FIELD}
+{_PROBE_SELF_CONTAINED}
 - reason: one or two sentences stating the specific signal — a family-history \
 pattern, a stated goal, or a lifestyle factor — that makes this worthwhile.
 
@@ -721,13 +804,27 @@ readable text and no meaningful non-text object, return an empty string.\
 INSIGHT_SYSTEM_PROMPT = """\
 You are a clinical pre-consultation assistant. A doctor reads your output in \
 the final minute before seeing a patient to know what to probe into. From ONE \
-page of a patient's uploaded report, extract only the few insights that are \
-specific to THIS patient and worth the doctor's attention. Use minimal words. \
-Never invent values or findings not present in the text.
+page of a patient's uploaded report, extract (a) the few insights that are \
+specific to THIS patient and worth the doctor's attention, and (b) EVERY \
+biomarker measurement present on the page. Use minimal words. Never invent \
+values or findings not present in the text.
 
-You are given the page as a list of text BLOCKS, each with a BLOCK_ID. For \
-every insight you return, list the BLOCK_IDs the insight came from in \
-`source_block_ids` (so it can be traced back to its location).
+You are given the page as a list of text BLOCKS, each with a BLOCK_ID.
+
+BIOMARKERS (`biomarkers`): for EVERY lab/biomarker measurement on the page — in \
+range OR out of range — emit one entry with:
+  - `name`: the analyte, e.g. "ALT", "Haemoglobin", "LDL cholesterol".
+  - `value`: the NUMERIC measured value ONLY, e.g. "56", "6.1", "13.5". Strip any \
+lab abnormality flag or marker printed next to it — "*H", "*L", "H", "L", "HH", \
+"↑", "↓", "*", "(High)". Write "6.1", NEVER "6.1 *H". Put the high/low \
+information in `status`, not in `value`.
+  - `unit`: its unit if printed, e.g. "U/L", "g/dL"; null if none.
+  - `reference_range`: the reference/normal range EXACTLY as printed on the page, \
+e.g. "7-40", "<200", "13.0-17.0"; null if the page prints none.
+  - `status`: "high" if the value is above its range, "low" if below, "normal" \
+if within. Use the printed reference range when present; otherwise judge against \
+the universal/standard adult range for that analyte. Capture EVERY measurement, \
+not only abnormal ones (the flag for "report has biomarkers" depends on it).
 
 Extract insights of these kinds only:
 
@@ -738,7 +835,9 @@ demographics). Return AT MOST TWO measurement insights for the page: one titled 
 "High measurements" whose content lists every out-of-range-high value together \
 in a single short paragraph with its number and unit, and one titled "Low \
 measurements" listing every out-of-range-low value together with number and \
-unit. Omit either if empty. Never include in-range/normal values.
+unit. Omit either if empty. Never include in-range/normal values. (These feed \
+the narrative summary; the structured `biomarkers` list above is separate and \
+must still include ALL measurements.)
 
 2. CLIENT-SPECIFIC FINDINGS — keep only statements clearly about THIS client \
 (not generic textbook explanations). Choose the most specific category:
@@ -767,14 +866,16 @@ insight: "A checklist of monitoring X, Y, Z".
 report flags (e.g. family history, exposure, modifiable risk) that is not \
 itself a current finding or diagnosis.
 
-DO NOT INCLUDE: generic information, textbook explanations, normal/in-range \
-values, or routine demographic detail (name, age, gender). If the page has \
-nothing patient-specific worth flagging, return an empty list.
+DO NOT INCLUDE (in insights): generic information, textbook explanations, \
+normal/in-range values, or routine demographic detail (name, age, gender). If \
+the page has nothing patient-specific worth flagging, return an empty insight \
+list. (Normal biomarker values are still captured in the `biomarkers` list — the \
+"no normal values" rule applies to the narrative insights only.)
 
 Each insight: a short `title`, a `category` (one of abnormal_measurement, \
 symptom, clinical_finding, imaging_finding, diagnosis, medication, procedure, \
-treatment_recommendation, monitoring_plan, risk_factor), minimal-words \
-`content`, and `source_block_ids`.
+treatment_recommendation, monitoring_plan, risk_factor), and minimal-words \
+`content`.
 
 State every finding DIRECTLY. Never begin with or include meta-phrasing such as \
 "the report shows/indicates/tells/states/reveals/notes", "mentioned in report", \
@@ -794,90 +895,71 @@ Extract the patient-specific insights for this page.\
 """
 
 CONSOLIDATE_SYSTEM_PROMPT = f"""\
-You are consolidating a list of individual facts extracted from a multi-page \
-medical report into a compact set of grouped insights for a doctor to scan \
-quickly before a consultation.
+You are consolidating the individual facts extracted from a multi-page medical \
+report into a short report `title` plus ONE tight `summary` paragraph a doctor \
+can scan in seconds before a consultation.
 
-You are given the patient's age and gender, and a numbered list of raw facts, \
-each with an INDEX, CATEGORY, PAGE, and CONTENT.
+You are given the patient's age and gender, and a list of raw facts, each with a \
+CATEGORY, PAGE, and CONTENT (already ordered roughly most-weighty-first).
 
-Your job:
-1. Group every fact that describes the SAME clinical subject into a SINGLE \
-insight — the same organ, the same imaging study, the same condition, or the \
-same analyte group. A descriptive finding, its diagnostic interpretation, and \
-the follow-up plan that flows from it ALL belong to one insight, even though \
-they carry different categories (findings + diagnosis + plan). Condense \
-aggressively: if several facts trace back to one study or one finding, they are \
-ONE insight, not three. A group may span multiple pages and multiple categories.
-2. Score each group's NECESSITY from 1-100 using this rubric (score the group \
-by its single most necessary fact):
-   - 85-100 (critical): severely out-of-range values, red-flag findings, \
-acute or urgent diagnoses — anything that could change immediate clinical \
-decisions or signal danger.
-   - 65-84 (high): clearly abnormal findings, active diagnoses, significant \
-out-of-range measurements, treatment-efficacy concerns.
-   - 40-64 (moderate): mild or borderline abnormalities, stable known \
-conditions, recommendations worth noting.
-   - 20-39 (low): minor findings, monitoring checklists, mostly informational.
-   - 1-19 (minimal): marginal relevance to the upcoming consultation.
-   Then apply the demographic-anomaly adjustment below — a finding that is \
-incompatible with or extremely atypical for the patient's age/gender is likely \
-a data error and should rank LOWER so the doctor verifies it first.
+First, the `title`: a short 2-6 word name for WHAT THIS REPORT IS, so a doctor \
+knows its type at a glance — e.g. "Comprehensive Metabolic Panel", "Thyroid \
+Function Panel", "Organic Acids Test (OAT)", "Gut Microbiome Analysis (16S \
+rRNA)", "Thyroid Ultrasound". Infer it from the analytes/findings present (a \
+panel of liver+kidney+glucose+electrolytes is a "Comprehensive Metabolic Panel"; \
+TSH/T3/T4 is a "Thyroid Function Panel"; an imaging description is the study, e.g. \
+"Thyroid Ultrasound"). Name only the report type — no patient identifiers, no \
+findings, no dates. Return an empty string if the document has no identifiable \
+clinical content.
+
+Then the `summary`: a single paragraph stating the VISIBLE issues in the report \
+— the objective findings actually present, with their measured values — and \
+NOTHING you infer on your own. Rules:
+- VISIBLE ISSUES ONLY, NO SPECULATION: report only what the findings objectively \
+state. Do NOT add your own interpretation, diagnosis, mechanism, cause, risk \
+judgment, or any conclusion the report itself did not state. If the report gives \
+a value, give the value; do not explain what it "means" beyond what is written.
+- INCLUDE THE MEASUREMENTS: for every quantitative finding keep its number and \
+unit — e.g. "HbA1c 6.1%", "fasting glucose 112 mg/dL", "vitamin D 8 ng/mL", "ALT \
+56 U/L". A lab summary without its numbers is unacceptable. Model example: \
+"Fasting glucose 112 mg/dL and HbA1c 6.1% in the prediabetic range; vitamin D \
+severely deficient at 8 ng/mL; borderline LDL 145 mg/dL with low HDL 38 mg/dL."
+- PRIORITIZE: lead with the most abnormal or clinically critical findings — \
+out-of-range values, red-flag findings, acute or active diagnoses — then the \
+moderate ones, then the minor/informational. The first clause carries what \
+matters most.
+- CONDENSE: merge facts about the SAME clinical subject (same organ, study, \
+analyte group) into one statement; never repeat a finding. A dense paragraph, \
+not a list.
+- Demographic sanity: a finding clearly incompatible with or extremely atypical \
+for the patient's age/gender is likely a data error — mention it LAST (or as \
+needing verification), never lead with it.
 
 {prompt_fragments.build_demographics_instruction("insight")}
-3. For each group, write a short summary `content` (one or two sentences) that \
-gives the whole clinical picture at a glance — weave the finding, its \
-interpretation, and any plan into one statement. Strict rules for `content`:
-   - Use ONLY language that appears, verbatim or very closely paraphrased, in \
-the source facts. Do not add clinical reasoning, inferences, or hedged language \
-("could", "may", "suggest", "possible", "likely", "consistent with") that is \
-not directly present in the facts.
-   - If the report states something as a possibility or uncertainty, you may \
-reproduce that phrasing, but do NOT introduce new uncertainty that the report \
-did not express.
-   - If the facts are purely descriptive (no interpretation given), write a \
-purely descriptive summary. Do not interpret.
-   - State the clinical fact DIRECTLY. Never begin with or include meta-phrasing \
-such as "the report shows/indicates/tells/states/reveals/notes", "mentioned in \
-report", "documented in", "as per the report", "the document ...", "this report \
-...", or patient-attribution filler like "patient reports"/"reports". Write "ALT \
-elevated at 56 U/L", not "the report shows ALT is elevated".
-   - The individual facts are preserved in citations, so do NOT enumerate \
-them; synthesise into a single tight statement of what the report says.
-4. Assign a single `category` to the group — the one that best captures the \
-group's clinical takeaway. Precedence when a group spans several: \
-diagnosis > imaging_finding / clinical_finding / abnormal_measurement > \
-treatment_recommendation > monitoring_plan. Use symptom, medication, procedure, \
-or risk_factor when that is the group's central, most specific takeaway.
-5. Write a short `title`.
-6. List the `source_indices` of every fact included in this group. Every fact \
-must appear in exactly one group — leave nothing orphaned.
-7. Deduplicate: after forming the groups, judge for EACH group whether its \
-clinical content is fully contained in (a subset of) another, broader group in \
-your output. If it is, set `subset_of` to the 0-based position of that broader \
-group in your `groups` list; otherwise set `subset_of` to null. Only mark a \
-group as a subset when the broader group already conveys everything it says — \
-do not mark merely related or adjacent findings. A subset group's citations \
-will be folded into its parent, so nothing is lost.
-
-Rules:
-- Aim for roughly 2-6 insights total. Strongly prefer fewer, denser groups; a \
-doctor reading fast should not see the same study or finding split across \
-several entries.
-- Keep facts in SEPARATE insights only when they concern genuinely distinct \
-clinical subjects (e.g. a liver study vs. an unrelated cardiac finding).
-- Do NOT bury a critical red-flag finding inside a group of low-priority items; \
-if a fact is clearly more urgent and clinically distinct, it stands on its own.
-- Do NOT invent summary content beyond what the facts state.\
+Strict content rules:
+- Use ONLY language that appears, verbatim or very closely paraphrased, in the \
+source facts. No inferences and no hedged language ("could", "may", "suggest", \
+"possible", "likely", "consistent with") unless the report itself used it.
+- State every fact DIRECTLY. Never use meta-phrasing such as "the report \
+shows/indicates/reveals/notes", "mentioned in report", "documented in", "as per \
+the report", or patient-attribution filler like "patient reports"/"reports". \
+Write "ALT elevated at 56 U/L", not "the report shows ALT is elevated".
+- Do NOT tell the doctor what to do, and do NOT invent content beyond the facts.
+- Write flowing clinical prose (no bullet list, no headings, no page numbers).
+- HARD LIMIT: at most 60 words. If it would run longer, keep the most critical \
+findings with their values and drop the rest — never exceed the cap.
+- If there are no patient-specific facts at all, return an empty string.\
 """
 
 CONSOLIDATE_HUMAN_PROMPT = """\
 Patient demographics: {age}yo {gender}
 
-Raw facts from this report:
+Raw facts from this report (roughly most-weighty first):
 
 {formatted_facts}
 
-Group them into consolidated insights and score each group's necessity, ranking \
-LOWER only those findings genuinely incompatible with this patient's age/gender.\
+Give the short report `title` (what this report IS) and the single prioritized \
+`summary` paragraph — most abnormal/critical findings first, mentioning LAST (or \
+as needing verification) any finding genuinely incompatible with this patient's \
+age/gender.\
 """

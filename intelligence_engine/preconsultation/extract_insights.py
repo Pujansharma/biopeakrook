@@ -1,6 +1,7 @@
 """Extract doctor-facing insights from an uploaded patient document.
 
-Given a raw uploaded file (pdf, docx, jpg, jpeg, png, txt, md) this module:
+Given a raw uploaded file (pdf, docx, jpg, jpeg, png, heic, heif, webp, txt, md)
+this module:
 
 1. Identifies the file type and reads it accordingly.
 2. Reads embedded images / scans / charts with a vision LLM and slots the
@@ -39,7 +40,7 @@ from pathlib import Path
 from typing import Literal
 import json
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -68,7 +69,13 @@ logger = logging.getLogger(__name__)
 
 LANGFUSE_ENVIRONMENT = "preconsultation-report-prasing"
 
-SUPPORTED_EXTENSIONS = {"pdf", "docx", "jpg", "jpeg", "png", "txt", "md"}
+SUPPORTED_EXTENSIONS = {
+    "pdf", "docx", "jpg", "jpeg", "png", "heic", "heif", "webp", "txt", "md"
+}
+
+# Image extensions that a browser/VLM cannot always consume directly and that we
+# transcode to JPEG before OCR. jpg/jpeg/png reach the vision model as-is.
+_TRANSCODE_IMAGE_EXTENSIONS = {"heic", "heif", "webp"}
 
 InsightCategory = Literal[
     "abnormal_measurement",
@@ -83,32 +90,22 @@ InsightCategory = Literal[
     "risk_factor",
 ]
 
-# Per-category importance weight (INTERNAL — folded into the existing `necessity`
-# field, never exposed separately). A moderate multiplier so clinically weightier
-# categories (a diagnosis, an out-of-range measurement) outrank softer ones (a
-# monitoring checklist) at equal LLM necessity, while a strongly-necessary
-# insight in a lighter category can still beat a weak one in a heavier category.
-# Ordering mirrors the precedence stated in CONSOLIDATE_SYSTEM_PROMPT. Tune freely.
-_CATEGORY_WEIGHT: dict[str, float] = {
-    "diagnosis": 1.00,
-    "abnormal_measurement": 0.95,
-    "imaging_finding": 0.90,
-    "clinical_finding": 0.85,
-    "symptom": 0.80,
-    "medication": 0.70,
-    "risk_factor": 0.65,
-    "treatment_recommendation": 0.60,
-    "procedure": 0.55,
-    "monitoring_plan": 0.50,
+# Category precedence (INTERNAL) — used only to order the raw facts fed to the
+# consolidation LLM so the most clinically weighty categories appear first and the
+# summary paragraph naturally leads with them. Lower number = higher precedence.
+_CATEGORY_ORDER: dict[str, int] = {
+    "diagnosis": 0,
+    "abnormal_measurement": 1,
+    "imaging_finding": 2,
+    "clinical_finding": 3,
+    "symptom": 4,
+    "medication": 5,
+    "risk_factor": 6,
+    "treatment_recommendation": 7,
+    "procedure": 8,
+    "monitoring_plan": 9,
 }
-# Default for any unmapped/paraphrased category.
-_DEFAULT_CATEGORY_WEIGHT = 0.5
-
-# Intra-category rank decay: within one category each successive insight (after
-# the most necessary) is discounted by this factor ** rank, so a single category
-# that produces many insights can't monopolize the top of the list and bury the
-# best insight of another category. Mirrors the checklist's _TAG_RANK_DECAY.
-_CATEGORY_RANK_DECAY = 0.6
+_DEFAULT_CATEGORY_ORDER = 5
 
 _REDACTION = "[REDACTED]"
 
@@ -183,48 +180,35 @@ class _ImageJob:
 # ---------------------------------------------------------------------------
 
 
-class SourceIndex(BaseModel):
-    """Where an insight came from. Page is always known; bbox is best-effort."""
+class Biomarker(BaseModel):
+    """One biomarker measurement found in the report.
 
-    page: int
-    bbox: list[float] | None = None  # [x0, y0, x1, y1] in parser coordinates
+    Values are kept as strings: short lab values (e.g. "13.5") survive PII
+    redaction, and reference ranges are free-form (e.g. "7-40", "<200", "0.4-4.0").
+    """
 
-
-class Citation(BaseModel):
-    """One individual raw fact that was grouped into a parent Insight."""
-
-    fact: str
-    page: int
-    bbox: list[float] | None = None
-
-    @computed_field
-    @property
-    def citation(self) -> str:
-        """The fact rendered with its page reference, e.g. 'ALT 56 U/L <Page 4>'."""
-        return f"{self.fact} <Page {self.page}>"
-
-
-class Insight(BaseModel):
-    id: str
-    title: str
-    category: InsightCategory
-    necessity: int  # 1-100: how necessary it is for the doctor to see this pre-consult
-    index: SourceIndex  # primary source (first / lowest page in the group)
-    content: str  # brief summary of the group — one sentence for a quick read
-    citations: list[Citation] = Field(
-        default_factory=list,
-        description="Individual raw facts grouped into this insight, each cited as <Page i>.",
-    )
+    name: str  # analyte name, e.g. "ALT", "Haemoglobin"
+    value: str  # measured value as printed, e.g. "56"
+    unit: str | None = None  # e.g. "U/L", "g/dL"; null when not printed
+    reference_range: str | None = None  # e.g. "7-40"; null when not printed
 
 
 class DocumentInsights(BaseModel):
-    """The doctor-facing output for one document: metadata + its insights."""
+    """The doctor-facing output for one document: a short report title, a
+    prioritized summary paragraph (abnormal/critical first), and structured
+    biomarker data."""
 
     doc_id: str
+    title: str = ""  # what this report is, e.g. "Comprehensive Metabolic Panel"
     name: str | None = None
     upload_date: str | None = None
     owner: str | None = None
-    insights: list[Insight]
+    summary: str  # one paragraph, most critical/abnormal findings first
+    contains_biomarkers: bool = False  # true if any biomarker measurement was found
+    abnormal_biomarkers: list[Biomarker] = Field(
+        default_factory=list,
+        description="Out-of-range biomarkers with value, unit, and reference range.",
+    )
 
 
 class SkippedFile(BaseModel):
@@ -249,7 +233,7 @@ class ExtractionRunResult(BaseModel):
 
 
 class _Block(BaseModel):
-    """One extracted unit of the document, with a stable id for citation."""
+    """One extracted unit of the document, with a stable id."""
 
     block_id: str
     page: int
@@ -257,16 +241,28 @@ class _Block(BaseModel):
     text: str
 
 
+class _BiomarkerLLM(BaseModel):
+    """One biomarker measurement as captured from a page (with abnormality)."""
+
+    name: str = Field(description="Analyte name, e.g. 'ALT', 'Haemoglobin'.")
+    value: str = Field(description="Measured value as printed, e.g. '56'.")
+    unit: str | None = Field(default=None, description="Unit, e.g. 'U/L'; null if not printed.")
+    reference_range: str | None = Field(
+        default=None,
+        description="Reference range as printed, e.g. '7-40'; null if not printed.",
+    )
+    status: Literal["high", "low", "normal"] = Field(
+        description="Whether the value is above ('high'), below ('low'), or within "
+        "('normal') its reference range (use the printed range, else the universal one)."
+    )
+
+
 class _InsightLLMItem(BaseModel):
-    """One insight as returned by the extraction LLM (page resolved by us)."""
+    """One insight as returned by the extraction LLM."""
 
     title: str = Field(description="Short title for the insight.")
     category: InsightCategory = Field(description="Insight category.")
     content: str = Field(description="Minimal-words insight content.")
-    source_block_ids: list[str] = Field(
-        default_factory=list,
-        description="BLOCK_IDs this insight was drawn from, for source tracing.",
-    )
 
 
 class _PageInsights(BaseModel):
@@ -276,37 +272,33 @@ class _PageInsights(BaseModel):
         default_factory=list,
         description="Patient-specific insights found on this page (may be empty).",
     )
-
-
-class _GroupLLMItem(BaseModel):
-    """One consolidated insight group as returned by the consolidation LLM."""
-
-    title: str = Field(description="Short title for the group.")
-    category: InsightCategory = Field(description="Most specific category in the group.")
-    necessity: int = Field(
-        description="1-100 score for how necessary it is that the doctor see this "
-        "before the consultation (use the provided rubric).",
-        ge=1,
-        le=100,
-    )
-    content: str = Field(description="One-sentence summary of the grouped facts.")
-    source_indices: list[int] = Field(
-        description="Indices of the raw facts that belong to this group."
-    )
-    subset_of: int | None = Field(
-        default=None,
-        description="0-based position of another group in this output whose content "
-        "fully contains this group's content, or null when this group is standalone. "
-        "Groups marked as a subset are folded into their parent and dropped.",
-    )
-
-
-class _ConsolidationOutput(BaseModel):
-    """Structured output of the consolidation LLM call."""
-
-    groups: list[_GroupLLMItem] = Field(
+    biomarkers: list[_BiomarkerLLM] = Field(
         default_factory=list,
-        description="Consolidated insight groups covering all raw facts.",
+        description="Biomarker measurements found on this page, in or out of range (may be empty).",
+    )
+
+
+class _RawFact(BaseModel):
+    """One patient-specific fact collected from a page, fed to consolidation."""
+
+    page: int
+    category: InsightCategory
+    content: str
+
+
+class _ConsolidatedSummary(BaseModel):
+    """Structured output of the consolidation LLM call: a report title + summary."""
+
+    title: str = Field(
+        description="A short (2-6 word) title naming what this report IS, so a "
+        "doctor knows its type at a glance, e.g. 'Comprehensive Metabolic Panel', "
+        "'Thyroid Function Panel', 'Gut Microbiome Analysis', 'Thyroid Ultrasound'. "
+        "Empty string if the document has no identifiable clinical content."
+    )
+    summary: str = Field(
+        description="One tight paragraph summarizing the whole report, most "
+        "abnormal/critical findings first, then the rest. Empty string if nothing "
+        "patient-specific was found."
     )
 
 
@@ -474,7 +466,7 @@ def _pre_read_text(ext: str, data: bytes) -> tuple[str, int]:
         return "\n".join(parts), len(document.inline_shapes)
     if ext in ("txt", "md"):
         return data.decode("utf-8", "ignore"), 0
-    if ext in ("jpg", "jpeg", "png"):
+    if ext in ("jpg", "jpeg", "png", "heic", "heif", "webp"):
         return "", 1
     return "", 0
 
@@ -505,25 +497,17 @@ def _mock_document_insights(metadata: dict | None) -> DocumentInsights:
     doc_id = str(meta.get("doc_id", "mock-doc"))
     return DocumentInsights(
         doc_id=doc_id,
+        title="[MOCK] Comprehensive Metabolic Panel",
         name=meta.get("name"),
         upload_date=meta.get("upload_date"),
         owner=meta.get("owner"),
-        insights=[
-            Insight(
-                id=f"{doc_id}-0",
-                title="[MOCK] Sample Insight",
-                category="clinical_finding",
-                necessity=50,
-                index=SourceIndex(page=1, bbox=None),
-                content="[MOCK] This is a placeholder insight; no LLM was called.",
-                citations=[
-                    Citation(
-                        fact="[MOCK] Placeholder fact",
-                        page=1,
-                        bbox=None,
-                    )
-                ],
-            )
+        summary=(
+            "[MOCK] Placeholder report summary; no LLM was called. Critical "
+            "findings would lead here, followed by the rest."
+        ),
+        contains_biomarkers=True,
+        abnormal_biomarkers=[
+            Biomarker(name="[MOCK] ALT", value="56", unit="U/L", reference_range="7-40")
         ],
     )
 
@@ -574,6 +558,43 @@ def _image_mime(image_bytes: bytes) -> str:
     if image_bytes[:3] == b"\xff\xd8\xff":
         return "image/jpeg"
     return "image/png"
+
+
+# JPEG quality for transcoded heic/heif/webp — high enough to preserve small
+# printed lab values, low enough to keep the VLM payload lean.
+_TRANSCODE_JPEG_QUALITY = 85
+
+
+def _transcode_image_to_jpeg(ext: str, data: bytes) -> bytes:
+    """Decode a heic/heif/webp image and re-encode it as JPEG for the vision model.
+
+    heic/heif need the pillow-heif opener registered; webp is decoded by Pillow's
+    stock libwebp support. EXIF orientation is applied (phone-camera heic files
+    routinely carry a rotation flag Pillow does not auto-apply), and the image is
+    flattened to RGB so JPEG encoding never fails on an alpha/palette mode. Any
+    decode failure propagates — the caller's fail-soft path records a skip.
+    """
+    import io
+
+    from PIL import Image, ImageOps
+
+    if ext in ("heic", "heif"):
+        from pillow_heif import register_heif_opener
+
+        register_heif_opener()
+
+    with Image.open(io.BytesIO(data)) as img:
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=_TRANSCODE_JPEG_QUALITY)
+    logger.info(
+        "[transcode] %s -> jpeg (%.1f KB -> %.1f KB)",
+        ext,
+        len(data) / 1024,
+        out.tell() / 1024,
+    )
+    return out.getvalue()
 
 
 async def _read_image_block(
@@ -1020,6 +1041,11 @@ async def _read_document(
         return await _read_pdf(filebytestream, semaphore, handler, ocr_config, client_details)
     if ext == "docx":
         return await _read_docx(filebytestream, semaphore, handler, client_details)
+    if ext in _TRANSCODE_IMAGE_EXTENSIONS:
+        # heic/heif/webp aren't reliably consumable by the vision model directly;
+        # transcode to JPEG first, then read exactly like a native jpg/png.
+        filebytestream = _transcode_image_to_jpeg(ext, filebytestream)
+        return await _read_image_file(filebytestream, semaphore, handler, client_details)
     if ext in {"jpg", "jpeg", "png"}:
         return await _read_image_file(filebytestream, semaphore, handler, client_details)
     # txt, md
@@ -1037,32 +1063,20 @@ def _format_blocks(blocks: list[_Block]) -> str:
     )
 
 
-def _union_bbox(bboxes: list[list[float]]) -> list[float] | None:
-    boxes = [b for b in bboxes if b]
-    if not boxes:
-        return None
-    x0 = min(b[0] for b in boxes)
-    y0 = min(b[1] for b in boxes)
-    x1 = max(b[2] for b in boxes)
-    y1 = max(b[3] for b in boxes)
-    return [x0, y0, x1, y1]
-
-
 async def _extract_page_insights(
     page: int,
     blocks: list[_Block],
     semaphore: asyncio.Semaphore,
     handler,
-) -> list[_InsightLLMItem]:
+) -> _PageInsights:
     """Run the insight LLM over one page's blocks.
 
-    Faithful per-page extraction only — no necessity scoring happens here (the
-    page schema has no `necessity` field). Demographic-anomaly scoring is applied
-    later in _consolidate, where necessity is assigned.
-    """
+    Returns the page's patient-specific facts AND any biomarker measurements (in
+    or out of range). No scoring happens here — the summary paragraph is written
+    by the consolidation LLM, and biomarker aggregation is deterministic."""
     if not blocks:
         logger.info("[insights] page %d — no blocks, skipping", page)
-        return []
+        return _PageInsights()
 
     logger.info(
         "[insights] page %d — extracting from %d block(s) ...",
@@ -1090,152 +1104,103 @@ async def _extract_page_insights(
             )
     except Exception as exc:
         logger.warning("[insights] page %d — failed: %s", page, exc)
-        return []
+        return _PageInsights()
 
-    # DEBUG: Show the insights returned by the LLM
     logger.info(
-        "[insights] page %d — %d insight(s) found", page, len(result.insights)
+        "[insights] page %d — %d fact(s), %d biomarker(s) found",
+        page,
+        len(result.insights),
+        len(result.biomarkers),
     )
     for idx, ins in enumerate(result.insights):
         logger.debug(
-            f"[insights] page {page} insight {idx}: "
-            f"title={ins.title!r}  category={ins.category}  "
-            f"source_blocks={ins.source_block_ids}  content={ins.content[:100]}..."
+            f"[insights] page {page} fact {idx}: title={ins.title!r}  "
+            f"category={ins.category}  content={ins.content[:100]}..."
         )
-    return result.insights
+    return result
 
 
-def _wrap_single_citation(ins: Insight, new_id: str) -> Insight:
-    return Insight(
-        id=new_id,
-        title=ins.title,
-        category=ins.category,
-        necessity=ins.necessity,
-        index=ins.index,
-        content=ins.content,
-        citations=[Citation(fact=ins.content, page=ins.index.page, bbox=ins.index.bbox)],
-    )
+# Lab abnormality flags/markers a report may print next to a value (e.g. "6.1 *H").
+# The numeric value belongs in `value`; the high/low signal belongs in `status`.
+# Stripped deterministically as a safety net even though the prompt forbids them.
+# The flag word must be preceded by a space/asterisk/paren so a real unit letter
+# (e.g. the "L" in "56 U/L") is never mistaken for a "low" flag.
+_BIOMARKER_FLAG_RE = re.compile(
+    r"(?:[*↑↓]+|[\s*(]\(?(?:HH|LL|HI|LO|HIGH|LOW|H|L)\)?)\s*$",
+    re.IGNORECASE,
+)
 
 
-def _rescore_insights_by_category(insights: list[Insight]) -> list[Insight]:
-    """Fold category weight + intra-category rank decay into each insight's
-    `necessity`, mirroring the checklist's _score_hypotheses.
+def _clean_biomarker_value(value: str) -> str:
+    """Strip trailing lab abnormality flags from a biomarker value ('6.1 *H' -> '6.1')."""
+    v = (value or "").strip()
+    prev = None
+    while v and v != prev:
+        prev = v
+        v = _BIOMARKER_FLAG_RE.sub("", v).strip()
+    return v or (value or "").strip()
 
-        final_necessity = llm_necessity * category_weight * (_CATEGORY_RANK_DECAY ** rank)
 
-    where rank is the insight's position within its OWN category (ordered by base
-    score, most-necessary first). Both factors are INTERNAL: the adjusted value
-    is written back into the existing `necessity` field — no new field is exposed
-    and only this one score leaves the module. Returns new Insight objects; the
-    input list is not mutated.
-    """
-    if not insights:
-        return insights
+def _aggregate_biomarkers(
+    biomarkers: list[_BiomarkerLLM],
+) -> tuple[bool, list[Biomarker]]:
+    """Deterministically fold every page's biomarkers into the output shape.
 
-    # First pass: base = llm_necessity * category_weight.
-    bases: list[float] = []
-    for ins in insights:
-        weight = _CATEGORY_WEIGHT.get(ins.category, _DEFAULT_CATEGORY_WEIGHT)
-        base = ins.necessity * weight
-        bases.append(base)
-        logger.debug(
-            "[necessity] id=%s category=%r llm_necessity=%d x weight=%.2f -> base=%.2f",
-            ins.id,
-            ins.category,
-            ins.necessity,
-            weight,
-            base,
-        )
-
-    # Group indices by category, rank within each by base desc, apply decay.
-    by_cat: dict[str, list[int]] = {}
-    for idx, ins in enumerate(insights):
-        by_cat.setdefault(ins.category, []).append(idx)
-
-    adjusted: dict[int, int] = {}
-    for cat, idxs in by_cat.items():
-        idxs.sort(key=lambda i: bases[i], reverse=True)
-        logger.debug(
-            "[necessity] category=%r has %d insight(s) -> applying intra-category rank decay",
-            cat,
-            len(idxs),
-        )
-        for rank, i in enumerate(idxs):
-            decay = _CATEGORY_RANK_DECAY**rank
-            final = bases[i] * decay
-            # Keep within the field's 1-100 range; never drop below 1.
-            final_int = max(1, min(100, round(final)))
-            adjusted[i] = final_int
-            logger.debug(
-                "[necessity]   rank=%d id=%s base=%.2f x decay=%.3f -> necessity=%d%s",
-                rank,
-                insights[i].id,
-                bases[i],
-                decay,
-                final_int,
-                "  <-- suppressed by rank" if rank > 0 else "",
+    Dedupe by (name, value) so the same analyte printed on several pages collapses
+    to one. `contains_biomarkers` is True if ANY biomarker was seen (in or out of
+    range); `abnormal_biomarkers` are the out-of-range ones (status != "normal").
+    Values are cleaned of any lab flag marker so `value` stays numeric."""
+    seen: set[tuple[str, str]] = set()
+    abnormal: list[Biomarker] = []
+    for b in biomarkers:
+        clean_value = _clean_biomarker_value(b.value)
+        key = (b.name.strip().lower(), clean_value.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        if b.status != "normal":
+            abnormal.append(
+                Biomarker(
+                    name=b.name,
+                    value=clean_value,
+                    unit=b.unit,
+                    reference_range=b.reference_range,
+                )
             )
-
-    return [
-        ins.model_copy(update={"necessity": adjusted[idx]})
-        for idx, ins in enumerate(insights)
-    ]
-
-
-def _resolve_subset_target(
-    grp_idx: int,
-    subset_of: dict[int, int | None],
-    built: dict[int, "Insight"],
-) -> int:
-    """Follow the subset_of chain to the ultimate parent grp_idx (cycle-safe).
-
-    Returns `grp_idx` itself when the group is standalone or its parent chain
-    dead-ends at a missing group, a cycle, or itself.
-    """
-    seen: set[int] = set()
-    current = grp_idx
-    while True:
-        parent = subset_of.get(current)
-        if (
-            parent is None
-            or parent == current
-            or parent not in built
-            or parent in seen
-        ):
-            return current
-        seen.add(current)
-        current = parent
+    logger.info(
+        "[biomarkers] %d reading(s) -> %d unique, %d abnormal",
+        len(biomarkers),
+        len(seen),
+        len(abnormal),
+    )
+    return bool(biomarkers), abnormal
 
 
 async def _consolidate(
-    insights: list[Insight],
+    facts: list[_RawFact],
     doc_id: str,
     semaphore: asyncio.Semaphore,
     handler,
     age="?",
     gender="?",
-) -> list[Insight]:
-    """Group raw per-page facts into fewer dense insights, each with citations.
+) -> tuple[str, str]:
+    """Name the report and write ONE prioritized summary paragraph from the raw
+    per-page facts, most abnormal/critical findings first. Returns
+    (title, summary) — both "" if there is nothing patient-specific. The patient's
+    age/gender are passed so the LLM can de-prioritize demographically implausible
+    findings (likely data errors)."""
+    if not facts:
+        return "", ""
 
-    Sends all facts to gpt-5-nano which returns groups; each group becomes one
-    Insight whose `citations` list carries the individual broken-out facts. The
-    patient's age/gender are passed so the LLM can lower the necessity of
-    findings that are incompatible with or atypical for the demographics.
-    """
-    if not insights:
-        return []
-
-    if len(insights) == 1:
-        return [_wrap_single_citation(insights[0], f"{doc_id}-g0")]
-
-    logger.info("[consolidate] grouping %d raw fact(s) ...", len(insights))
-
-    formatted = "\n\n".join(
-        f"INDEX: {i}\nCATEGORY: {ins.category}\nPAGE: {ins.index.page}\nCONTENT: {ins.content}"
-        for i, ins in enumerate(insights)
+    # Order facts by category precedence so the weightiest ones lead the input
+    # (the prompt then keeps the paragraph critical-first).
+    ordered = sorted(
+        facts, key=lambda f: _CATEGORY_ORDER.get(f.category, _DEFAULT_CATEGORY_ORDER)
     )
+    formatted = "\n".join(f"- [{f.category}] (p{f.page}) {f.content}" for f in ordered)
+    logger.info("[consolidate] summarizing %d fact(s) ...", len(facts))
 
-    llm = build_llm("consolidate_insights").with_structured_output(_ConsolidationOutput)
+    llm = build_llm("consolidate_insights").with_structured_output(_ConsolidatedSummary)
     template = ChatPromptTemplate.from_messages(
         [
             ("system", prompts.CONSOLIDATE_SYSTEM_PROMPT),
@@ -1246,96 +1211,26 @@ async def _consolidate(
     config = trace_config(
         handler, {"step": "consolidate_insights"}, "consolidate_insights"
     )
-
     try:
         async with semaphore:
-            result: _ConsolidationOutput = await chain.ainvoke(
+            result: _ConsolidatedSummary = await chain.ainvoke(
                 {"formatted_facts": formatted, "age": age, "gender": gender},
                 config=config,
             )
     except Exception as exc:
         logger.warning(
-            "[consolidate] LLM call failed, returning raw facts: %s", exc
+            "[consolidate] LLM call failed, falling back to joined facts: %s", exc
         )
-        fallback = [
-            _wrap_single_citation(ins, f"{doc_id}-g{i}")
-            for i, ins in enumerate(insights)
-        ]
-        return _rescore_insights_by_category(fallback)
+        # Degraded fallback: no title, join the (category-ordered) facts so the
+        # document is not lost entirely.
+        return "", " ".join(f.content.rstrip(".") + "." for f in ordered)
 
-    # DEBUG: Show consolidated groups returned by LLM
-    logger.debug(f"[consolidate] LLM returned {len(result.groups)} group(s)")
-    for grp_idx, grp in enumerate(result.groups):
-        logger.debug(
-            f"[consolidate] group {grp_idx}: title={grp.title!r}  category={grp.category}  "
-            f"necessity={grp.necessity}  source_indices={grp.source_indices}  content={grp.content[:100]}..."
-        )
-
-    covered: set[int] = set()
-    built: dict[int, Insight] = {}  # grp_idx -> Insight (before subset folding)
-    subset_of: dict[int, int | None] = {}
-
-    for grp_idx, grp in enumerate(result.groups):
-        valid = sorted(i for i in grp.source_indices if 0 <= i < len(insights))
-        if not valid:
-            continue
-        covered.update(valid)
-        sources = [insights[i] for i in valid]
-        built[grp_idx] = Insight(
-            id=f"{doc_id}-g{grp_idx}",
-            title=grp.title,
-            category=grp.category,
-            necessity=grp.necessity,
-            index=sources[0].index,
-            content=grp.content,
-            citations=[
-                Citation(fact=s.content, page=s.index.page, bbox=s.index.bbox)
-                for s in sources
-            ],
-        )
-        subset_of[grp_idx] = grp.subset_of
-
-    # Dedup: fold every group flagged as a subset into its (ultimate) parent,
-    # merging citations so nothing is lost, and drop the subset from the output.
-    targets = {g: _resolve_subset_target(g, subset_of, built) for g in built}
-    grouped: list[Insight] = []
-    kept_pos: dict[int, int] = {}  # kept grp_idx -> position in `grouped`
-    for grp_idx, insight in built.items():
-        if targets[grp_idx] == grp_idx:
-            kept_pos[grp_idx] = len(grouped)
-            grouped.append(insight)
-    for grp_idx, insight in built.items():
-        target = targets[grp_idx]
-        if target == grp_idx or target not in kept_pos:
-            continue
-        parent = grouped[kept_pos[target]]
-        seen_facts = {(c.fact, c.page) for c in parent.citations}
-        for citation in insight.citations:
-            if (citation.fact, citation.page) not in seen_facts:
-                parent.citations.append(citation)
-                seen_facts.add((citation.fact, citation.page))
-        logger.debug(
-            "[consolidate] group %d folded into %d (subset)", grp_idx, target
-        )
-
-    # Any facts the LLM orphaned — add as single-citation insights.
-    for i, ins in enumerate(insights):
-        if i not in covered:
-            logger.warning(
-                "[consolidate] orphaned fact at index %d, adding standalone", i
-            )
-            grouped.append(_wrap_single_citation(ins, f"{doc_id}-g{len(grouped)}"))
-
-    # Fold category weight + intra-category rank decay into `necessity`
-    # (INTERNAL — overwrites the existing field; no new field is exposed).
-    grouped = _rescore_insights_by_category(grouped)
-
-    # Most necessary first, so the doctor sees what matters at a glance.
-    grouped.sort(key=lambda x: x.necessity, reverse=True)
+    title = (result.title or "").strip()
+    summary = (result.summary or "").strip()
     logger.info(
-        "[consolidate] %d raw fact(s) → %d insight(s)", len(insights), len(grouped)
+        "[consolidate] title=%r, summary generated (%d chars)", title, len(summary)
     )
-    return grouped
+    return title, summary
 
 
 # ---------------------------------------------------------------------------
@@ -1387,14 +1282,18 @@ async def _aextract_insights(
             try:
                 span.update_trace(
                     output={
-                        "insight_count": len(result.insights),
-                        "insights": [
+                        "title": result.title,
+                        "summary_chars": len(result.summary),
+                        "contains_biomarkers": result.contains_biomarkers,
+                        "abnormal_biomarker_count": len(result.abnormal_biomarkers),
+                        "abnormal_biomarkers": [
                             {
-                                "title": i.title,
-                                "category": i.category,
-                                "necessity": i.necessity,
+                                "name": b.name,
+                                "value": b.value,
+                                "unit": b.unit,
+                                "reference_range": b.reference_range,
                             }
-                            for i in result.insights
+                            for b in result.abnormal_biomarkers
                         ],
                     }
                 )
@@ -1435,8 +1334,6 @@ async def _run_doc_extraction(
             logger.debug(f"[pii] {b.block_id}: {len(original)} → {len(b.text)} chars")
     logger.info("[pii] done")
 
-    block_lookup = {b.block_id: b for b in blocks}
-
     # Group by page and infer page-wise (concurrently, bounded by the semaphore).
     by_page: dict[int, list[_Block]] = {}
     for b in blocks:
@@ -1454,57 +1351,47 @@ async def _run_doc_extraction(
             )
         )
 
-    raw_insights: list[Insight] = []
-    counter = 0
-    for page, items in zip(pages, page_results):
-        for item in items:
-            cited = [
-                block_lookup[bid]
-                for bid in item.source_block_ids
-                if bid in block_lookup
-            ]
-            bbox = _union_bbox([b.bbox for b in cited if b.bbox])
-            src_page = cited[0].page if cited else page
-            raw_insights.append(
-                Insight(
-                    id=f"{doc_id}-{counter}",
-                    title=item.title,
-                    category=item.category,
-                    necessity=50,
-                    index=SourceIndex(page=src_page, bbox=bbox),
-                    content=item.content,
-                )
+    raw_facts: list[_RawFact] = []
+    all_biomarkers: list[_BiomarkerLLM] = []
+    for page, result in zip(pages, page_results):
+        for item in result.insights:
+            raw_facts.append(
+                _RawFact(page=page, category=item.category, content=item.content)
             )
-            counter += 1
+        all_biomarkers.extend(result.biomarkers)
 
     logger.info(
-        "[insights] %d raw fact(s) collected across all pages", len(raw_insights)
+        "[insights] %d raw fact(s), %d biomarker reading(s) collected across all pages",
+        len(raw_facts),
+        len(all_biomarkers),
     )
-    if raw_insights:
-        categories = Counter(ins.category for ins in raw_insights)
-        logger.debug(f"[insights] raw facts by category: {dict(categories)}")
+    if raw_facts:
+        categories = Counter(f.category for f in raw_facts)
+        logger.debu_aextract_insightsg(f"[insights] raw facts by category: {dict(categories)}")
+
+    contains_biomarkers, abnormal_biomarkers = _aggregate_biomarkers(all_biomarkers)
+
     age = (client_details or {}).get("age", "?")
     gender = (client_details or {}).get("gender", "?")
     with log_stage("extract:consolidate", doc_id=doc_id, client_id=client_id):
-        insights = await _consolidate(
-            raw_insights, doc_id, semaphore, handler, age, gender
+        title, summary = await _consolidate(
+            raw_facts, doc_id, semaphore, handler, age, gender
         )
-    logger.info("=== done: %s — %d insight(s) ===", doc_name, len(insights))
-
-    # DEBUG: Show final insights
-    for ins in insights:
-        logger.debug(
-            f"[final] {ins.id}: title={ins.title!r}  category={ins.category}  "
-            f"necessity={ins.necessity}  page={ins.index.page}  "
-            f"citations={len(ins.citations)}"
-        )
+    logger.info(
+        "=== done: %s — title=%r, summary %d chars, biomarkers=%s (%d abnormal) ===",
+        doc_name,
+        title,
+        len(summary),
+        contains_biomarkers,
+        len(abnormal_biomarkers),
+    )
 
     return DocumentInsights(
         doc_id=doc_id,
-        # name=metadata.get("name"),
-        # upload_date=metadata.get("upload_date"),
-        # owner=metadata.get("owner"),
-        insights=insights,
+        title=title,
+        summary=summary,
+        contains_biomarkers=contains_biomarkers,
+        abnormal_biomarkers=abnormal_biomarkers,
     )
 
 

@@ -192,10 +192,12 @@ identical across them.
   "output_style": "paragraph",
   "output_size": "medium",
   "preconsultation_summary": "Patient reports mid-day energy crashes ... Stated goals are weight loss, balancing hormones and improving energy ...",
-  "family_risk_summary": "Family history shows maternal hypercholesterolemia (mother aged 50–60), a hereditary signal toward the reported high cholesterol ...",
+  "quick_summary": "Mid-day energy crashes; prediabetes; maternal hypercholesterolemia at 50-60; goals of weight loss and better energy",
+  "family_risk_summary": "Maternal hypercholesterolemia (mother aged 50–60), a hereditary signal toward the reported high cholesterol ...",
+  "family_risk_present": true,
   "preconsultation_checklist": [
     {
-      "probe": "Obtain current glycemic labs (A1c, fasting glucose)",
+      "probe": "Are current glycemic labs (A1c, fasting glucose) worth having on hand?",
       "tag": "missing_context",
       "score": 0.41,
       "reason": "'Prediabetes' was reported with low confidence and minimal daily impact; objective labs are needed to confirm status."
@@ -203,6 +205,18 @@ identical across them.
   ]
 }
 ```
+
+- `quick_summary` — a short, natural but concise, **subjectless** line stating
+  the facts (not the evidence), most critical first — the doctor's five-second
+  glance. Capped at ~30 words; always one line regardless of
+  `output_style`/`output_size`.
+- `family_risk_present` — LLM-set boolean: `true` only when the family history
+  holds a signal worth the doctor's attention. When `false`, `family_risk_summary`
+  is an empty string (nothing noteworthy, or no family history at all).
+
+All summaries are length-capped: preconsultation summary ~45/90/160 words
+(small/medium/large), quick summary ~30 words, family-risk summary ~35 words,
+each checklist probe ~20 words.
 
 `tag` is one of (the mode decides which set applies):
 - **Concern mode:** `red_flag_escalation`, `contradiction_resolution`,
@@ -264,7 +278,8 @@ metadata = {"doc_id": "doc-1"}
 client_details = {"client_id": "CL-001", "name": "Jane Doe", "age": 29, "gender": "Female"}
 ```
 
-Supported file types: `pdf`, `docx`, `jpg`, `jpeg`, `png`, `txt`, `md`.
+Supported file types: `pdf`, `docx`, `jpg`, `jpeg`, `png`, `heic`, `heif`, `webp`, `txt`, `md`.
+(`heic`/`heif`/`webp` are transcoded to JPEG internally before OCR.)
 
 ### Output schema (`ExtractionRunResult`)
 
@@ -274,22 +289,16 @@ Supported file types: `pdf`, `docx`, `jpg`, `jpeg`, `png`, `txt`, `md`.
   "results": [                       // processed documents (each a DocumentInsights)
     {
       "doc_id": "doc-1",             // name / upload_date / owner default to null (not populated by the pipeline)
-      "insights": [
+      "title": "Comprehensive Metabolic Panel",  // short 2-6 word name for what the report IS (LLM-inferred; "" if none)
+      "summary": "ALT elevated at 56 U/L (ref 7-40) and LDL 165 mg/dL above range; stable hypothyroidism on levothyroxine.",
+                                     // one paragraph, most abnormal/critical findings first; stated directly (no "the report shows ..." phrasing)
+      "contains_biomarkers": true,   // true if ANY biomarker measurement (in or out of range) was found
+      "abnormal_biomarkers": [       // only the OUT-OF-RANGE ones
         {
-          "id": "doc-1-g0",
-          "title": "Elevated ALT",
-          "category": "abnormal_measurement", // abnormal_measurement | symptom | clinical_finding | imaging_finding | diagnosis | medication | procedure | treatment_recommendation | monitoring_plan | risk_factor
-          "necessity": 82,                   // 1-100: how necessary for the doctor to see pre-consult.
-          "index": { "page": 4, "bbox": [72.0, 310.5, 540.0, 330.0] },  // bbox may be null
-          "content": "ALT elevated at 56 U/L (normal 7-40).",  // stated directly — no "the report shows ..." phrasing
-          "citations": [
-            {
-              "fact": "ALT 56 U/L (normal 7-40)",
-              "page": 4,
-              "bbox": [72.0, 310.5, 540.0, 330.0],   // may be null
-              "citation": "ALT 56 U/L (normal 7-40) <Page 4>"
-            }
-          ]
+          "name": "ALT",
+          "value": "56",
+          "unit": "U/L",             // null if the report prints none
+          "reference_range": "7-40"  // as printed; null if the report prints none
         }
       ]
     }
@@ -304,6 +313,12 @@ Supported file types: `pdf`, `docx`, `jpg`, `jpeg`, `png`, `txt`, `md`.
   ]
 }
 ```
+
+Each processed document is a **prioritized summary paragraph** (abnormal/critical
+findings first) plus **structured biomarker data**: `contains_biomarkers` flags
+whether the report holds any biomarker measurement at all, and
+`abnormal_biomarkers` lists the out-of-range ones with value, unit, and reference
+range. (The pipeline no longer returns a per-insight list or citations.)
 
 A document that raises during processing (corrupt file, unsupported type, an LLM
 error that survives the client's retries) does **not** abort the batch: it is

@@ -85,7 +85,7 @@ async def _run_llm(stage: str, client_id: str, coro):
     return result
 
 
-WEBHOOK_URL = os.environ["TOOLS_URL"] + os.environ["PRECONS_TOOL_TRIGGER_API"]
+WEBHOOK_URL = os.environ.get("TOOLS_URL", "http://localhost:8005") + os.environ.get("PRECONS_TOOL_TRIGGER_API", "/preconsultation/v1/onboarding-webhook")
 
 # Concern-mode axes: a node with pressing findings may warrant probing here.
 # Ordered by clinical urgency (see _CONCERN_TAG_WEIGHT).
@@ -187,8 +187,14 @@ class _SummaryLLMOutput(BaseModel):
     preconsultation_summary: str = Field(
         description="Who the patient is, as a single dense prose paragraph, most critical findings first."
     )
+    quick_summary: str = Field(
+        description="A compact keyword/telegraphic version of the preconsultation summary, most critical first (e.g. 'HTN 8yr worsening; ALT high; maternal T2DM')."
+    )
     family_risk_summary: str = Field(
-        description="Hereditary signals in the family history, cross-referenced with the patient's current patterns."
+        description="Hereditary signals in the family history, cross-referenced with the patient's current patterns. Empty string when nothing is noteworthy."
+    )
+    family_risk_present: bool = Field(
+        description="True only when the family history holds a hereditary signal worth the doctor's attention; false (with an empty family_risk_summary) when it does not."
     )
 
 
@@ -218,10 +224,13 @@ class _WellnessChecklistLLMOutput(BaseModel):
 
 
 class PreconsultationSummaries(BaseModel):
-    """The doctor-facing output: two markdown summaries + a scored probe checklist."""
+    """The doctor-facing output: two markdown summaries, a short keyword summary,
+    a family-risk-present flag, and a scored probe checklist."""
 
     preconsultation_summary: str
+    quick_summary: str
     family_risk_summary: str
+    family_risk_present: bool
     preconsultation_checklist: list[ChecklistProbe]
 
 
@@ -479,10 +488,12 @@ def _mock_summaries(client_details: dict) -> PreconsultationSummaries:
             f"Primary pattern: {cluster_hint}. This is a mock summary; "
             "no LLM was called."
         ),
+        quick_summary=f"[MOCK] {age}yo {gender}; {cluster_hint}",
         family_risk_summary=(
             "[MOCK] No family risk analysis performed. "
             "This is a mock result; no LLM was called."
         ),
+        family_risk_present=False,
         preconsultation_checklist=[
             ChecklistProbe(
                 probe="[MOCK] Confirm primary cluster findings",
@@ -560,21 +571,25 @@ async def _generate_summaries(
     client_details: dict,
     summary_llm,
     callbacks: list,
-) -> tuple[str, str]:
-    """LLM call 1 (the two prose summaries) plus both reorder passes, for one
-    concrete style/size combination. Returns
-    (preconsultation_summary, family_risk_summary).
+) -> tuple[str, str, str, bool]:
+    """LLM call 1 (the prose summaries + keyword summary) plus both reorder passes,
+    for one concrete style/size combination. Returns
+    (preconsultation_summary, quick_summary, family_risk_summary,
+    family_risk_present).
 
     The checklist is size-independent and is generated once by the caller, so it
-    is not produced here.
+    is not produced here. `quick_summary` is a compact keyword version of the
+    preconsultation summary; it is NOT reordered (critical-first is handled in the
+    prompt). `family_risk_present` is the LLM's own judgment.
 
     Empty-input guards (nothing to summarize -> empty string): if the salience
-    profile is blank, no LLM call is made and both summaries are "". If the
-    patient has no nested family history at all, the family-risk summary is forced
-    to "" (and its reorder skipped) regardless of what the LLM emitted."""
+    profile is blank, no LLM call is made and all summaries are "" (and the flag
+    False). If the patient has no nested family history at all, the family-risk
+    summary is forced to "" (and its reorder skipped) and the flag forced False,
+    regardless of what the LLM emitted."""
     if not (profile or "").strip():
         logger.debug("[summaries] empty profile -> returning empty summaries")
-        return "", ""
+        return "", "", "", False
     want_family = has_family_history(client_details)
     summary_prompt = ChatPromptTemplate.from_messages(
         [
@@ -595,18 +610,24 @@ async def _generate_summaries(
         "\n"
         "################## LLM CALL 1 (summaries, style=%s size=%s) — OUTPUT ##################\n"
         "[preconsultation_summary]\n%s\n\n"
-        "[family_risk_summary]\n%s\n"
+        "[quick_summary]\n%s\n\n"
+        "[family_risk_summary] (present=%s)\n%s\n"
         "################## END CALL 1 OUTPUT ##################",
         output_style,
         output_size,
         summaries_raw.preconsultation_summary,
+        summaries_raw.quick_summary,
+        summaries_raw.family_risk_present,
         summaries_raw.family_risk_summary,
     )
-    # No family history in the data -> nothing to summarize; force empty and skip
-    # its reorder (guards against the LLM hallucinating a family-risk paragraph).
+    # No family history in the data -> nothing to summarize; force empty + flag off
+    # and skip its reorder (guards against the LLM hallucinating a family-risk
+    # paragraph). Otherwise the flag is the LLM's own noteworthy judgment.
     family_text = summaries_raw.family_risk_summary if want_family else ""
-    # Reorder both by deterministic priority, preserving the chosen output_style.
-    return await asyncio.gather(
+    family_present = summaries_raw.family_risk_present if want_family else False
+    # Reorder the two prose summaries by deterministic priority, preserving style.
+    # quick_summary passes through untouched.
+    reordered_pre, reordered_family = await asyncio.gather(
         areorder_onboarding_summary(
             summaries_raw.preconsultation_summary,
             client_details,
@@ -622,19 +643,23 @@ async def _generate_summaries(
             output_style,
         ),
     )
+    return reordered_pre, summaries_raw.quick_summary, reordered_family, family_present
 
 
 def _assemble_variant(
     output_style: str,
     size_tag: str,
-    summaries: tuple[str, str],
+    summaries: tuple[str, str, str, bool],
     checklist_items: list[ChecklistProbe],
 ) -> dict:
-    """Bundle one size variant's two summaries with the shared checklist."""
-    pre_summary, fam_summary = summaries
+    """Bundle one size variant's summaries + keyword summary + family flag with
+    the shared checklist."""
+    pre_summary, quick_summary, fam_summary, fam_present = summaries
     result = PreconsultationSummaries(
         preconsultation_summary=pre_summary,
+        quick_summary=quick_summary,
         family_risk_summary=fam_summary,
+        family_risk_present=fam_present,
         preconsultation_checklist=checklist_items,
     )
     return {
