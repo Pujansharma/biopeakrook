@@ -415,7 +415,7 @@ class CustomerLeadDetailView(BaseRetrieveAPIView):
         qs = Lead.objects.select_related(
             'customer_profile__customer__user'
         ).filter(
-            customer_profile__customer__user__phone=phone_cleaned
+            phone=phone_cleaned
         )
         return qs
 
