@@ -10,11 +10,13 @@ from accounts.customers.models import (
     CustomerAssociateAssignment,
     Customer,
 )
+from accounts.customers.serializers import BaseCustomerProfileSerializer
 from accounts.notifications.models import FirebaseRegistrationToken
 from accounts.notifications.utils.db import save_firebase_registration_token
 from accounts.users.utils.constants import Gender
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+from leads.models import Lead
 from programs.models import TherapyProgram, TherapyProgramService
 from programs.services.models import Service
 from programs.utils.constants import ProgramType
@@ -346,3 +348,34 @@ class CustomerFirebaseTokenDeregisterSerializer(BaseSerializer):
         ).delete()
 
         return True
+
+
+class ExternalCustomerLeadSerializer(BaseModelSerializer):
+    customer_profile = BaseCustomerProfileSerializer(read_only=True)
+    home_center = MinimumCenterSerializer(read_only=True)
+
+    class Meta:
+        model = Lead
+        fields = [
+            "id",
+            "unique_id",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "phone",
+            "email",
+            "description",
+            "is_active",
+            "is_client",
+            "is_invited",
+            "is_joined",
+            "converted_on",
+            "packages",
+            "home_center",
+            "home_center_id",
+            "customer_profile",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

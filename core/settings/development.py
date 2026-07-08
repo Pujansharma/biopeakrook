@@ -59,3 +59,7 @@ PASSWORD_BASE_URL = config("DEV_PASSWORD_BASE_URL", "")
 # Firebase
 ADMIN_CERT = config("ADMIN_CERT", None)
 APP_CERT = config("APP_CERT", None)
+
+# Metsights
+METSIGHTS_BASE_URL = config('DEV_METSIGHTS_BASE_URL', None)
+METSIGHTS_API_KEY = config('DEV_METSIGHTS_API_KEY', None)

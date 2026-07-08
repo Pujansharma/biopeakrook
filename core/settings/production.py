@@ -105,3 +105,6 @@ PASSWORD_BASE_URL = config("PRD_PASSWORD_BASE_URL", "")
 # Firebase
 ADMIN_CERT = config("ADMIN_CERT", None)
 APP_CERT = config("APP_CERT", None)
+
+# Metsights
+METSIGHTS_API_KEY = config('PRD_METSIGHTS_API_KEY', None)
