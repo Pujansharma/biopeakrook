@@ -42,7 +42,7 @@ def get_metsights_profile(phone):
 
 
 def create_metsights_profile(
-        phone, email, first_name, last_name, gender, age, date_of_birth
+        phone, email, first_name, last_name, gender, age=None, date_of_birth=None
 ):
     profile_id = get_metsights_profile(phone)
     if profile_id:
@@ -50,6 +50,9 @@ def create_metsights_profile(
     url = METSIGHTS_BASE_URL + "/profiles/"
     session = Session()
     gender_value = GENDER_MAPPING.get(gender)
+    date_of_birth_value = None
+    if date_of_birth:
+        date_of_birth_value = str(date_of_birth)
     payload = {
         'phone': phone,
         'email': email,
@@ -57,7 +60,7 @@ def create_metsights_profile(
         "last_name": last_name,
         "gender": gender_value,
         "age": age,
-        "date_of_birth": str(date_of_birth),
+        "date_of_birth": date_of_birth_value,
     }
     response = session.post(url, json=payload)
     if not response.ok:
