@@ -25,7 +25,7 @@ from pre_consultation.serializers import (
 )
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
-    guard_lead_onboarding_complete_for_start,
+    guard_lead_onboarding_completed_for_start,
     is_session_completed,
 )
 from pre_consultation.utils.api import pre_consultation_response
@@ -73,7 +73,7 @@ class PreConsultationSessionStartView(BaseGenericAPIView, PostMethodMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        onboarding_conflict = guard_lead_onboarding_complete_for_start(request)
+        onboarding_conflict = guard_lead_onboarding_completed_for_start(request)
         if onboarding_conflict is not None:
             return onboarding_conflict
 
