@@ -19,7 +19,7 @@ from pre_consultation.layers.patient_lifestyle_environment import (
 )
 from pre_consultation.models import PreConsultationConcern
 from pre_consultation.persistence import get_session_category_ids
-from pre_consultation.result import build_goals_payload
+from pre_consultation.result import build_overview_goals_payload
 from pre_consultation.result_session import ResultSessionContext
 from pre_consultation.utils.constants import (
     PreConsultationConcernSourceId,
@@ -166,7 +166,7 @@ def build_overview_payload(context: ResultSessionContext) -> dict:
     return {
         "summary": _artifact_text(context, "summary"),
         "checklist": checklist,
-        "patient_goals": build_goals_payload(context.session),
+        "goals": build_overview_goals_payload(context.session),
     }
 
 
