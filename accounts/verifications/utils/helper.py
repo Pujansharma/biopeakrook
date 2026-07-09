@@ -47,7 +47,6 @@ def set_values_for_phone_verification(instance):
 def perform_otp_generation(phone, code):
     if settings.DEBUG:
         send_verification_phone_email(phone, code)
-        print(f"OTP FOR {phone} --> {code}", flush=True)
         return None
 
     send_verification_code_whatsapp(phone, code)
