@@ -432,12 +432,12 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             increment_centers_count(profile.pk)
             increment_organization_clients_count()
             metsights_profile_id = get_or_create_metsights_profile(
-                phone,
-                profile.customer.contact_email,
-                profile.first_name,
-                profile.last_name,
-                profile.gender,
-                profile.date_of_birth
+                phone=phone,
+                email=profile.customer.contact_email,
+                first_name=profile.first_name,
+                last_name=profile.last_name,
+                gender=profile.gender,
+                date_of_birth=profile.date_of_birth
             )
             profile.data = {**profile.data, "metsights_profile_id": metsights_profile_id}
             profile.save(update_fields=['data'])

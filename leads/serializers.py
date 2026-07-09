@@ -111,7 +111,13 @@ class LeadListCreateSerializer(BaseLeadSerializer):
             if not lead.is_active:
                 increment_leads_inactive()
             metsights_profile_id = get_or_create_metsights_profile(
-                phone, email, first_name, last_name, gender, age, date_of_birth
+                phone=phone,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                gender=gender,
+                age=age,
+                date_of_birth=date_of_birth
             )
             if metsights_profile_id:
                 lead.data = {
@@ -163,11 +169,11 @@ class LeadDetailSerializer(BaseLeadSerializer):
                 decrement_leads_assigned()
             if not lead_data.get("metsights_profile_id"):
                 metsights_profile_id = get_or_create_metsights_profile(
-                    lead.phone,
-                    lead.email,
-                    lead.first_name,
-                    lead.last_name,
-                    lead.gender,
+                    phone=lead.phone,
+                    email=lead.email,
+                    first_name=lead.first_name,
+                    last_name=lead.last_name,
+                    gender=lead.gender,
                     age=None,
                     date_of_birth=lead.date_of_birth,
                 )
