@@ -10,6 +10,9 @@ from accounts.users.utils.helper import calculate_age
 from core.utils.db.functions import ExtractPartText
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.layers.patient_baseline import customer_profile_to_payload
+from pre_consultation.layers.patient_medical_history_context import (
+    get_customer_profile_gender_and_age,
+)
 from pre_consultation.layers.patient_goals_priorities import (
     build_health_goals_response,
     get_session_stored_health_goals,
@@ -19,7 +22,7 @@ from pre_consultation.layers.patient_lifestyle_environment import (
 )
 from pre_consultation.models import PreConsultationConcern
 from pre_consultation.persistence import get_session_category_ids
-from pre_consultation.result import build_goals_payload
+from pre_consultation.result import build_overview_goals_payload
 from pre_consultation.result_session import ResultSessionContext
 from pre_consultation.utils.constants import (
     PreConsultationConcernSourceId,
@@ -35,7 +38,9 @@ from pre_consultation.utils.directive import (
     get_directive_cluster_probes_for_cluster,
     get_directive_concern_label_map,
     get_directive_diagnosis_label_map,
+    get_directive_reproductive_diagnoses_for_gender,
     get_directive_family_relation_label_map,
+    get_directive_sexual_health_questions_for_gender,
     get_directive_health_goals,
     get_directive_impact_label_map,
     get_directive_lifestyle_fields,
@@ -166,7 +171,7 @@ def build_overview_payload(context: ResultSessionContext) -> dict:
     return {
         "summary": _artifact_text(context, "summary"),
         "checklist": checklist,
-        "patient_goals": build_goals_payload(context.session),
+        "goals": build_overview_goals_payload(context.session),
     }
 
 
@@ -660,6 +665,148 @@ def build_medical_context_payload(context: ResultSessionContext) -> dict:
     }
 
 
+def _raw_data_diagnosis_labels(context: ResultSessionContext) -> list[str]:
+    if context.medical_history is None:
+        return []
+
+    diagnosis_label_map = get_directive_diagnosis_label_map()
+    gender, _age_years = get_customer_profile_gender_and_age(context.customer_profile)
+    reproductive_label_map: dict[str, str] = {}
+    if gender is not None:
+        reproductive_label_map = {
+            reproductive_diagnosis["id"]: reproductive_diagnosis["label"]
+            for reproductive_diagnosis in get_directive_reproductive_diagnoses_for_gender(
+                gender
+            )
+        }
+
+    diagnosis_labels: list[str] = []
+    for diagnosis in context.medical_history.diagnoses.order_by("created_at"):
+        if diagnosis.is_reproductive:
+            label = reproductive_label_map.get(
+                diagnosis.diagnosis_id,
+                diagnosis.diagnosis_id,
+            )
+        else:
+            label = diagnosis_label_map.get(
+                diagnosis.diagnosis_id,
+                diagnosis.diagnosis_id,
+            )
+        diagnosis_labels.append(label)
+    return diagnosis_labels
+
+
+def _raw_data_medication_supplement_labels(context: ResultSessionContext) -> list[str]:
+    if context.medical_history is None:
+        return []
+
+    medication_status = context.medical_history.medication_status
+    if medication_status in {
+        PreConsultationMedicationStatus.NO,
+        "",
+    }:
+        return []
+
+    return [
+        medication_entry["label"]
+        for medication_entry in _medication_entries(context)
+    ]
+
+
+def _raw_data_allergy_labels(context: ResultSessionContext) -> list[str]:
+    if context.medical_history is None:
+        return []
+
+    return [
+        allergy.name
+        for allergy in context.medical_history.allergies.order_by("created_at")
+    ]
+
+
+def _raw_data_sexual_health_rows(context: ResultSessionContext) -> list[dict[str, str]]:
+    if context.medical_history is None:
+        return []
+
+    gender, age_years = get_customer_profile_gender_and_age(context.customer_profile)
+
+    question_label_by_id: dict[str, str] = {}
+    option_label_by_id: dict[str, str] = {}
+    if gender is not None:
+        for question in get_directive_sexual_health_questions_for_gender(
+            gender,
+            age_years,
+        ):
+            question_label_by_id[question["id"]] = question["label"]
+            for option in question["options"]:
+                option_label_by_id[option["id"]] = option["label"]
+
+    sexual_health_rows: list[dict[str, str]] = []
+    for answer in context.medical_history.sexual_health_answers.order_by("created_at"):
+        sexual_health_rows.append(
+            {
+                "question": question_label_by_id.get(
+                    answer.question_id,
+                    answer.question_id,
+                ),
+                "answer": option_label_by_id.get(
+                    answer.option_id,
+                    answer.option_id,
+                ),
+            }
+        )
+    return sexual_health_rows
+
+
+def _raw_data_family_medical_history_rows(
+    context: ResultSessionContext,
+) -> list[dict[str, str]]:
+    relation_label_map = get_directive_family_relation_label_map()
+    age_band_label_map = get_directive_age_band_label_map()
+    concern_label_map = get_directive_concern_label_map()
+
+    family_history_rows: list[dict[str, str]] = []
+    seen_relation_keys: set[tuple[str, str, str]] = set()
+    for concern in _session_concerns(context):
+        concern_label = concern_label_map[concern.concern_id]
+        for family_history in concern.family_history.all():
+            relation_key = (
+                family_history.relation_id,
+                family_history.age_band_id,
+                concern.concern_id,
+            )
+            if relation_key in seen_relation_keys:
+                continue
+            seen_relation_keys.add(relation_key)
+            family_history_rows.append(
+                {
+                    "relation": relation_label_map.get(
+                        family_history.relation_id,
+                        family_history.relation_id,
+                    ),
+                    "age_band": age_band_label_map.get(
+                        family_history.age_band_id,
+                        family_history.age_band_id,
+                    ),
+                    "concern": concern_label,
+                }
+            )
+    return family_history_rows
+
+
+def _raw_data_surgery_rows(context: ResultSessionContext) -> list[dict[str, str]]:
+    if context.medical_history is None:
+        return []
+
+    return [
+        {
+            "name": surgery.name,
+            "performed_when": surgery.performed_when,
+            "reason": surgery.reason,
+        }
+        for surgery in context.medical_history.surgeries.order_by("created_at")
+    ]
+
+
 def build_raw_data_payload(context: ResultSessionContext) -> dict:
     category_label_map = get_directive_category_label_map()
     concern_label_map = get_directive_concern_label_map()
@@ -753,20 +900,6 @@ def build_raw_data_payload(context: ResultSessionContext) -> dict:
                 }
             )
 
-    patient_medical_history_context: list[str] = []
-    if context.medical_history is not None:
-        diagnosis_label_map = get_directive_diagnosis_label_map()
-        for diagnosis in context.medical_history.diagnoses.all():
-            patient_medical_history_context.append(
-                diagnosis_label_map.get(diagnosis.diagnosis_id, diagnosis.diagnosis_id)
-            )
-        for allergy in context.medical_history.allergies.all():
-            patient_medical_history_context.append(allergy.name)
-        for medication in context.medical_history.medications.all():
-            patient_medical_history_context.append(medication.name)
-        for surgery in context.medical_history.surgeries.all():
-            patient_medical_history_context.append(surgery.name)
-
     patient_lifestyle_environment = []
     lifestyle_payload = build_lifestyle_payload(context)
     for lifestyle_row in lifestyle_payload["life_style"]:
@@ -789,7 +922,16 @@ def build_raw_data_payload(context: ResultSessionContext) -> dict:
         "patient_symptom": patient_symptom,
         "patient_concern_probe": patient_concern_probe,
         "patient_cluster_probe": patient_cluster_probe,
-        "patient_medical_history_context": patient_medical_history_context,
+        "patient_medical_diagnosis": _raw_data_diagnosis_labels(context),
+        "patient_medications_suppliments": _raw_data_medication_supplement_labels(
+            context
+        ),
+        "patient_allergies": _raw_data_allergy_labels(context),
+        "patient_sexual_health": _raw_data_sexual_health_rows(context),
+        "patient_family_medical_history": _raw_data_family_medical_history_rows(
+            context
+        ),
+        "patient_surgeries": _raw_data_surgery_rows(context),
         "patient_lifestyle_environment": patient_lifestyle_environment,
         "patient_goals_priorities": patient_goals_priorities,
     }

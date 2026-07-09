@@ -1,5 +1,8 @@
 from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
 from django.db.models.functions import Coalesce, Concat
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
@@ -22,6 +25,9 @@ from accounts.customers.serializers import (
     CustomerAssociateSerializer,
     BaseCustomerAssignedCenterSerializer,
     CustomerProfileAddressSerializer,
+    CustomerLeadProfileSerializer,
+    build_customer_lead_profile_fallback,
+    get_main_customer_profile_for_user,
 )
 from accounts.organizations.utils.db import (
     decrement_organization_clients_count,
@@ -32,11 +38,13 @@ from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerU
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListAPIView,
+    BaseRetrieveAPIView,
     BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
     BaseCreateAPIView,
     BaseListCreateAPIView,
 )
+from leads.models import Lead
 
 
 def get_customer_for_request(request):
@@ -54,6 +62,33 @@ class CustomerAccountProfileView(BaseRetrieveUpdateAPIView):
 
     def get_object(self):
         return get_customer_for_request(self.request)
+
+
+class CustomerLeadProfileView(BaseRetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomerLeadProfileSerializer
+
+    def get_queryset(self):
+        return Lead.objects.select_related(
+            "customer_profile__customer__user",
+            "home_center",
+        ).filter(phone=self.request.user.phone)
+
+    def get(self, request, *args, **kwargs):
+        lead = self.get_queryset().first()
+        if lead:
+            serializer = self.get_serializer(lead)
+            return Response({"success": True, "data": serializer.data})
+
+        customer_profile = get_main_customer_profile_for_user(request.user)
+        if customer_profile:
+            data = build_customer_lead_profile_fallback(
+                customer_profile,
+                context=self.get_serializer_context(),
+            )
+            return Response({"success": True, "data": data})
+
+        raise NotFound("Lead not found")
 
 
 class CustomerProfilesListView(BaseListAPIView):

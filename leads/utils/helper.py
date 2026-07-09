@@ -23,17 +23,22 @@ User = get_user_model()
 
 def create_customer_profile_from_lead(lead: Lead, updated_by: User) -> CustomerProfile:
     was_joined = lead.is_joined
-    profile_data = {
+    user_profile_data = {
         "first_name": lead.first_name,
         "last_name": lead.last_name,
         "gender": lead.gender,
+    }
+    customer_profile_data = {
+        **user_profile_data,
+        "date_of_birth": lead.date_of_birth,
+        "emergency_contact_phone": lead.phone,
     }
 
     user = User.objects.create_user(
         email=None,
         password=None,
         phone=lead.phone,
-        **profile_data,
+        **user_profile_data,
     )
     customer = Customer.objects.create(
         user=user,
@@ -44,7 +49,7 @@ def create_customer_profile_from_lead(lead: Lead, updated_by: User) -> CustomerP
         customer=customer,
         is_main=True,
         created_by=updated_by,
-        **profile_data,
+        **customer_profile_data,
     )
     CustomerCenterAssignment.objects.create(
         customer_profile=customer_profile,
