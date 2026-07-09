@@ -9,7 +9,13 @@ def get_or_create_metsights_profile(
         return profile_id
 
     profile_response = create_metsights_profile(
-        phone, email, first_name, last_name, gender, age, date_of_birth
+        phone=phone,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        gender=gender,
+        age=age,
+        date_of_birth=date_of_birth
     )
     if not profile_response:
         return None
