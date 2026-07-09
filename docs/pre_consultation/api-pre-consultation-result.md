@@ -194,7 +194,12 @@ Flattened layer answers for export.
 | `patient_symptom` | string[] |
 | `patient_concern_probe` | `{ "concern", "label" }[]` |
 | `patient_cluster_probe` | `{ "question", "answer" }[]` |
-| `patient_medical_history_context` | string[] |
+| `patient_medical_diagnosis` | string[] |
+| `patient_medications_suppliments` | string[] |
+| `patient_allergies` | string[] |
+| `patient_sexual_health` | `{ "question", "answer" }[]` |
+| `patient_family_medical_history` | `{ "relation", "age_band", "concern" }[]` |
+| `patient_surgeries` | `{ "name", "performed_when", "reason" }[]` |
 | `patient_lifestyle_environment` | string[] |
 | `patient_goals_priorities` | string[] |
 
