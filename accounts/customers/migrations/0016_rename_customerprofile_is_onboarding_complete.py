@@ -10,9 +10,42 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameField(
-            model_name='customerprofile',
-            old_name='is_onboarding_complete',
-            new_name='is_onboarding_completed',
+        migrations.RunSQL(
+            sql="""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = 'customers_customerprofile'
+                          AND column_name = 'is_onboarding_complete'
+                    ) THEN
+                        ALTER TABLE customers_customerprofile
+                        RENAME COLUMN is_onboarding_complete TO is_onboarding_completed;
+                    END IF;
+                END $$;
+            """,
+            reverse_sql="""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = 'customers_customerprofile'
+                          AND column_name = 'is_onboarding_completed'
+                    ) AND NOT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = 'customers_customerprofile'
+                          AND column_name = 'is_onboarding_complete'
+                    ) THEN
+                        ALTER TABLE customers_customerprofile
+                        RENAME COLUMN is_onboarding_completed TO is_onboarding_complete;
+                    END IF;
+                END $$;
+            """,
         ),
     ]
