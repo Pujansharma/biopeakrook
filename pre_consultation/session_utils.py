@@ -30,7 +30,7 @@ def is_session_completed(session: PreConsultationSession) -> bool:
     return session.status == PreConsultationSessionStatus.COMPLETED
 
 
-def is_customer_onboarding_complete(request: Request) -> bool:
+def is_customer_onboarding_completed(request: Request) -> bool:
     customer_profile = resolve_customer_profile_for_request(
         request.user,
         getattr(request, "customer_profile_id", None),
@@ -38,7 +38,7 @@ def is_customer_onboarding_complete(request: Request) -> bool:
     return customer_profile.is_onboarding_completed
 
 
-def build_onboarding_complete_conflict_response(
+def build_onboarding_completed_conflict_response(
     user,
     session: PreConsultationSession | None = None,
 ) -> Response:
@@ -60,9 +60,9 @@ def guard_onboarding_incomplete_for_mutation(
     request: Request,
     session: PreConsultationSession | None = None,
 ) -> Response | None:
-    if not is_customer_onboarding_complete(request):
+    if not is_customer_onboarding_completed(request):
         return None
-    return build_onboarding_complete_conflict_response(request.user, session)
+    return build_onboarding_completed_conflict_response(request.user, session)
 
 
 def is_user_ready_for_onboarding_session_start(request: Request) -> bool:
@@ -75,10 +75,10 @@ def is_user_ready_for_onboarding_session_start(request: Request) -> bool:
     )
 
 
-def guard_lead_onboarding_complete_for_start(
+def guard_lead_onboarding_completed_for_start(
     request: Request,
     session: PreConsultationSession | None = None,
 ) -> Response | None:
     if is_user_ready_for_onboarding_session_start(request):
         return None
-    return build_onboarding_complete_conflict_response(request.user, session)
+    return build_onboarding_completed_conflict_response(request.user, session)
