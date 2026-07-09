@@ -117,6 +117,16 @@ def build_goals_payload(session: PreConsultationSession) -> list[dict]:
     return sorted(ranked_health_goals, key=lambda health_goal: health_goal["priority"])
 
 
+def build_overview_goals_payload(session: PreConsultationSession) -> list[dict]:
+    return [
+        {
+            "label": health_goal["label"],
+            "priority": health_goal["priority"],
+        }
+        for health_goal in build_goals_payload(session)
+    ]
+
+
 def build_session_result_payload(session: PreConsultationSession) -> dict:
     explored_cluster_ids = build_explored_cluster_ids(session)
     health_system = build_health_system_payload(explored_cluster_ids)

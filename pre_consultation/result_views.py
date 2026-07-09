@@ -99,7 +99,7 @@ class PreConsultationSessionListView(PreConsultationResultBaseView, GetMethodMix
 @extend_schema_view(
     get=extend_schema(
         tags=[PRE_CONSULTATION_RESULT_TAG],
-        description="Overview summary, checklist, and patient goals for a user session.",
+        description="Overview summary, checklist, and ranked health goals for a user session.",
     ),
 )
 class PreConsultationResultOverviewView(PreConsultationResultBaseView, GetMethodMixin):
