@@ -152,7 +152,10 @@ def update_organization_clients_count() -> None:
 
     active_count_subquery = Coalesce(
         Subquery(
-            CustomerProfile.objects.filter(customer__user__is_active=True)
+            CustomerProfile.objects.filter(
+                customer__user__is_active=True,
+                is_converted=True,
+            )
             .values()
             .annotate(count=Count("pk", distinct=True))
             .values("count")[:1]
@@ -161,7 +164,10 @@ def update_organization_clients_count() -> None:
     )
     inactive_count_subquery = Coalesce(
         Subquery(
-            CustomerProfile.objects.filter(customer__user__is_active=False)
+            CustomerProfile.objects.filter(
+                customer__user__is_active=False,
+                is_converted=True,
+            )
             .values()
             .annotate(count=Count("pk", distinct=True))
             .values("count")[:1]

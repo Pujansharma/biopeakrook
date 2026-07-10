@@ -44,6 +44,23 @@ from integrations.metsights.helper import get_or_create_metsights_profile
 PROFILE_FIELDS = ["first_name", "last_name", "gender", "date_of_birth", "image"]
 
 
+def validate_phone_for_customer_create(phone: str) -> None:
+    if Lead.objects.filter(phone__iexact=phone).exists():
+        raise serializers.ValidationError(
+            {
+                "phone": "Phone belongs to a lead. Convert the lead to a client instead.",
+            }
+        )
+    phone_user = User.objects.filter(phone__iexact=phone).first()
+    if phone_user:
+        account_type = get_user_account_type(phone_user)
+        raise serializers.ValidationError(
+            {
+                "phone": f"A user with this phone number already exists as an {account_type} account."
+            }
+        )
+
+
 class CustomerAccountSerializer(BaseModelSerializer):
     """Serializer for customers to view and update their account details"""
 
@@ -118,6 +135,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "is_legacy",
             "is_onboarding_sent",
             "is_onboarding_completed",
+            "is_converted",
             "created_at",
             "updated_at",
         ]
@@ -258,14 +276,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         phone = user_wrapper.get("phone")
         # email = user_wrapper.get("email")
 
-        phone_user = User.objects.filter(phone__iexact=phone).first()
-        if phone_user:
-            account_type = get_user_account_type(phone_user)
-            raise serializers.ValidationError(
-                {
-                    "phone": f"A user with this phone number already exists as an {account_type} account."
-                }
-            )
+        validate_phone_for_customer_create(phone)
 
         profile_data = {
             "first_name": profile_wrapper.get("first_name"),
@@ -396,14 +407,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
         phone = user_wrapper.get("phone")
         contact_email = customer_wrapper.get("contact_email")
 
-        phone_user = User.objects.filter(phone__iexact=phone).first()
-        if phone_user:
-            account_type = get_user_account_type(phone_user)
-            raise serializers.ValidationError(
-                {
-                    "phone": f"A user with this phone number already exists as an {account_type} account."
-                }
-            )
+        validate_phone_for_customer_create(phone)
 
         profile_data = {
             "first_name": profile_wrapper.get("first_name"),
@@ -961,6 +965,10 @@ def build_customer_lead_profile_fallback(
     )
     gender_value = customer_profile.gender
     gender_display = Gender.MAPPING.get(gender_value, gender_value)
+    linked_lead = Lead.objects.filter(phone=user.phone).first()
+    is_client = linked_lead.is_client if linked_lead else customer_profile.is_converted
+    is_joined = linked_lead.is_joined if linked_lead else customer_profile.is_converted
+    converted_on = linked_lead.converted_on if linked_lead else None
     return {
         "id": None,
         "unique_id": None,
@@ -972,12 +980,12 @@ def build_customer_lead_profile_fallback(
         "email": customer.contact_email,
         "description": None,
         "is_active": customer_profile.is_active,
-        "is_client": True,
-        "is_invited": False,
-        "is_joined": True,
+        "is_client": is_client,
+        "is_invited": linked_lead.is_invited if linked_lead else False,
+        "is_joined": is_joined,
         "is_onboarding_sent": customer_profile.is_onboarding_sent,
         "is_onboarding_completed": customer_profile.is_onboarding_completed,
-        "converted_on": None,
+        "converted_on": converted_on,
         "packages": [],
         "home_center": home_center_data,
         "home_center_id": home_center.id if home_center else None,
