@@ -28,12 +28,18 @@ class Command(BaseCommand):
         )
 
         customer_count = (
-            CustomerProfile.objects.filter(customer__user__is_active=True)
+            CustomerProfile.objects.filter(
+                customer__user__is_active=True,
+                is_converted=True,
+            )
             .distinct()
             .count()
         )
         inactive_customer_count = (
-            CustomerProfile.objects.filter(customer__user__is_active=False)
+            CustomerProfile.objects.filter(
+                customer__user__is_active=False,
+                is_converted=True,
+            )
             .distinct()
             .count()
         )

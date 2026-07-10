@@ -219,6 +219,7 @@ class CenterUUIDCustomerProfilesView(BaseListCreateAPIView):
             filter_kwargs["customer_profile__customer__user__is_active"] = bool(
                 int(active)
             )
+        filter_kwargs["customer_profile__is_converted"] = True
 
         account_type = get_user_account_type(user)
         if account_type == UserType.ASSOCIATE:

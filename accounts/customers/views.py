@@ -141,8 +141,9 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
         )
 
     def perform_destroy(self, instance: CustomerCenterAssignment):
-        decrement_customer_count(instance.center.pk)
-        decrement_organization_clients_count()
+        if instance.customer_profile.is_converted:
+            decrement_customer_count(instance.center.pk)
+            decrement_organization_clients_count()
         super().perform_destroy(instance)
 
 
