@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from accounts.utils import get_user_model
 from core.utils.authentication import perform_login_for_user
+from leads.utils.helper import resolve_user_for_direct_phone_login
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseSerializer
 from .models import PhoneVerification
@@ -71,7 +72,7 @@ class DirectPhoneLoginSerializer(BaseSerializer):
 
     def validate(self, attrs):
         phone = attrs.get("phone")
-        user = User.objects.filter(phone__iexact=phone, is_active=True).first()
+        user = resolve_user_for_direct_phone_login(phone)
         if not user:
             raise serializers.ValidationError(
                 {"phone": ["Phone number is not registered."]}

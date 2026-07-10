@@ -352,7 +352,7 @@ class AssociateAvailableProfilesView(BaseListAPIView):
                 full_name=Concat(F("first_name"), Value(" "), F("last_name")),
                 exists=Exists(exists_subquery),
             )
-            .filter(search, **filter_kwargs)
+            .filter(search, is_converted=True, **filter_kwargs)
             .distinct()
             .order_by("-created_at")
         )
