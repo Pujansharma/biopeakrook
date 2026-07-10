@@ -33,15 +33,12 @@ class LeadsView(BaseListCreateAPIView):
         search = Q()
         search_query = self.request.query_params.get("search", "").strip()
         client_query = self.request.query_params.get("client", None)
-        converted_query = self.request.query_params.get("converted", None)
         joined_query = self.request.query_params.get("joined", None)
         invited_query = self.request.query_params.get("invited", None)
         profile_query = self.request.query_params.get("profile", None)
 
         if client_query in ["0", "1"]:
             filter_kwargs["is_client"] = bool(int(client_query))
-        if converted_query in ["0", "1"]:
-            filter_kwargs["is_client"] = bool(int(converted_query))
         if invited_query in ["0", "1"]:
             filter_kwargs["is_invited"] = bool(int(invited_query))
         if joined_query in ["0", "1"]:

@@ -53,10 +53,7 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
     is_legacy = models.BooleanField(default=False)
     is_onboarding_sent = models.BooleanField(default=True)
     is_onboarding_completed = models.BooleanField(default=False)
-    is_converted = models.BooleanField(
-        default=True,
-        help_text="False for shell profiles created at lead login; true after convert-client.",
-    )
+
     created_by = models.ForeignKey(
         User,
         null=True,

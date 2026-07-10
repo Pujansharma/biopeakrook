@@ -948,7 +948,31 @@ Write "ALT elevated at 56 U/L", not "the report shows ALT is elevated".
 - Write flowing clinical prose (no bullet list, no headings, no page numbers).
 - HARD LIMIT: at most 60 words. If it would run longer, keep the most critical \
 findings with their values and drop the rest — never exceed the cap.
-- If there are no patient-specific facts at all, return an empty string.\
+- If there are no patient-specific facts at all, return an empty string.
+
+Before anything else, judge `has_findings`:
+- Set `has_findings` to false if the raw facts you were given do NOT amount to \
+genuine, coherent, patient-specific clinical content — for example the facts \
+look garbled, contradictory, describe something implausible for a medical \
+report, or plainly came from a misread image rather than real report content. \
+When `has_findings` is false, still fill in `title`/`summary` as best you can, \
+but they will be discarded and treated as empty — so do not worry about getting \
+them perfect in that case.
+- Otherwise (the normal case) set `has_findings` to true.
+
+Finally, the criticality flag:
+- `is_flagged`: true ONLY if this document contains something clinically \
+critical the doctor must not miss before the consultation — e.g. a markedly \
+out-of-range value, a red-flag imaging finding, an acute or serious active \
+diagnosis, or an urgent recommendation. Routine, in-range, or minor \
+informational content is NOT flagged. Judge conservatively: reserve the flag for \
+findings that genuinely change what the doctor should address first. (A \
+non-medical document — e.g. a diet plan — can still be flagged if it states \
+something clinically critical.) Never true when `has_findings` is false.
+- `flag_reason`: a brief, HIGH-LEVEL phrase (under ~10 words) naming the KIND of \
+critical finding — NOT an exhaustive list of values, e.g. "Markedly elevated \
+HbA1c and lipid panel", "Red-flag imaging finding", "Uncontrolled diabetes \
+markers". If `is_flagged` is false, return an empty string.\
 """
 
 CONSOLIDATE_HUMAN_PROMPT = """\
@@ -961,5 +985,63 @@ Raw facts from this report (roughly most-weighty first):
 Give the short report `title` (what this report IS) and the single prioritized \
 `summary` paragraph — most abnormal/critical findings first, mentioning LAST (or \
 as needing verification) any finding genuinely incompatible with this patient's \
-age/gender.\
+age/gender. Judge `has_findings` (do these facts represent genuine clinical \
+content). Then decide `is_flagged` (does this contain something clinically \
+critical the doctor must not miss) and give the brief, high-level `flag_reason`.\
+"""
+
+
+# ---------------------------------------------------------------------------
+# Document metadata extraction (extract_insights.py)
+#
+# A single per-document call over the opening pages that pulls two document-LEVEL
+# facts: the date the document was created/issued and the facility/author that
+# issued it. Deliberately generic — a diet plan, letter, or discharge note all
+# carry these, so this is NOT gated on the file being a medical report.
+# ---------------------------------------------------------------------------
+
+DOC_METADATA_SYSTEM_PROMPT = """\
+You extract two pieces of DOCUMENT-LEVEL metadata from the opening pages of an \
+uploaded document: the date it was created/issued, and the facility or author \
+that created/issued it. This applies to ANY document — a lab report, an imaging \
+report, a discharge summary, a diet plan, a doctor's letter — not only medical \
+reports.
+
+You are given the document's first pages as a list of text BLOCKS.
+
+Multiple candidates are common. Find EVERY candidate first, then choose the \
+single best of each.
+
+DATE:
+- List every date you see in `date_candidates`, each tagged with the label the \
+document gave it, e.g. "Reported On: 2024-03-12", "Collected: 2024-03-10", \
+"Printed: 2024-03-13".
+- Then set `report_date` to the ONE that best represents when the document was \
+produced. Prefer, in order: a report / issue / "reported on" date > a \
+sample-collection date > a print date > any other single date.
+- NEVER use the patient's date of birth, an appointment or follow-up date, or a \
+reference-range validity date.
+- Normalise `report_date` to ISO YYYY-MM-DD. If only month and year are given, \
+use the first day of that month. If no usable date exists, set it to null.
+
+LOCATION:
+- List every organisation or person that could be the issuer in \
+`location_candidates`, each tagged with its role, e.g. "Issuing lab: ABC \
+Diagnostics", "Hospital: XYZ Medical Center", "Referring: Dr A".
+- Then set `report_location` to the ONE that CREATED / ISSUED the document — the \
+letterhead lab, clinic, hospital, or author. Do NOT use a referring physician, \
+the patient's home address, or a device/manufacturer brand name.
+- If no issuer is stated, set `report_location` to null.
+
+Extract only what is present. Never invent a date or a facility the text does \
+not contain.\
+"""
+
+DOC_METADATA_HUMAN_PROMPT = """\
+Document opening pages — text blocks:
+
+{blocks}
+
+List all date and location candidates, then select the single best creation \
+date and issuing location.\
 """

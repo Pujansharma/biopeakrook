@@ -109,6 +109,11 @@ _DEFAULT_CATEGORY_ORDER = 5
 
 _REDACTION = "[REDACTED]"
 
+# Document-level metadata (creation date + issuing facility) is read only from
+# the opening pages, where letterheads/headers live — bounding the metadata LLM
+# call's input regardless of how long the full document is.
+_METADATA_PAGE_LIMIT = 3
+
 
 # ---------------------------------------------------------------------------
 # OCR strategy
@@ -204,6 +209,10 @@ class DocumentInsights(BaseModel):
     upload_date: str | None = None
     owner: str | None = None
     summary: str  # one paragraph, most critical/abnormal findings first
+    report_date: str | None = None  # ISO date the document was created/issued
+    report_location: str | None = None  # issuing facility/lab/clinic/author
+    is_flagged: bool = False  # something clinically critical the doctor must review
+    flag_reason: str = ""  # why it was flagged (abnormal biomarkers + LLM reason)
     contains_biomarkers: bool = False  # true if any biomarker measurement was found
     abnormal_biomarkers: list[Biomarker] = Field(
         default_factory=list,
@@ -299,6 +308,60 @@ class _ConsolidatedSummary(BaseModel):
         description="One tight paragraph summarizing the whole report, most "
         "abnormal/critical findings first, then the rest. Empty string if nothing "
         "patient-specific was found."
+    )
+    has_findings: bool = Field(
+        default=True,
+        description="False if the raw facts do not amount to genuine, coherent "
+        "patient-specific clinical content — e.g. they are garbled, "
+        "non-clinical, or otherwise unusable. When False, `title` and `summary` "
+        "are discarded and returned empty regardless of what was written above.",
+    )
+    is_flagged: bool = Field(
+        default=False,
+        description="True only if the document contains something clinically "
+        "critical the doctor must not miss (markedly out-of-range value, red-flag "
+        "finding, acute/serious diagnosis, urgent recommendation).",
+    )
+    flag_reason: str = Field(
+        default="",
+        description="A brief, HIGH-LEVEL phrase (under ~10 words) naming the kind "
+        "of critical finding — e.g. 'Markedly elevated HbA1c and lipid panel', "
+        "'Red-flag imaging finding'. No values, no exhaustive lists. Empty string "
+        "when is_flagged is false.",
+    )
+
+
+class _DocumentMetadata(BaseModel):
+    """Document-level header metadata: when and where the document was created.
+
+    Not specific to medical reports — a diet plan, letter, or discharge note all
+    carry an issue date and an author/facility. Multiple candidates are common
+    (collection vs report vs print date; issuing lab vs referring clinic), so the
+    LLM lists every candidate it finds, then selects the single best of each.
+    """
+
+    report_date: str | None = Field(
+        default=None,
+        description="The single best ISO date (YYYY-MM-DD) for when this document "
+        "was created/issued/reported. Prefer a report/issue date over a "
+        "sample-collection date over a print date. NEVER the patient's date of "
+        "birth. Null if the document states no such date.",
+    )
+    date_candidates: list[str] = Field(
+        default_factory=list,
+        description="Every date found, each labelled with what the document called "
+        "it, e.g. 'Reported On: 2024-03-12', 'Collected: 2024-03-10'. For audit.",
+    )
+    report_location: str | None = Field(
+        default=None,
+        description="The single best name of the facility/lab/clinic/organisation "
+        "or author that CREATED/ISSUED the document (the letterhead/issuer), not a "
+        "referring physician or the patient's address. Null if none is stated.",
+    )
+    location_candidates: list[str] = Field(
+        default_factory=list,
+        description="Every candidate issuer found, each with its role, e.g. "
+        "'Issuing lab: ABC Diagnostics', 'Referring: Dr X Clinic'. For audit.",
     )
 
 
@@ -505,6 +568,10 @@ def _mock_document_insights(metadata: dict | None) -> DocumentInsights:
             "[MOCK] Placeholder report summary; no LLM was called. Critical "
             "findings would lead here, followed by the rest."
         ),
+        report_date="2024-03-12",
+        report_location="[MOCK] ABC Diagnostics",
+        is_flagged=True,
+        flag_reason="[MOCK] ALT elevated at 56 U/L.",
         contains_biomarkers=True,
         abnormal_biomarkers=[
             Biomarker(name="[MOCK] ALT", value="56", unit="U/L", reference_range="7-40")
@@ -1176,6 +1243,36 @@ def _aggregate_biomarkers(
     return bool(biomarkers), abnormal
 
 
+# Cap how many biomarker names appear in a flag_reason — the reason is meant to
+# be a brief, high-level pointer, not an exhaustive value dump.
+_MAX_FLAG_BIOMARKER_NAMES = 3
+
+
+def _resolve_flag(
+    abnormal_biomarkers: list[Biomarker],
+    llm_is_flagged: bool,
+    llm_flag_reason: str,
+) -> tuple[bool, str]:
+    """Combine the two flag sources into a final (is_flagged, flag_reason).
+
+    A document is flagged if EITHER any out-of-range biomarker was found OR the
+    consolidation LLM judged something clinically critical. The reason is kept
+    brief and high-level: at most a few biomarker names (never values/ranges,
+    never the full list) plus the LLM's own short justification."""
+    reasons: list[str] = []
+    if abnormal_biomarkers:
+        names = [b.name for b in abnormal_biomarkers]
+        shown = ", ".join(names[:_MAX_FLAG_BIOMARKER_NAMES])
+        remaining = len(names) - _MAX_FLAG_BIOMARKER_NAMES
+        suffix = f" (+{remaining} more)" if remaining > 0 else ""
+        reasons.append(f"Abnormal biomarkers: {shown}{suffix}.")
+    if llm_is_flagged and llm_flag_reason:
+        reasons.append(llm_flag_reason)
+
+    is_flagged = bool(abnormal_biomarkers) or llm_is_flagged
+    return is_flagged, " ".join(reasons)
+
+
 async def _consolidate(
     facts: list[_RawFact],
     doc_id: str,
@@ -1183,14 +1280,15 @@ async def _consolidate(
     handler,
     age="?",
     gender="?",
-) -> tuple[str, str]:
+) -> tuple[str, str, bool, str]:
     """Name the report and write ONE prioritized summary paragraph from the raw
     per-page facts, most abnormal/critical findings first. Returns
-    (title, summary) — both "" if there is nothing patient-specific. The patient's
-    age/gender are passed so the LLM can de-prioritize demographically implausible
-    findings (likely data errors)."""
+    (title, summary, is_flagged, flag_reason) — title/summary "" and is_flagged
+    False if there is nothing patient-specific. The patient's age/gender are
+    passed so the LLM can de-prioritize demographically implausible findings
+    (likely data errors)."""
     if not facts:
-        return "", ""
+        return "", "", False, ""
 
     # Order facts by category precedence so the weightiest ones lead the input
     # (the prompt then keeps the paragraph critical-first).
@@ -1222,15 +1320,78 @@ async def _consolidate(
             "[consolidate] LLM call failed, falling back to joined facts: %s", exc
         )
         # Degraded fallback: no title, join the (category-ordered) facts so the
-        # document is not lost entirely.
-        return "", " ".join(f.content.rstrip(".") + "." for f in ordered)
+        # document is not lost entirely. No flag opinion on this path — the
+        # deterministic abnormal-biomarker check still runs in the caller.
+        return "", " ".join(f.content.rstrip(".") + "." for f in ordered), False, ""
+
+    has_findings = bool(result.has_findings)
+    if not has_findings:
+        # The LLM judged its own input facts as not genuine clinical content
+        # (garbled, non-clinical, or hallucination-shaped) — discard whatever
+        # title/summary/flag it produced rather than trust text built on a
+        # premise it just disavowed.
+        logger.info(
+            "[consolidate] has_findings=False — discarding title/summary/flag"
+        )
+        return "", "", False, ""
 
     title = (result.title or "").strip()
     summary = (result.summary or "").strip()
+    is_flagged = bool(result.is_flagged)
+    flag_reason = (result.flag_reason or "").strip() if is_flagged else ""
     logger.info(
-        "[consolidate] title=%r, summary generated (%d chars)", title, len(summary)
+        "[consolidate] title=%r, summary generated (%d chars), is_flagged=%s",
+        title,
+        len(summary),
+        is_flagged,
     )
-    return title, summary
+    return title, summary, is_flagged, flag_reason
+
+
+async def _extract_document_metadata(
+    header_blocks: list[_Block],
+    semaphore: asyncio.Semaphore,
+    handler,
+) -> _DocumentMetadata:
+    """Pull document-level creation date + issuing facility from the opening pages.
+
+    Runs one structured LLM call over the first pages' redacted blocks (facility
+    names and report dates are not client PII and survive redaction). Robust to
+    multiple candidates: the LLM enumerates every date/location it sees, then
+    selects the single best of each. Fails soft — any error yields empty metadata
+    so document extraction is never aborted by a missing header."""
+    if not header_blocks:
+        return _DocumentMetadata()
+
+    formatted = _format_blocks(header_blocks)
+    llm = build_llm("extract_document_metadata").with_structured_output(_DocumentMetadata)
+    template = ChatPromptTemplate.from_messages(
+        [
+            ("system", prompts.DOC_METADATA_SYSTEM_PROMPT),
+            ("human", prompts.DOC_METADATA_HUMAN_PROMPT),
+        ]
+    )
+    chain = template | llm
+    config = trace_config(
+        handler, {"step": "extract_document_metadata"}, "document_metadata"
+    )
+    try:
+        async with semaphore:
+            result: _DocumentMetadata = await chain.ainvoke(
+                {"blocks": formatted}, config=config
+            )
+    except Exception as exc:
+        logger.warning("[metadata] extraction failed: %s", exc)
+        return _DocumentMetadata()
+
+    logger.info(
+        "[metadata] date=%r (%d candidate(s)), location=%r (%d candidate(s))",
+        result.report_date,
+        len(result.date_candidates),
+        result.report_location,
+        len(result.location_candidates),
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1284,6 +1445,10 @@ async def _aextract_insights(
                     output={
                         "title": result.title,
                         "summary_chars": len(result.summary),
+                        "report_date": result.report_date,
+                        "report_location": result.report_location,
+                        "is_flagged": result.is_flagged,
+                        "flag_reason": result.flag_reason,
                         "contains_biomarkers": result.contains_biomarkers,
                         "abnormal_biomarker_count": len(result.abnormal_biomarkers),
                         "abnormal_biomarkers": [
@@ -1343,12 +1508,18 @@ async def _run_doc_extraction(
     logger.info("[insights] processing %d page(s) concurrently ...", len(pages))
     logger.debug(f"[insights] page distribution: {dict(sorted((p, len(blocks)) for p, blocks in by_page.items()))}")
 
+    # Document-level metadata (creation date + issuing facility) reads only the
+    # opening pages and runs concurrently with the per-page insight extraction,
+    # sharing the same semaphore, so it adds no extra wall-clock latency.
+    header_blocks = [b for b in blocks if b.page <= _METADATA_PAGE_LIMIT]
+
     with log_stage("extract:page_insights", doc_id=doc_id, client_id=client_id):
-        page_results = await asyncio.gather(
+        metadata_result, *page_results = await asyncio.gather(
+            _extract_document_metadata(header_blocks, semaphore, handler),
             *(
                 _extract_page_insights(page, by_page[page], semaphore, handler)
                 for page in pages
-            )
+            ),
         )
 
     raw_facts: list[_RawFact] = []
@@ -1367,29 +1538,39 @@ async def _run_doc_extraction(
     )
     if raw_facts:
         categories = Counter(f.category for f in raw_facts)
-        logger.debu_aextract_insightsg(f"[insights] raw facts by category: {dict(categories)}")
+        logger.debug(f"[insights] raw facts by category: {dict(categories)}")
 
     contains_biomarkers, abnormal_biomarkers = _aggregate_biomarkers(all_biomarkers)
 
     age = (client_details or {}).get("age", "?")
     gender = (client_details or {}).get("gender", "?")
     with log_stage("extract:consolidate", doc_id=doc_id, client_id=client_id):
-        title, summary = await _consolidate(
+        title, summary, llm_is_flagged, llm_flag_reason = await _consolidate(
             raw_facts, doc_id, semaphore, handler, age, gender
         )
+
+    is_flagged, flag_reason = _resolve_flag(
+        abnormal_biomarkers, llm_is_flagged, llm_flag_reason
+    )
     logger.info(
-        "=== done: %s — title=%r, summary %d chars, biomarkers=%s (%d abnormal) ===",
+        "=== done: %s — title=%r, summary %d chars, biomarkers=%s (%d abnormal), "
+        "flagged=%s ===",
         doc_name,
         title,
         len(summary),
         contains_biomarkers,
         len(abnormal_biomarkers),
+        is_flagged,
     )
 
     return DocumentInsights(
         doc_id=doc_id,
         title=title,
         summary=summary,
+        report_date=metadata_result.report_date,
+        report_location=metadata_result.report_location,
+        is_flagged=is_flagged,
+        flag_reason=flag_reason,
         contains_biomarkers=contains_biomarkers,
         abnormal_biomarkers=abnormal_biomarkers,
     )

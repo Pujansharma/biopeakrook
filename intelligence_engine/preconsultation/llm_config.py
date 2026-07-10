@@ -50,4 +50,10 @@ TASK_CONFIGS: dict[str, TaskLLMConfig] = {
         model="gpt-5.2",
         temperature=0.0,
     ),
+    # extract_document_metadata: pulls document-level creation date + issuing
+    # facility from the opening pages (works for any document, not just reports).
+    "extract_document_metadata": TaskLLMConfig(
+        model="gpt-5-mini",
+        temperature=0.0,
+    ),
 }

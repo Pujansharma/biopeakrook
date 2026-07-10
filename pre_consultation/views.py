@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from accounts.customers.utils.db import mark_customer_profile_onboarding_completed_for_user
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
+from leads.utils.db import mark_lead_onboarding_completed_for_user
 from pre_consultation.models import (
     PreConsultationSession,
     PreConsultationSessionArtifacts,
@@ -18,7 +19,6 @@ from pre_consultation.result import (
     PreConsultationSessionResultSerializer,
     build_session_result_payload,
 )
-from pre_consultation.result_session import get_result_session_context
 from pre_consultation.serializers import (
     PreConsultationSessionResponseSerializer,
     PreConsultationSessionStartSerializer,
@@ -41,6 +41,7 @@ from pre_consultation.utils.schema import (
     pre_consultation_data_envelope,
 )
 from leads.utils.db import mark_lead_onboarding_completed_for_user
+from pre_consultation.completion_worker import spawn_post_completion_generation
 
 SESSION_CONFLICT_ENVELOPE = PreConsultationSessionConflictEnvelope
 SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
@@ -49,8 +50,6 @@ SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
 SESSION_RESULT_ENVELOPE = pre_consultation_data_envelope(
     PreConsultationSessionResultSerializer
 )
-from intelligence_engine.preconsultation.summarize import asummarize_patient
-from intelligence_engine.preconsultation.extract_insights import aextract_insights_batch
 
 
 @extend_schema_view(
@@ -187,214 +186,10 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
                 session=session,
                 defaults={"generation_status": PreConsultationArtifactGenerationStatus.PENDING},
             )
-            transaction.on_commit(
-                lambda: spawn_summarization(session.pk, session.user_id)
-            )
 
             transaction.on_commit(
-                lambda: spawn_report_insights_extraction(session.pk, session.user_id)
+                lambda: spawn_post_completion_generation(session.pk, session.user_id)
             )
-
-
-        '''
-        INCLUDES:
-            PRECONSULTATION SUMMARY
-            FAMILY RISK SUMMARY
-            QUICK SUMMARY
-            DOCTOR'S CHECKLIST
-
-        FUNCTION CALL:
-            asummarize_patient(
-                client_details = {
-                    "patient_baseline": {
-                        "id": "",
-                        "first_name": "",
-                        "last_name": "",
-                        "contact_email": "",
-                        "date_of_birth": "",
-                        "gender": ""
-                    },
-                    "category_selections": [
-                        {
-                        "category_label": ""
-                        }
-                    ],
-                    "concerns": [
-                        {
-                        "concern_label": "",
-                        "functional_impact_id": "",
-                        "functional_impact_label": "",
-                        "duration_impact_label": "",
-                        "progression_impact_id": "",
-                        "progression_impact_label": "",
-                        "confidence_score": 0,
-                        "probe_flagged": false,
-                        "probe_question_count": 0,
-                        "symptoms": [
-                            {
-                            "symptom_label": ""
-                            }
-                        ],
-                        "concern_sources": [
-                            {
-                            "source_label": ""
-                            }
-                        ],
-                        "family_history": [
-                            {
-                            "relation_label": "",
-                            "age_band_label": ""
-                            }
-                        ],
-                        "cluster_probe_answers": [
-                            {
-                            "probe_label": "",
-                            "value": ""
-                            }
-                        ]
-                        }
-                    ],
-                    "medical_history": {
-                        "diagnoses": [
-                        {
-                            "diagnosis_label": ""
-                        }
-                        ],
-                        "medications": [
-                        {
-                            "name": "",
-                            "dosage": "",
-                            "frequency": "",
-                            "duration": ""
-                        }
-                        ],
-                        "allergies": [
-                        {
-                            "name": ""
-                        }
-                        ],
-                        "surgeries": [
-                        {
-                            "name": "",
-                            "area": "",
-                            "performed_when": "",
-                            "reason": ""
-                        }
-                        ],
-                        "sexual_health_answers": [
-                        {
-                            "question_label": "",
-                            "option_id": "",
-                            "option_label": ""
-                        }
-                        ]
-                    },
-                    "cluster_scores": [
-                        {
-                        "cluster_label": "",
-                        "final_score": 0,
-                        "bucket_id": "",
-                        "bucket_label": "",
-                        "lifestyle_signals_triggered": [
-                            {
-                            "signal_label": ""
-                            }
-                        ],
-                        "family_risk_contribution": 0,
-                        "validation_skip_reason": ""
-                        }
-                    ],
-                    "health_goals": [
-                        {
-                        "goal_label": "",
-                        "priority": 0
-                        }
-                    ],
-                    "lifestyle_answers": [
-                        {
-                        "field_label": "",
-                        "option_value": "",
-                        "option_label": ""
-                        }
-                    ]
-                },
-                trigger_webhook = True
-            ) 
-            -> 
-            {
-                "output_style": "" (same as input, not required),
-                "output_size": "" (same as input, not required),
-                "preconsultation_summary": "",
-                "quick_summary": "",
-                "family_risk_summary": "",
-                "preconsultation_checklist": [
-                    {
-                    "probe": "", (main content)
-                    "tag": "",
-                    "score": int,
-                    "reason": "" (supplementary, could be concatenated)
-                    }
-                ]
-            }
-        '''
-
-
-        '''
-        INCLUDES:
-            MEDICAL REPORT INSIGHTS GENERATION
-
-        FUNCTION CALL:
-            aextract_insights_batch(
-                "reports": [
-                    {
-                        "filebytestream": ,
-                        "filename": ",
-                        "metadata": {
-                            "doc_id": "",
-                            "upload_date": YYYY-MM-DD (optional)
-                        },
-                    "client_details": {
-                            "client_id": "",
-                            "name": "",
-                            "age": "",
-                            "gender": ""
-                        }
-                    }
-                ]
-            )
-            ->
-            {
-            "results": [
-                {
-                "doc_id": "",
-                "title": "",
-                "name": null,
-                "upload_date": null,
-                "owner": null,
-                "summary": "",
-                "contains_biomarkers": boolean,
-                "abnormal_biomarkers": 
-                    [
-                        {
-                            "name": "",
-                            "value": "", // Could be phrase-values such as High, Low, A-grade etc.
-                            "unit": "",
-                            "reference_range": ""
-                        }
-                    ]
-                }
-            ],
-            "skipped": [
-                {
-                "doc_id": null,
-                "filename": null,
-                "reason": "",
-                "detail": ""
-                }
-            ]
-            }
-        '''
-
 
         return pre_consultation_response(
             success=True,

@@ -36,6 +36,8 @@ dependencies = [
     "firebase-admin",
     "drf-spectacular>=0.29.0",
     "ruff",
+    "python-dotenv>=1.2.2",
+    "pillow-heif>=1.4.0",
 ]
 
 

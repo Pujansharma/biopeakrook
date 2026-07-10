@@ -125,7 +125,7 @@ class Migration(migrations.Migration):
                 ),
                 ("is_primary", models.BooleanField(default=False, editable=False)),
                 (
-                    "is_onboarding_complete",
+                    "is_onboarding_completed",
                     models.BooleanField(default=False, editable=False),
                 ),
                 (
