@@ -34,7 +34,6 @@ def _lead_customer_profile_data(lead: Lead) -> dict:
     return {
         **_lead_user_profile_data(lead),
         "date_of_birth": lead.date_of_birth,
-        "emergency_contact_phone": lead.phone,
     }
 
 
