@@ -50,10 +50,6 @@ from pre_consultation.utils.directive import (
 
 logger = logging.getLogger(__name__)
 
-
-# --- Thread orchestration ----------------------------------------------------
-
-
 def spawn_post_completion_generation(session_id: str, user_id: str) -> None:
     """Spawn a daemon thread that runs both post-completion generation steps."""
     logger.info(
@@ -68,14 +64,15 @@ def spawn_post_completion_generation(session_id: str, user_id: str) -> None:
 
 
 def _run_post_completion_generation(session_id: str, user_id: str) -> None:
-    """Run summarization then report extraction, each isolated, on this thread."""
     logger.info(
         f"Post-completion generation thread started for session {session_id}",
         extra={"session_id": session_id},
     )
     try:
         try:
+            print('running summary\n'*10)
             run_summarization(session_id, user_id)
+            print('completing summary\n'*10)
         except Exception:
             logger.exception(
                 f"Summarization failed for session {session_id}",
@@ -83,7 +80,9 @@ def _run_post_completion_generation(session_id: str, user_id: str) -> None:
             )
 
         try:
+            print('running insight\n'*10)
             run_report_insights_extraction(session_id, user_id)
+            print('completing insights\n'*10)
         except Exception:
             logger.exception(
                 f"Report insight extraction failed for session {session_id}",
@@ -97,12 +96,7 @@ def _run_post_completion_generation(session_id: str, user_id: str) -> None:
     finally:
         connections.close_all()
 
-
-# --- Summarization -----------------------------------------------------------
-
-
 def run_summarization(session_id: str, user_id: str) -> None:
-    """Fetch session, call summarization LLM, persist results."""
     logger.info(
         f"Starting summarization for session {session_id}",
         extra={"session_id": session_id},
@@ -167,7 +161,6 @@ def _persist_summarization_result(
     artifacts: PreConsultationSessionArtifacts,
     result: dict,
 ) -> None:
-    """Persist LLM result to artifacts and checklist tables."""
     summary = result.get("preconsultation_summary", "")
     family_risk_summary = result.get("family_risk_summary", "")
     checklist_items = result.get("preconsultation_checklist", [])
@@ -207,10 +200,6 @@ def _persist_summarization_result(
         extra={"session_id": str(session.pk)},
     )
 
-
-# --- Summarization payload building ------------------------------------------
-
-
 def build_summarize_client_details(context: ResultSessionContext) -> dict:
     """Transform ResultSessionContext into LLM-required client_details shape.
 
@@ -229,7 +218,6 @@ def build_summarize_client_details(context: ResultSessionContext) -> dict:
 
 
 def _patient_baseline_payload(context: ResultSessionContext) -> dict:
-    """Build patient_baseline dict from customer_profile."""
     if context.customer_profile is None:
         return {
             "id": str(context.session.pk),
@@ -255,7 +243,6 @@ def _patient_baseline_payload(context: ResultSessionContext) -> dict:
 
 
 def _category_selections_payload(context: ResultSessionContext) -> list[dict]:
-    """Build category_selections list with resolved labels."""
     category_label_map = get_directive_category_label_map()
     return [
         {
@@ -269,7 +256,6 @@ def _category_selections_payload(context: ResultSessionContext) -> list[dict]:
 
 
 def _concerns_payload(context: ResultSessionContext) -> list[dict]:
-    """Build concerns list with nested symptoms, sources, family_history, probe_answers."""
     concern_label_map = get_directive_concern_label_map()
     functional_impact_map = get_directive_impact_label_map("functional_impact")
     duration_impact_map = get_directive_impact_label_map("duration_impact")
@@ -368,7 +354,6 @@ def _concerns_payload(context: ResultSessionContext) -> list[dict]:
 
 
 def _medical_history_payload(context: ResultSessionContext) -> dict:
-    """Build medical_history dict with diagnoses, medications, allergies, surgeries, sexual_health_answers."""
     if context.medical_history is None:
         return {}
 
@@ -401,7 +386,6 @@ def _medical_history_payload(context: ResultSessionContext) -> dict:
     surgeries = [
         {
             "name": surgery.name,
-            "area": surgery.area,
             "performed_when": surgery.performed_when,
             "reason": surgery.reason,
         }
@@ -424,7 +408,6 @@ def _medical_history_payload(context: ResultSessionContext) -> dict:
 
 
 def _sexual_health_answers_payload(context: ResultSessionContext) -> list[dict]:
-    """Build sexual_health_answers list (best-effort, handles missing gender/questions gracefully)."""
     if context.medical_history is None or context.customer_profile is None:
         return []
 
@@ -469,7 +452,6 @@ def _sexual_health_answers_payload(context: ResultSessionContext) -> list[dict]:
 
 
 def _cluster_scores_payload(context: ResultSessionContext) -> list[dict]:
-    """Build cluster_scores list with resolved lifestyle signal labels."""
     lifestyle_signal_label_map = get_directive_lifestyle_signal_label_map()
 
     return [
@@ -495,7 +477,6 @@ def _cluster_scores_payload(context: ResultSessionContext) -> list[dict]:
 
 
 def _health_goals_payload(context: ResultSessionContext) -> list[dict]:
-    """Build health_goals list with resolved labels, ordered by priority."""
     health_goal_label_map = _build_health_goal_label_map()
 
     return [
@@ -508,7 +489,6 @@ def _health_goals_payload(context: ResultSessionContext) -> list[dict]:
 
 
 def _lifestyle_answers_payload(context: ResultSessionContext) -> list[dict]:
-    """Build lifestyle_answers list with resolved field and option labels."""
     lifestyle_fields = get_directive_lifestyle_fields()
 
     field_label_map = {lf["id"]: lf["label"] for lf in lifestyle_fields}
@@ -532,17 +512,11 @@ def _lifestyle_answers_payload(context: ResultSessionContext) -> list[dict]:
 
 
 def _build_concern_source_label_map() -> dict[str, str]:
-    """Build concern_source id→label map from directive data."""
     return {cs["id"]: cs["label"] for cs in get_directive_concern_sources()}
 
 
 def _build_health_goal_label_map() -> dict[str, str]:
-    """Build health_goal id→label map from directive data."""
     return {hg["id"]: hg["label"] for hg in get_directive_health_goals()}
-
-
-# --- Medical report insight extraction ---------------------------------------
-
 
 def run_report_insights_extraction(session_id: str, user_id: str) -> None:
     """Fetch uploaded reports, call extraction LLM, persist results."""
@@ -588,11 +562,7 @@ def run_report_insights_extraction(session_id: str, user_id: str) -> None:
             _mark_reports_failed(doc_ids)
 
 
-# --- Extraction payload building ---------------------------------------------
-
-
 def build_extract_insights_reports(context: ResultSessionContext) -> list[dict]:
-    """Build the `reports` list for extract_insights_batch from a session's uploaded medical reports."""
     if context.medical_history is None:
         return []
 
@@ -617,11 +587,9 @@ def build_extract_insights_reports(context: ResultSessionContext) -> list[dict]:
         for report in context.medical_history.medical_reports.all()
     ]
 
-
 def _extraction_client_identity(
     context: ResultSessionContext,
 ) -> tuple[str, int | None, str]:
-    """Resolve (name, age, gender) for extraction client_details from customer_profile."""
     if context.customer_profile is None:
         return "", None, ""
 
@@ -630,12 +598,7 @@ def _extraction_client_identity(
     age = calculate_age(profile.date_of_birth) if profile.date_of_birth else None
     return name, age, profile.gender or ""
 
-
-# --- Extraction persistence ---------------------------------------------------
-
-
 def _parse_testing_date(report_date: str | None) -> date | None:
-    """Parse an ISO `report_date` string into a date, or None if absent/unparseable."""
     if not report_date:
         return None
     try:
@@ -646,12 +609,6 @@ def _parse_testing_date(report_date: str | None) -> date | None:
 
 
 def _persist_extraction_results(result: dict) -> None:
-    """Persist an extract_insights_batch result into PreConsultationMedicalReportSummary.
-
-    `doc_id` in both `results` and `skipped` is the PreConsultationMedicalReport
-    pk (set by build_extract_insights_reports), so it's used directly as the
-    lookup key — one summary row per report, keyed by that FK.
-    """
     processed = result.get("results", [])
     skipped = result.get("skipped", [])
 
@@ -703,9 +660,7 @@ def _persist_extraction_results(result: dict) -> None:
         f"{len(skipped)} skipped/failed"
     )
 
-
 def _mark_reports_failed(doc_ids: list[str]) -> None:
-    """Mark every report in `doc_ids` as FAILED after the extraction call itself blew up."""
     reports = PreConsultationMedicalReport.objects.filter(pk__in=doc_ids)
     for report in reports:
         PreConsultationMedicalReportSummary.objects.update_or_create(
