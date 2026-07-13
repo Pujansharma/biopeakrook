@@ -70,9 +70,7 @@ def _run_post_completion_generation(session_id: str, user_id: str) -> None:
     )
     try:
         try:
-            print('running summary\n'*10)
             run_summarization(session_id, user_id)
-            print('completing summary\n'*10)
         except Exception:
             logger.exception(
                 f"Summarization failed for session {session_id}",
@@ -80,9 +78,7 @@ def _run_post_completion_generation(session_id: str, user_id: str) -> None:
             )
 
         try:
-            print('running insight\n'*10)
             run_report_insights_extraction(session_id, user_id)
-            print('completing insights\n'*10)
         except Exception:
             logger.exception(
                 f"Report insight extraction failed for session {session_id}",
