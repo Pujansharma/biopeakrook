@@ -1716,8 +1716,8 @@ async def _run_reports(
         if langfuse_client is not None:
             try:
                 langfuse_client.flush()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to flush Langfuse client: %s", exc, exc_info=True)
 
     results: list = []
     for (_idx, report), outcome in zip(to_process, outcomes):
