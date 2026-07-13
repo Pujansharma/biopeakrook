@@ -15,7 +15,7 @@ and maintainable — when anomaly detection rules change, update the fragment
 and all prompts inherit the change.
 """
 
-import os
+from decouple import config
 
 from intelligence_engine.preconsultation import prompt_fragments
 
@@ -427,9 +427,7 @@ _CHECKLIST_PROBE_REGISTERS: dict[str, dict[str, str]] = {
     },
 }
 
-ACTIVE_CHECKLIST_REGISTER = os.environ.get(
-    "PRECONS_CHECKLIST_REGISTER", "associate_v3"
-)
+ACTIVE_CHECKLIST_REGISTER = config("PRECONS_CHECKLIST_REGISTER", default="associate_v3")
 
 
 def _probe_register() -> dict[str, str]:

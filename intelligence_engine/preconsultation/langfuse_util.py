@@ -21,6 +21,7 @@ import logging
 import os
 from contextlib import contextmanager
 
+from decouple import config
 from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 
@@ -28,22 +29,23 @@ logger = logging.getLogger(__name__)
 
 # Bound the spend query so a slow/unreachable Langfuse never stalls a run: it
 # fails fast and cost gating treats spend as 0.0 (fail-open). Tunable via env.
-_SPEND_FETCH_TIMEOUT = float(os.environ.get("INSIGHT_SPEND_FETCH_TIMEOUT", "60"))
+_SPEND_FETCH_TIMEOUT = config("INSIGHT_SPEND_FETCH_TIMEOUT", default=60, cast=float)
 # Cap pagination so an enormous trace history can't turn into an unbounded loop.
-_SPEND_MAX_PAGES = int(os.environ.get("INSIGHT_SPEND_FETCH_MAX_PAGES", "20"))
+_SPEND_MAX_PAGES = config("INSIGHT_SPEND_FETCH_MAX_PAGES", default=20, cast=int)
 
 
 def _credentials_present() -> bool:
-    return bool(os.environ.get("LANGFUSE_SECRET_KEY"))
+    return bool(config("LANGFUSE_SECRET_KEY", default=""))
 
 
 def _bridge_env(environment: str) -> None:
     """Map the user's LANGFUSE_BASE_URL onto the SDK's LANGFUSE_HOST and set the
     tracing environment env var (read by langfuse v3)."""
-    base_url = os.environ.get("LANGFUSE_BASE_URL")
-    if base_url and not os.environ.get("LANGFUSE_HOST"):
+    base_url = config("LANGFUSE_BASE_URL", default="")
+    if base_url and not config("LANGFUSE_HOST", default=""):
         os.environ["LANGFUSE_HOST"] = base_url
-    os.environ.setdefault("LANGFUSE_TRACING_ENVIRONMENT", environment)
+    if not config("LANGFUSE_TRACING_ENVIRONMENT", default=""):
+        os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = environment
 
 
 def build_callback_handler(environment: str) -> LangfuseCallbackHandler | None:

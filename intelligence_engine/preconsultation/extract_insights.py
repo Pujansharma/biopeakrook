@@ -33,13 +33,13 @@ import difflib
 import hashlib
 import logging
 import re
-import os
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 import json
 
+from decouple import config
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -477,7 +477,7 @@ _IMAGE_TOKEN_ESTIMATE = 800
 
 def _token_limit() -> int | None:
     """Per-file input-token ceiling from INSIGHT_EXTRACTION_TOKEN_LIMIT, or None."""
-    raw = os.environ.get("INSIGHT_EXTRACTION_TOKEN_LIMIT")
+    raw = config("INSIGHT_EXTRACTION_TOKEN_LIMIT", default="")
     return int(raw) if raw else None
 
 
@@ -485,7 +485,7 @@ def _resolve_budget(budget: float | None) -> float | None:
     """Return the explicit `budget`, else INSIGHT_EXTRACTION_BUDGET, else None."""
     if budget is not None:
         return budget
-    raw = os.environ.get("INSIGHT_EXTRACTION_BUDGET")
+    raw = config("INSIGHT_EXTRACTION_BUDGET", default="")
     return float(raw) if raw else None
 
 

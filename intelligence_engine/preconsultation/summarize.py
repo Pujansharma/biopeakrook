@@ -7,12 +7,12 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import threading
 from datetime import date
 from time import perf_counter
 from typing import Literal
 
+from decouple import config
 import requests
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
@@ -85,7 +85,9 @@ async def _run_llm(stage: str, client_id: str, coro):
     return result
 
 
-WEBHOOK_URL = os.environ.get("TOOLS_URL", "http://localhost:8005") + os.environ.get("PRECONS_TOOL_TRIGGER_API", "/preconsultation/v1/onboarding-webhook")
+WEBHOOK_URL = config("TOOLS_URL", default="http://localhost:8005") + config(
+    "PRECONS_TOOL_TRIGGER_API", default="/preconsultation/v1/onboarding-webhook"
+)
 
 # Concern-mode axes: a node with pressing findings may warrant probing here.
 # Ordered by clinical urgency (see _CONCERN_TAG_WEIGHT).
@@ -408,7 +410,7 @@ def _post_webhook(payload: dict) -> None:
     """Blocking POST to the preconsultation tool webhook; response is logged."""
     try:
         body = json.dumps(payload, separators=(",", ":")).encode()
-        secret = os.environ.get("ONBOARDING_WEBHOOK_SECRET", "")
+        secret = config("ONBOARDING_WEBHOOK_SECRET", default="")
         signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         headers = {
             "Content-Type": "application/json",
