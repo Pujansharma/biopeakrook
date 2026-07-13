@@ -151,8 +151,11 @@ def trace_span(
         if span_cm is not None:
             try:
                 span_cm.__exit__(None, None, None)
-            except Exception:
-                pass
+            except Exception as cleanup_exc:
+                logger.debug(
+                    "[langfuse] span cleanup after failed init raised: %s",
+                    cleanup_exc,
+                )
         yield None, None
         return
     try:
@@ -160,8 +163,8 @@ def trace_span(
     finally:
         try:
             span_cm.__exit__(None, None, None)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("[langfuse] span __exit__ failed: %s", exc)
 
 
 def doc_trace_span(
@@ -222,8 +225,8 @@ def fetch_client_spend(environment: str, client_id: str) -> float:
     finally:
         try:
             client.flush()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("[langfuse] client flush failed in fetch_client_spend: %s", exc)
 
 
 def _sum_trace_cost(client, environment: str, client_id: str) -> float:

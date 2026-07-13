@@ -40,7 +40,7 @@ from intelligence_engine.preconsultation.salience import (
 logger = logging.getLogger(__name__)
 
 LANGFUSE_ENVIRONMENT = "onboarding-summary"
-
+_CHECKLIST_LIMIT = 10
 
 def _run_config(callbacks: list | None) -> dict:
     """LangChain invoke config: the callbacks plus the langfuse reserved run keys
@@ -696,7 +696,7 @@ async def _run_patient_pipeline(
     )
 
     # Score the (shared) checklist once; every size variant carries the same one.
-    checklist_items = _score_hypotheses(checklist_raw.probe_hypotheses)
+    checklist_items = _score_hypotheses(checklist_raw.probe_hypotheses)[:_CHECKLIST_LIMIT]
 
     results = [
         _assemble_variant(output_style, sz, variant, checklist_items)
@@ -827,8 +827,8 @@ async def asummarize_patient(
         if langfuse_client is not None:
             try:
                 langfuse_client.flush()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("[langfuse] client flush failed: %s", exc)
     return result
 
 

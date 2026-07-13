@@ -34,7 +34,7 @@ import hashlib
 import logging
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 import json
@@ -68,7 +68,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 LANGFUSE_ENVIRONMENT = "preconsultation-report-prasing"
-
 SUPPORTED_EXTENSIONS = {
     "pdf", "docx", "jpg", "jpeg", "png", "heic", "heif", "webp", "txt", "md"
 }
@@ -733,7 +732,13 @@ def _image_identity(doc, xref: int) -> str:
     try:
         raw = doc.extract_image(xref)["image"]
         return hashlib.md5(raw).hexdigest()
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "[pdf] image identity hash failed for xref %s, falling back to "
+            "xref-based identity (dedupe may miss this image): %s",
+            xref,
+            exc,
+        )
         return f"xref:{xref}"
 
 
@@ -794,7 +799,14 @@ def _plan_pdf_images(doc, config: OCRConfig) -> tuple[list[_ImageJob], dict]:
             ident = _image_identity(doc, xref)
             try:
                 rects = page.get_image_rects(xref)
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "[pdf] get_image_rects failed for xref %s on page %d, "
+                    "skipping this image: %s",
+                    xref,
+                    page_no,
+                    exc,
+                )
                 rects = []
             for rect_idx, rect in enumerate(rects):
                 w, h = rect.width, rect.height
@@ -1025,7 +1037,12 @@ async def _read_docx(
         if "image" in rel.reltype:
             try:
                 png_bytes = rel.target_part.blob
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "[docx] embedded image %d blob read failed, skipping: %s",
+                    img_idx,
+                    exc,
+                )
                 continue
             image_coros.append(
                 _read_image_block(
@@ -1717,7 +1734,7 @@ async def _run_reports(
             try:
                 langfuse_client.flush()
             except Exception as exc:
-                logger.debug("Failed to flush Langfuse client: %s", exc, exc_info=True)
+                logger.warning("[langfuse] client flush failed: %s", exc)
 
     results: list = []
     for (_idx, report), outcome in zip(to_process, outcomes):

@@ -32,7 +32,6 @@ from intelligence_engine.preconsultation import prompt_fragments
 
 OUTPUT_STYLES = ("paragraph", "markdown")
 OUTPUT_SIZES = ("small", "medium", "large", "all")
-_CONCRETE_SIZES = ("small", "medium", "large")
 
 _SUMMARY_PREAMBLE = """\
 You are a clinical pre-consultation assistant. A doctor reads your output in \
