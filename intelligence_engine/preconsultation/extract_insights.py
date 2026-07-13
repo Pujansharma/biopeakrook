@@ -544,7 +544,7 @@ def _estimate_input_tokens(filename: str, filebytestream: bytes) -> int:
     try:
         text, image_count = _pre_read_text(ext, filebytestream)
     except Exception as exc:
-        logger.warning("[cost] input-token pre-read failed for %s: %s", filename, exc)
+        logger.warning("[cost] input-token pre-read failed for %s: %s", filename, exc, exc_info=True)
         return 0
     return count_tokens(text, _EXTRACT_MODEL) + image_count * _IMAGE_TOKEN_ESTIMATE
 
@@ -710,7 +710,7 @@ async def _read_image_block(
             resp = await llm.ainvoke([msg], config=config)
     except Exception as exc:
         logger.warning(
-            "  [image] read failed (page %s, %s): %s", page, block_id, exc
+            "  [image] read failed (page %s, %s): %s", page, block_id, exc, exc_info=True
         )
         return None
 
@@ -1170,7 +1170,7 @@ async def _extract_page_insights(
                 {"page": page, "blocks": formatted}, config=config
             )
     except Exception as exc:
-        logger.warning("[insights] page %d — failed: %s", page, exc)
+        logger.warning("[insights] page %d — failed: %s", page, exc, exc_info=True)
         return _PageInsights()
 
     logger.info(
@@ -1317,7 +1317,7 @@ async def _consolidate(
             )
     except Exception as exc:
         logger.warning(
-            "[consolidate] LLM call failed, falling back to joined facts: %s", exc
+            "[consolidate] LLM call failed, falling back to joined facts: %s", exc, exc_info=True
         )
         # Degraded fallback: no title, join the (category-ordered) facts so the
         # document is not lost entirely. No flag opinion on this path — the
@@ -1381,7 +1381,7 @@ async def _extract_document_metadata(
                 {"blocks": formatted}, config=config
             )
     except Exception as exc:
-        logger.warning("[metadata] extraction failed: %s", exc)
+        logger.warning("[metadata] extraction failed: %s", exc, exc_info=True)
         return _DocumentMetadata()
 
     logger.info(
@@ -1727,6 +1727,7 @@ async def _run_reports(
                 "[extract] document failed (doc_id=%s): %s",
                 meta.get("doc_id"),
                 outcome,
+                exc_info=outcome,
             )
             skipped.append(
                 SkippedFile(

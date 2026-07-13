@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import logging
 
+from decouple import config
 from langchain_openai import ChatOpenAI
 
 from intelligence_engine.preconsultation.llm_config import TASK_CONFIGS
 
 logger = logging.getLogger(__name__)
+
+OPENAI_API_KEY = config("OPENAI_API_KEY")
 
 # Models that reject a custom `temperature` (only the default of 1 is allowed):
 # the GPT-5 family and the o-series reasoning models.
@@ -48,4 +51,4 @@ def build_llm(task: str, model: str | None = None) -> ChatOpenAI:
     kwargs.update(cfg.extra)  # per-task extra overrides the defaults above
     if pass_temperature:
         kwargs["temperature"] = cfg.temperature
-    return ChatOpenAI(model=chosen, **kwargs)
+    return ChatOpenAI(model=chosen, api_key=OPENAI_API_KEY, **kwargs)

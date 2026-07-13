@@ -250,25 +250,12 @@ def _score_hypotheses(hypotheses: list[_HypothesisBase]) -> list[ChecklistProbe]
     the single best probe of another tag. Final list is sorted by the adjusted
     score, descending.
     """
-    logger.debug(
-        "[score] scoring %d hypotheses (tag_rank_decay=%s)",
-        len(hypotheses),
-        _TAG_RANK_DECAY,
-    )
-
     # First pass: base score per hypothesis.
     scored: list[tuple[_HypothesisBase, float]] = []
     for h in hypotheses:
         tag_weight = _TAG_WEIGHT.get(h.tag, _DEFAULT_TAG_WEIGHT)
         base = h.probability * tag_weight
         scored.append((h, base))
-        logger.debug(
-            "[score]   tag=%r prob=%.3f x tag_weight=%.2f -> base=%.3f",
-            h.tag,
-            h.probability,
-            tag_weight,
-            base,
-        )
 
     # Group by tag and apply the rank decay within each tag.
     by_tag: dict[str, list[tuple[_HypothesisBase, float]]] = {}
@@ -278,22 +265,9 @@ def _score_hypotheses(hypotheses: list[_HypothesisBase]) -> list[ChecklistProbe]
     items: list[ChecklistProbe] = []
     for tag, group in by_tag.items():
         group.sort(key=lambda hb: hb[1], reverse=True)
-        logger.debug(
-            "[score] tag=%r has %d hypotheses -> applying intra-tag rank decay",
-            tag,
-            len(group),
-        )
         for rank, (h, base) in enumerate(group):
             decay = _TAG_RANK_DECAY**rank
             adjusted = base * decay
-            logger.debug(
-                "[score]   rank=%d base=%.3f x decay=%.3f -> adjusted=%.3f%s",
-                rank,
-                base,
-                decay,
-                adjusted,
-                "  <-- suppressed by rank" if rank > 0 else "",
-            )
             items.append(
                 ChecklistProbe(
                     probe=h.probe,
@@ -303,15 +277,7 @@ def _score_hypotheses(hypotheses: list[_HypothesisBase]) -> list[ChecklistProbe]
                 )
             )
     items.sort(key=lambda i: i.score, reverse=True)
-    logger.debug("[score] final checklist order (after cross-tag re-sort):")
-    for i, item in enumerate(items):
-        logger.debug(
-            "[score]   #%d  score=%.3f  tag=%r  probe=%r",
-            i + 1,
-            item.score,
-            item.tag,
-            item.probe,
-        )
+    logger.debug("[score] %d hypotheses scored into %d checklist item(s)", len(hypotheses), len(items))
     return items
 
 
@@ -348,14 +314,6 @@ async def areorder_onboarding_summary(
         ),
     )
     reordered = (out.summary or "").strip()
-    logger.debug(
-        "\n################## ONBOARDING SUMMARY REORDER ##################\n"
-        "[priority order]\n%s\n\n[before]\n%s\n\n[after]\n%s\n"
-        "################## END REORDER ##################",
-        priority_order,
-        summary_text,
-        reordered,
-    )
     return reordered or summary_text
 
 
@@ -395,14 +353,6 @@ async def areorder_family_risk_summary(
         ),
     )
     reordered = (out.summary or "").strip()
-    logger.debug(
-        "\n################## FAMILY-RISK REORDER ##################\n"
-        "[priority order]\n%s\n\n[before]\n%s\n\n[after]\n%s\n"
-        "################## END REORDER ##################",
-        priority_order,
-        family_text,
-        reordered,
-    )
     return reordered or family_text
 
 
@@ -608,20 +558,6 @@ async def _generate_summaries(
         _client_id(client_details),
         summary_chain.ainvoke(summary_inputs, config=_run_config(callbacks)),
     )
-    logger.debug(
-        "\n"
-        "################## LLM CALL 1 (summaries, style=%s size=%s) — OUTPUT ##################\n"
-        "[preconsultation_summary]\n%s\n\n"
-        "[quick_summary]\n%s\n\n"
-        "[family_risk_summary] (present=%s)\n%s\n"
-        "################## END CALL 1 OUTPUT ##################",
-        output_style,
-        output_size,
-        summaries_raw.preconsultation_summary,
-        summaries_raw.quick_summary,
-        summaries_raw.family_risk_present,
-        summaries_raw.family_risk_summary,
-    )
     # No family history in the data -> nothing to summarize; force empty + flag off
     # and skip its reorder (guards against the LLM hallucinating a family-risk
     # paragraph). Otherwise the flag is the LLM's own noteworthy judgment.
@@ -754,19 +690,9 @@ async def _run_patient_pipeline(
         ),
     )
 
-    output_lines = "\n".join(
-        f"  - tag={h.tag!r} prob={h.probability:.3f}\n"
-        f"      probe : {h.probe}\n"
-        f"      reason: {h.reason}"
-        for h in checklist_raw.probe_hypotheses
-    )
     logger.debug(
-        "\n"
-        "################## LLM CALL 2 (checklist) — OUTPUT (%d raw hypotheses, pre-scoring) ##################\n"
-        "%s\n"
-        "################## END CALL 2 OUTPUT ##################",
+        "[checklist] %d raw hypotheses returned, pre-scoring",
         len(checklist_raw.probe_hypotheses),
-        output_lines,
     )
 
     # Score the (shared) checklist once; every size variant carries the same one.
@@ -879,12 +805,6 @@ async def asummarize_patient(
                 client_id=client_id,
                 cause=exc,
             ) from exc
-
-        logger.debug(
-            "[preprocess] checklist seeds (deterministic gaps):\n%s", seeds
-        )
-        # NOTE: the full prioritized profile text is shown inline in the rendered
-        # LLM CALL 1/2 input prompts below, so it is not dumped separately here.
 
         # One parent Langfuse span per client: both LLM calls and every reorder
         # pass nest under it as a single expandable trace (patient_trace_span).

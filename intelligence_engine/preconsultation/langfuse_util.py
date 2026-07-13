@@ -18,7 +18,6 @@ carries `user_id` (= client_id, the dimension `fetch_client_spend` queries),
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import contextmanager
 
 from decouple import config
@@ -38,14 +37,19 @@ def _credentials_present() -> bool:
     return bool(config("LANGFUSE_SECRET_KEY", default=""))
 
 
-def _bridge_env(environment: str) -> None:
-    """Map the user's LANGFUSE_BASE_URL onto the SDK's LANGFUSE_HOST and set the
-    tracing environment env var (read by langfuse v3)."""
-    base_url = config("LANGFUSE_BASE_URL", default="")
-    if base_url and not config("LANGFUSE_HOST", default=""):
-        os.environ["LANGFUSE_HOST"] = base_url
-    if not config("LANGFUSE_TRACING_ENVIRONMENT", default=""):
-        os.environ["LANGFUSE_TRACING_ENVIRONMENT"] = environment
+def _client_kwargs(environment: str) -> dict:
+    """Explicit Langfuse credentials read via decouple, passed straight to the
+    SDK constructor rather than left for it to pick up from os.environ (which
+    is never populated now that scripts don't call load_dotenv)."""
+    kwargs = {
+        "secret_key": config("LANGFUSE_SECRET_KEY", default=""),
+        "public_key": config("LANGFUSE_PUBLIC_KEY", default=""),
+        "environment": environment,
+    }
+    host = config("LANGFUSE_BASE_URL", default="") or config("LANGFUSE_HOST", default="")
+    if host:
+        kwargs["host"] = host
+    return kwargs
 
 
 def build_callback_handler(environment: str) -> LangfuseCallbackHandler | None:
@@ -53,9 +57,10 @@ def build_callback_handler(environment: str) -> LangfuseCallbackHandler | None:
     if not _credentials_present():
         logger.debug("[langfuse] LANGFUSE_SECRET_KEY not set -> tracing disabled")
         return None
-    _bridge_env(environment)
+    kwargs = _client_kwargs(environment)
     try:
-        return LangfuseCallbackHandler()
+        Langfuse(**kwargs)  # registers/initializes the client the handler binds to
+        return LangfuseCallbackHandler(public_key=kwargs["public_key"])
     except Exception as exc:
         logger.warning("Langfuse handler could not be initialized: %s", exc)
         return None
@@ -65,9 +70,8 @@ def build_client(environment: str):
     """Return a Langfuse client if credentials are present, else None."""
     if not _credentials_present():
         return None
-    _bridge_env(environment)
     try:
-        return Langfuse()
+        return Langfuse(**_client_kwargs(environment))
     except Exception as exc:
         logger.warning("Langfuse client could not be initialized: %s", exc)
         return None
