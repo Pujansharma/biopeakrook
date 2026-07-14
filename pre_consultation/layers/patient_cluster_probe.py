@@ -2,8 +2,6 @@
 
 from rest_framework import serializers
 
-from django.utils import timezone
-
 from pre_consultation.cluster_scoring import persist_session_cluster_scores
 from pre_consultation.layers.patient_lifestyle_environment import (
     get_probe_flagged_cluster_ids,
@@ -223,8 +221,8 @@ def build_patient_cluster_probe_put_context(session, request) -> dict:
     }
 
 
-def persist_patient_cluster_probe_payload(
-    user, session: PreConsultationSession, validated_data: dict
+def write_patient_cluster_probe_answers(
+    session: PreConsultationSession, validated_data: dict
 ) -> None:
     for concern_data in validated_data["concerns"]:
         concern = session.concerns.get(concern_id=concern_data["id"])
@@ -256,5 +254,18 @@ def persist_patient_cluster_probe_payload(
 
     persist_session_cluster_scores(session, get_session_lifestyle_answers(session))
 
+
+def persist_patient_cluster_probe_payload(
+    user, session: PreConsultationSession, validated_data: dict
+) -> None:
+    write_patient_cluster_probe_answers(session, validated_data)
     session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
+    session.save(update_fields=["current_layer", "updated_at"])
+
+
+def persist_patient_cluster_probe_v2_payload(
+    user, session: PreConsultationSession, validated_data: dict
+) -> None:
+    write_patient_cluster_probe_answers(session, validated_data)
+    session.current_layer = PreConsultationLayerProgression.PATIENT_HEALTH_MAP
     session.save(update_fields=["current_layer", "updated_at"])

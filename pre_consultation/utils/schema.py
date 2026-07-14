@@ -55,22 +55,29 @@ PRE_CONSULTATION_OPENAPI_DESCRIPTION = (
     "patient_symptom → patient_concern_probe → patient_medical_history_context → "
     "patient_lifestyle_environment → patient_cluster_probe (conditional) → "
     "patient_goals_priorities → patient_health_map (GET result) → complete. "
-    "Human-readable reference: api-pre-consultation.md. "
+    "Human-readable reference: api-pre-consultation-v1.md / api-pre-consultation-v2.md. "
     "OpenAPI schema: /pre-consultation/openapi/ · Swagger UI: /pre-consultation/openapi/docs/."
 )
 
 PRE_CONSULTATION_PATH_ORDER: tuple[str, ...] = (
     "/pre-consultation/session/start/",
     "/pre-consultation/session/patient_baseline/",
+    "/pre-consultation/session/patient_baseline/v2/",
     "/pre-consultation/session/patient_category/",
     "/pre-consultation/session/patient_concern/",
+    "/pre-consultation/session/patient_concern/v2/",
     "/pre-consultation/session/patient_symptom/",
     "/pre-consultation/session/patient_concern_probe/",
+    "/pre-consultation/session/patient_concern_probe/v2/",
     "/pre-consultation/session/patient_medical_history_context/",
     "/pre-consultation/session/patient_lifestyle_environment/",
+    "/pre-consultation/session/patient_lifestyle_environment/v2/",
     "/pre-consultation/session/patient_cluster_probe/",
+    "/pre-consultation/session/patient_cluster_probe/v2/",
     "/pre-consultation/session/patient_goals_priorities/",
+    "/pre-consultation/session/patient_goals_priorities/v2/",
     "/pre-consultation/session/result/",
+    "/pre-consultation/session/result/v2/",
     "/pre-consultation/session/complete/",
     "/pre-consultation/result/list/",
     "/pre-consultation/result/{user_id}/overview/",
