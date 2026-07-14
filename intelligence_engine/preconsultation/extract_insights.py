@@ -1768,6 +1768,8 @@ def _run_sync(coro):
 
         nest_asyncio.apply()
     except RuntimeError:
+        # No running event loop in this thread; this is expected and we
+        # intentionally fall back to asyncio.run(coro) below.
         pass
     return asyncio.run(coro)
 
