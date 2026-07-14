@@ -92,6 +92,11 @@ def _webhook_url() -> str:
             "TOOLS_URL is not set. The onboarding webhook has no endpoint to post "
             "to. Set it, or call with trigger_webhook=False."
         )
+    if not base.lower().startswith("https://"):
+        raise ValueError(
+            f"TOOLS_URL must use https, got {base!r}. The onboarding webhook posts "
+            "patient PII and must not be sent over plain http."
+        )
     path = config(
         "PRECONS_TOOL_TRIGGER_API", default="/preconsultation/v1/onboarding-webhook"
     )
@@ -376,6 +381,10 @@ async def areorder_family_risk_summary(
 
 
 def _post_webhook(payload: dict, url: str, secret: str) -> None:
+    """Runs on a background thread. The actual network call (DNS, connect,
+    timeout, non-2xx, etc.) is swallowed and logged as a warning only — it
+    must NOT propagate, since there is nothing on the main thread left to
+    catch it and a delivery failure here is not fatal to the summary run."""
     try:
         body = json.dumps(payload, separators=(",", ":")).encode()
         signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -385,22 +394,29 @@ def _post_webhook(payload: dict, url: str, secret: str) -> None:
         }
         resp = requests.post(url, data=body, headers=headers, timeout=10)
         logger.info(
-            "Webhook posted to %s: status=%s, response=%s",
+            "Webhook posted to %s: status=%s",
             url,
             resp.status_code,
-            resp.text,
         )
     except Exception as exc:
         logger.warning("Webhook post to %s failed: %s", url, exc)
 
 
 def _fire_webhook(payload: dict) -> None:
-
-    url = _webhook_url()
-    secret = _webhook_secret()
-    threading.Thread(
-        target=_post_webhook, args=(payload, url, secret), daemon=True
-    ).start()
+    """Fire-and-forget: NOTHING webhook-related may block or abort the rest
+    of asummarize_patient. Every failure — misconfigured URL/secret
+    (TOOLS_URL, ONBOARDING_WEBHOOK_SECRET), or the OS refusing to start the
+    background thread — is caught and logged here, never propagated. The
+    actual POST runs on a daemon thread and its failures are handled the
+    same way inside _post_webhook."""
+    try:
+        url = _webhook_url()
+        secret = _webhook_secret()
+        threading.Thread(
+            target=_post_webhook, args=(payload, url, secret), daemon=True
+        ).start()
+    except Exception as exc:
+        logger.warning("Webhook not fired: %s", exc)
 
 
 def _patient_baseline(client_details: dict) -> dict:
