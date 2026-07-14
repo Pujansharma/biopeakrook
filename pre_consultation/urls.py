@@ -8,7 +8,9 @@ from pre_consultation.layer_views import (
     PatientBaselineV2LayerView,
     PatientCategoryLayerView,
     PatientClusterProbeLayerView,
+    PatientClusterProbeV2LayerView,
     PatientConcernLayerView,
+    PatientConcernV2LayerView,
     PatientConcernProbeLayerView,
     PatientConcernProbeV2LayerView,
     PatientGoalsPrioritiesLayerView,
@@ -114,6 +116,11 @@ urlpatterns = [
         name="session-patient-concern",
     ),
     path(
+        "session/patient_concern/v2/",
+        PatientConcernV2LayerView.as_view(),
+        name="session-patient-concern-v2",
+    ),
+    path(
         "session/patient_symptom/",
         PatientSymptomLayerView.as_view(),
         name="session-patient-symptom",
@@ -132,6 +139,11 @@ urlpatterns = [
         "session/patient_cluster_probe/",
         PatientClusterProbeLayerView.as_view(),
         name="session-patient-cluster-probe",
+    ),
+    path(
+        "session/patient_cluster_probe/v2/",
+        PatientClusterProbeV2LayerView.as_view(),
+        name="session-patient-cluster-probe-v2",
     ),
     path(
         "session/patient_medical_history_context/",

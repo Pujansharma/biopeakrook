@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from accounts.customers.models import CustomerProfile, CustomerProfileAddress
 from accounts.customers.utils.constants import AddressType
+from accounts.users.models import User
 from core.utils.fields import PhoneNumberSerializerField
 from pre_consultation.gender_mapping import (
     baseline_gender_to_profile_gender,
@@ -181,7 +182,7 @@ def load_patient_baseline_payload(
 
 
 def load_patient_baseline_v2_payload(
-    user,
+    user: User,
     session: PreConsultationSession,
     customer_profile: CustomerProfile | None = None,
 ) -> dict:
@@ -278,7 +279,7 @@ def persist_patient_baseline_payload(
 
 
 def persist_patient_baseline_v2_payload(
-    user,
+    user: User,
     session: PreConsultationSession,
     validated_data: dict,
     customer_profile: CustomerProfile | None = None,

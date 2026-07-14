@@ -23,6 +23,7 @@ from pre_consultation.layers.patient_concern import (
     build_patient_concern_put_context,
     load_patient_concern_payload,
     persist_patient_concern_payload,
+    persist_patient_concern_v2_payload,
 )
 from pre_consultation.layers.patient_concern_probe import (
     PatientConcernProbeRequestSerializer,
@@ -63,6 +64,7 @@ from pre_consultation.layers.patient_cluster_probe import (
     build_patient_cluster_probe_put_context,
     load_patient_cluster_probe_payload,
     persist_patient_cluster_probe_payload,
+    persist_patient_cluster_probe_v2_payload,
 )
 from pre_consultation.layers.patient_concern_probe_v2 import (
     PatientConcernProbeV2RequestSerializer,
@@ -124,6 +126,16 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_CONCERN] = LayerHandler(
     put_includes_data=False,
 )
 
+PATIENT_CONCERN_V2_HANDLER = LayerHandler(
+    layer_id=PreConsultationLayerProgression.PATIENT_CONCERN,
+    request_serializer_class=PatientConcernRequestSerializer,
+    response_serializer_class=PatientConcernResponseSerializer,
+    load_payload=load_patient_concern_payload,
+    persist_payload=persist_patient_concern_v2_payload,
+    build_put_serializer_context=build_patient_concern_put_context,
+    put_includes_data=False,
+)
+
 LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_SYMPTOM] = LayerHandler(
     layer_id=PreConsultationLayerProgression.PATIENT_SYMPTOM,
     request_serializer_class=PatientSymptomRequestSerializer,
@@ -160,6 +172,16 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE] = LayerHan
     response_serializer_class=PatientClusterProbeResponseSerializer,
     load_payload=load_patient_cluster_probe_payload,
     persist_payload=persist_patient_cluster_probe_payload,
+    build_put_serializer_context=build_patient_cluster_probe_put_context,
+    put_includes_data=False,
+)
+
+PATIENT_CLUSTER_PROBE_V2_HANDLER = LayerHandler(
+    layer_id=PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE,
+    request_serializer_class=PatientClusterProbeRequestSerializer,
+    response_serializer_class=PatientClusterProbeResponseSerializer,
+    load_payload=load_patient_cluster_probe_payload,
+    persist_payload=persist_patient_cluster_probe_v2_payload,
     build_put_serializer_context=build_patient_cluster_probe_put_context,
     put_includes_data=False,
 )

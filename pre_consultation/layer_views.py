@@ -14,7 +14,9 @@ from pre_consultation.layers.base import LayerHandler
 from pre_consultation.layers.registry import (
     LAYER_HANDLERS,
     PATIENT_BASELINE_V2_HANDLER,
+    PATIENT_CLUSTER_PROBE_V2_HANDLER,
     PATIENT_CONCERN_PROBE_V2_HANDLER,
+    PATIENT_CONCERN_V2_HANDLER,
     PATIENT_GOALS_PRIORITIES_V2_HANDLER,
     PATIENT_LIFESTYLE_ENVIRONMENT_V2_HANDLER,
 )
@@ -160,6 +162,40 @@ def build_layer_view_from_handler(
     return decorated_view
 
 
+def build_layer_put_only_view_from_handler(
+    handler: LayerHandler,
+    view_class_name: str,
+    layer_id: str,
+) -> type:
+    parameters = []
+    if handler.needs_customer_profile:
+        parameters.append(CUSTOMER_PROFILE_HEADER)
+
+    put_responses = build_put_responses(handler)
+    put_request = resolve_put_request_schema(layer_id, handler)
+
+    class LayerPutOnlyView(BaseGenericAPIView, PutMethodMixin):
+        http_method_names = ["put", "head", "options"]
+        permission_classes = [IsAuthenticated]
+        throttle_classes = [PreConsultationPutThrottle]
+
+        def put(self, request, *args, **kwargs):
+            return execute_layer_put(request, handler)
+
+    decorated_view = extend_schema_view(
+        put=extend_schema(
+            tags=[PRE_CONSULTATION_LAYER_TAG],
+            parameters=parameters,
+            description=build_layer_put_description(layer_id),
+            request=put_request,
+            responses=put_responses,
+        ),
+    )(LayerPutOnlyView)
+    decorated_view.__name__ = view_class_name
+    decorated_view.__qualname__ = view_class_name
+    return decorated_view
+
+
 def build_layer_view_registry() -> dict[str, type]:
     return {
         definition.view_class_name: build_layer_view_class(definition)
@@ -177,6 +213,11 @@ PatientBaselineV2LayerView = build_layer_view_from_handler(
 )
 PatientCategoryLayerView = _LAYER_VIEW_REGISTRY["PatientCategoryLayerView"]
 PatientConcernLayerView = _LAYER_VIEW_REGISTRY["PatientConcernLayerView"]
+PatientConcernV2LayerView = build_layer_put_only_view_from_handler(
+    PATIENT_CONCERN_V2_HANDLER,
+    "PatientConcernV2LayerView",
+    PreConsultationLayerProgression.PATIENT_CONCERN,
+)
 PatientSymptomLayerView = _LAYER_VIEW_REGISTRY["PatientSymptomLayerView"]
 PatientConcernProbeLayerView = _LAYER_VIEW_REGISTRY["PatientConcernProbeLayerView"]
 PatientConcernProbeV2LayerView = build_layer_view_from_handler(
@@ -185,10 +226,15 @@ PatientConcernProbeV2LayerView = build_layer_view_from_handler(
     PreConsultationLayerProgression.PATIENT_CONCERN_PROBE,
 )
 PatientClusterProbeLayerView = _LAYER_VIEW_REGISTRY["PatientClusterProbeLayerView"]
+PatientClusterProbeV2LayerView = build_layer_put_only_view_from_handler(
+    PATIENT_CLUSTER_PROBE_V2_HANDLER,
+    "PatientClusterProbeV2LayerView",
+    PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE,
+)
 PatientLifestyleEnvironmentLayerView = _LAYER_VIEW_REGISTRY[
     "PatientLifestyleEnvironmentLayerView"
 ]
-PatientLifestyleEnvironmentV2LayerView = build_layer_view_from_handler(
+PatientLifestyleEnvironmentV2LayerView = build_layer_put_only_view_from_handler(
     PATIENT_LIFESTYLE_ENVIRONMENT_V2_HANDLER,
     "PatientLifestyleEnvironmentV2LayerView",
     PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT,
@@ -207,10 +253,12 @@ __all__ = [
     "PatientBaselineV2LayerView",
     "PatientCategoryLayerView",
     "PatientConcernLayerView",
+    "PatientConcernV2LayerView",
     "PatientSymptomLayerView",
     "PatientConcernProbeLayerView",
     "PatientConcernProbeV2LayerView",
     "PatientClusterProbeLayerView",
+    "PatientClusterProbeV2LayerView",
     "PatientLifestyleEnvironmentLayerView",
     "PatientLifestyleEnvironmentV2LayerView",
     "PatientGoalsPrioritiesLayerView",

@@ -1,13 +1,26 @@
 """Targeted parent-child invalidation (diff-driven, not blanket layer wipe)."""
 
+from django.utils import timezone
+
 from pre_consultation.models import (
     PreConsultationConcern,
+    PreConsultationConcernProbeAnswer,
     PreConsultationDiagnosis,
     PreConsultationMedicalHistory,
     PreConsultationSession,
     PreConsultationSexualHealthAnswer,
 )
 from pre_consultation.utils.directive import get_concern_category_id_map
+
+
+def clear_session_cluster_probe_answers(session: PreConsultationSession) -> None:
+    """Clear prior cluster-probe answers so lifestyle can rescore from provisional only."""
+    PreConsultationConcernProbeAnswer.objects.filter(concern__session=session).delete()
+    session.concerns.update(
+        probe_question_count=0,
+        probe_positive_count=0,
+        updated_at=timezone.now(),
+    )
 
 
 def reset_gender_dependent_medical_history(session: PreConsultationSession) -> None:
