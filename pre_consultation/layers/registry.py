@@ -4,8 +4,12 @@ from pre_consultation.layers.base import LayerHandler
 from pre_consultation.layers.patient_baseline import (
     PatientBaselineRequestSerializer,
     PatientBaselineResponseSerializer,
+    PatientBaselineV2RequestSerializer,
+    PatientBaselineV2ResponseSerializer,
     load_patient_baseline_payload,
+    load_patient_baseline_v2_payload,
     persist_patient_baseline_payload,
+    persist_patient_baseline_v2_payload,
 )
 from pre_consultation.layers.patient_category import (
     PatientCategoryRequestSerializer,
@@ -75,6 +79,16 @@ LAYER_HANDLERS[PreConsultationLayerProgression.PATIENT_BASELINE] = LayerHandler(
     response_serializer_class=PatientBaselineResponseSerializer,
     load_payload=load_patient_baseline_payload,
     persist_payload=persist_patient_baseline_payload,
+    needs_customer_profile=True,
+    put_includes_data=False,
+)
+
+PATIENT_BASELINE_V2_HANDLER = LayerHandler(
+    layer_id=PreConsultationLayerProgression.PATIENT_BASELINE,
+    request_serializer_class=PatientBaselineV2RequestSerializer,
+    response_serializer_class=PatientBaselineV2ResponseSerializer,
+    load_payload=load_patient_baseline_v2_payload,
+    persist_payload=persist_patient_baseline_v2_payload,
     needs_customer_profile=True,
     put_includes_data=False,
 )

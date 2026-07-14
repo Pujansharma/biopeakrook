@@ -96,6 +96,37 @@ class PatientBaselineResponseSerializer(serializers.Serializer):
     address = PatientBaselineAddressResponseSerializer()
 
 
+EMPTY_PATIENT_BASELINE_V2_PAYLOAD = {
+    "first_name": "",
+    "last_name": "",
+    "dob": None,
+    "gender": None,
+    "email_address": "",
+}
+
+
+class PatientBaselineV2RequestSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(
+        max_length=100, allow_blank=True, required=False, default=""
+    )
+    dob = serializers.DateField()
+    gender = serializers.ChoiceField(choices=PatientBaselineGender.choices)
+    email_address = serializers.EmailField()
+
+
+class PatientBaselineV2ResponseSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=100, allow_blank=True, default="")
+    last_name = serializers.CharField(max_length=100, allow_blank=True, default="")
+    dob = serializers.DateField(allow_null=True, required=False)
+    gender = serializers.ChoiceField(
+        choices=PatientBaselineGender.choices,
+        allow_null=True,
+        required=False,
+    )
+    email_address = serializers.EmailField(allow_blank=True, default="")
+
+
 def get_default_customer_profile_address(
     customer_profile: CustomerProfile,
 ) -> CustomerProfileAddress | None:
@@ -128,6 +159,17 @@ def customer_profile_to_payload(customer_profile: CustomerProfile) -> dict:
     }
 
 
+def customer_profile_to_payload_v2(customer_profile: CustomerProfile) -> dict:
+    contact_email = customer_profile.customer.contact_email or ""
+    return {
+        "first_name": customer_profile.first_name or "",
+        "last_name": customer_profile.last_name or "",
+        "dob": customer_profile.date_of_birth,
+        "gender": profile_gender_to_baseline_gender(customer_profile.gender),
+        "email_address": contact_email,
+    }
+
+
 def load_patient_baseline_payload(
     user,
     session: PreConsultationSession,
@@ -136,6 +178,16 @@ def load_patient_baseline_payload(
     if customer_profile is None:
         return EMPTY_PATIENT_BASELINE_PAYLOAD
     return customer_profile_to_payload(customer_profile)
+
+
+def load_patient_baseline_v2_payload(
+    user,
+    session: PreConsultationSession,
+    customer_profile: CustomerProfile | None = None,
+) -> dict:
+    if customer_profile is None:
+        return EMPTY_PATIENT_BASELINE_V2_PAYLOAD
+    return customer_profile_to_payload_v2(customer_profile)
 
 
 def persist_customer_profile_address(
@@ -220,6 +272,50 @@ def persist_patient_baseline_payload(
         customer.save(update_fields=["contact_email", "updated_at"])
 
         persist_customer_profile_address(customer_profile, address)
+
+    session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
+    session.save(update_fields=["current_layer", "updated_at"])
+
+
+def persist_patient_baseline_v2_payload(
+    user,
+    session: PreConsultationSession,
+    validated_data: dict,
+    customer_profile: CustomerProfile | None = None,
+) -> None:
+    if customer_profile is None:
+        return
+
+    previous_gender = profile_gender_to_baseline_gender(customer_profile.gender)
+    previous_dob = customer_profile.date_of_birth
+    gender_or_dob_changed = (
+        validated_data["gender"] != previous_gender
+        or validated_data["dob"] != previous_dob
+    )
+
+    profile_gender = baseline_gender_to_profile_gender(validated_data["gender"])
+
+    with transaction.atomic():
+        if gender_or_dob_changed:
+            reset_gender_dependent_medical_history(session)
+
+        customer_profile.first_name = validated_data["first_name"]
+        customer_profile.last_name = validated_data["last_name"]
+        customer_profile.date_of_birth = validated_data["dob"]
+        customer_profile.gender = profile_gender
+        customer_profile.save(
+            update_fields=[
+                "first_name",
+                "last_name",
+                "date_of_birth",
+                "gender",
+                "updated_at",
+            ]
+        )
+
+        customer = customer_profile.customer
+        customer.contact_email = validated_data["email_address"]
+        customer.save(update_fields=["contact_email", "updated_at"])
 
     session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
     session.save(update_fields=["current_layer", "updated_at"])

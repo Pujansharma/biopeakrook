@@ -62,6 +62,7 @@ PRE_CONSULTATION_OPENAPI_DESCRIPTION = (
 PRE_CONSULTATION_PATH_ORDER: tuple[str, ...] = (
     "/pre-consultation/session/start/",
     "/pre-consultation/session/patient_baseline/",
+    "/pre-consultation/session/patient_baseline/v2/",
     "/pre-consultation/session/patient_category/",
     "/pre-consultation/session/patient_concern/",
     "/pre-consultation/session/patient_symptom/",

@@ -11,7 +11,7 @@ from core.utils.view_types import GetMethodMixin, PutMethodMixin
 from core.utils.views import BaseGenericAPIView
 from pre_consultation.layer_execution import execute_layer_get, execute_layer_put
 from pre_consultation.layers.base import LayerHandler
-from pre_consultation.layers.registry import LAYER_HANDLERS
+from pre_consultation.layers.registry import LAYER_HANDLERS, PATIENT_BASELINE_V2_HANDLER
 from pre_consultation.utils.constants import PreConsultationLayerProgression
 from pre_consultation.layers.patient_goals_priorities import (
     PatientGoalsPrioritiesGoalRequestSerializer,
@@ -104,13 +104,25 @@ def resolve_put_request_schema(
 
 def build_layer_view_class(definition: LayerViewDefinition) -> type:
     handler = LAYER_HANDLERS[definition.layer_id]
+    return build_layer_view_from_handler(
+        handler,
+        definition.view_class_name,
+        definition.layer_id,
+    )
+
+
+def build_layer_view_from_handler(
+    handler: LayerHandler,
+    view_class_name: str,
+    layer_id: str,
+) -> type:
     parameters = []
     if handler.needs_customer_profile:
         parameters.append(CUSTOMER_PROFILE_HEADER)
 
     get_response = pre_consultation_data_envelope(handler.response_serializer_class)
     put_responses = build_put_responses(handler)
-    put_request = resolve_put_request_schema(definition.layer_id, handler)
+    put_request = resolve_put_request_schema(layer_id, handler)
 
     class LayerView(BaseGenericAPIView, GetMethodMixin, PutMethodMixin):
         permission_classes = [IsAuthenticated]
@@ -126,19 +138,19 @@ def build_layer_view_class(definition: LayerViewDefinition) -> type:
         get=extend_schema(
             tags=[PRE_CONSULTATION_LAYER_TAG],
             parameters=parameters,
-            description=build_layer_get_description(definition.layer_id),
+            description=build_layer_get_description(layer_id),
             responses={200: get_response},
         ),
         put=extend_schema(
             tags=[PRE_CONSULTATION_LAYER_TAG],
             parameters=parameters,
-            description=build_layer_put_description(definition.layer_id),
+            description=build_layer_put_description(layer_id),
             request=put_request,
             responses=put_responses,
         ),
     )(LayerView)
-    decorated_view.__name__ = definition.view_class_name
-    decorated_view.__qualname__ = definition.view_class_name
+    decorated_view.__name__ = view_class_name
+    decorated_view.__qualname__ = view_class_name
     return decorated_view
 
 
@@ -152,6 +164,11 @@ def build_layer_view_registry() -> dict[str, type]:
 _LAYER_VIEW_REGISTRY = build_layer_view_registry()
 
 PatientBaselineLayerView = _LAYER_VIEW_REGISTRY["PatientBaselineLayerView"]
+PatientBaselineV2LayerView = build_layer_view_from_handler(
+    PATIENT_BASELINE_V2_HANDLER,
+    "PatientBaselineV2LayerView",
+    PreConsultationLayerProgression.PATIENT_BASELINE,
+)
 PatientCategoryLayerView = _LAYER_VIEW_REGISTRY["PatientCategoryLayerView"]
 PatientConcernLayerView = _LAYER_VIEW_REGISTRY["PatientConcernLayerView"]
 PatientSymptomLayerView = _LAYER_VIEW_REGISTRY["PatientSymptomLayerView"]
@@ -166,6 +183,7 @@ PatientGoalsPrioritiesLayerView = _LAYER_VIEW_REGISTRY[
 
 __all__ = [
     "PatientBaselineLayerView",
+    "PatientBaselineV2LayerView",
     "PatientCategoryLayerView",
     "PatientConcernLayerView",
     "PatientSymptomLayerView",

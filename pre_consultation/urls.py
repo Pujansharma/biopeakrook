@@ -5,6 +5,7 @@ from django.views.generic import RedirectView
 
 from pre_consultation.layer_views import (
     PatientBaselineLayerView,
+    PatientBaselineV2LayerView,
     PatientCategoryLayerView,
     PatientClusterProbeLayerView,
     PatientConcernLayerView,
@@ -87,6 +88,11 @@ urlpatterns = [
         "session/patient_baseline/",
         PatientBaselineLayerView.as_view(),
         name="session-patient-baseline",
+    ),
+    path(
+        "session/patient_baseline/v2/",
+        PatientBaselineV2LayerView.as_view(),
+        name="session-patient-baseline-v2",
     ),
     path(
         "session/patient_category/",
