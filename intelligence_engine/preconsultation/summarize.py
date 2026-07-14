@@ -496,6 +496,8 @@ def _run_sync(coro):
 
         nest_asyncio.apply()
     except RuntimeError:
+        # Expected when no event loop is running in this thread; fall through
+        # to asyncio.run(coro), which creates and manages a fresh loop.
         pass
     return asyncio.run(coro)
 
