@@ -55,7 +55,7 @@ PRE_CONSULTATION_OPENAPI_DESCRIPTION = (
     "patient_symptom → patient_concern_probe → patient_medical_history_context → "
     "patient_lifestyle_environment → patient_cluster_probe (conditional) → "
     "patient_goals_priorities → patient_health_map (GET result) → complete. "
-    "Human-readable reference: api-pre-consultation.md. "
+    "Human-readable reference: api-pre-consultation-v1.md / api-pre-consultation-v2.md. "
     "OpenAPI schema: /pre-consultation/openapi/ · Swagger UI: /pre-consultation/openapi/docs/."
 )
 
