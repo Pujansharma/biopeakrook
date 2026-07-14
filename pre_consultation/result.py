@@ -6,6 +6,7 @@ from pre_consultation.layers.serialization import DirectiveJsonKeyCharField
 from pre_consultation.layers.patient_goals_priorities import (
     build_health_goals_response,
     get_session_stored_health_goals,
+    resolve_previous_layer_for_session,
 )
 from pre_consultation.layers.patient_lifestyle_environment import (
     get_session_lifestyle_answers,
@@ -42,6 +43,15 @@ class PreConsultationSessionResultSerializer(serializers.Serializer):
     concern_count = serializers.IntegerField()
     lifestyle_context = LifestyleContextItemSerializer(many=True)
     goals = GoalItemSerializer(many=True)
+
+
+class PreConsultationSessionResultV2Serializer(serializers.Serializer):
+    health_system = HealthSystemItemSerializer(many=True)
+    cluster_count = serializers.IntegerField()
+    concern_count = serializers.IntegerField()
+    lifestyle_context = LifestyleContextItemSerializer(many=True)
+    goals = GoalItemSerializer(many=True)
+    previous_layer = serializers.CharField()
 
 
 def build_lifestyle_option_label_map() -> dict[str, dict[str, str]]:
@@ -136,4 +146,11 @@ def build_session_result_payload(session: PreConsultationSession) -> dict:
         "concern_count": session.concerns.count(),
         "lifestyle_context": build_lifestyle_context_payload(session),
         "goals": build_goals_payload(session),
+    }
+
+
+def build_session_result_v2_payload(session: PreConsultationSession) -> dict:
+    return {
+        **build_session_result_payload(session),
+        "previous_layer": resolve_previous_layer_for_session(session),
     }

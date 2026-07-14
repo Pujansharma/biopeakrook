@@ -10,7 +10,9 @@
 
 **OpenAPI:** tag `Pre-Consultation Result` in `/pre-consultation/openapi/`
 
-**Session wizard:** [api-pre-consultation.md](./api-pre-consultation.md)
+**Session wizard:** [api-pre-consultation-v1.md](./api-pre-consultation-v1.md) · [api-pre-consultation-v2.md](./api-pre-consultation-v2.md) · [simulation.md](./simulation.md)
+
+**Postman:** folder `pre-consultation-result` (staff `Bearer {{access_token}}`)
 
 ---
 

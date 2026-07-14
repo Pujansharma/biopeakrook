@@ -27,14 +27,40 @@ def _lead_user_profile_data(lead: Lead) -> dict:
         "first_name": lead.first_name,
         "last_name": lead.last_name,
         "gender": lead.gender,
+        "date_of_birth": lead.date_of_birth,
     }
 
 
 def _lead_customer_profile_data(lead: Lead) -> dict:
-    return {
-        **_lead_user_profile_data(lead),
-        "date_of_birth": lead.date_of_birth,
-    }
+    return _lead_user_profile_data(lead)
+
+
+def _fill_missing_profile_fields(
+    target: User | CustomerProfile,
+    lead_data: dict,
+) -> None:
+    update_fields = []
+    for field_name, value in lead_data.items():
+        if value is None:
+            continue
+        if getattr(target, field_name) is not None:
+            continue
+        setattr(target, field_name, value)
+        update_fields.append(field_name)
+    if not update_fields:
+        return
+    update_fields.append("updated_at")
+    target.save(update_fields=update_fields)
+
+
+def _sync_lead_profile_fields(
+    lead: Lead,
+    user: User,
+    customer_profile: CustomerProfile,
+) -> None:
+    profile_data = _lead_customer_profile_data(lead)
+    _fill_missing_profile_fields(user, profile_data)
+    _fill_missing_profile_fields(customer_profile, profile_data)
 
 
 def provision_shell_customer_from_lead(lead: Lead) -> User:
@@ -73,6 +99,8 @@ def provision_shell_customer_from_lead(lead: Lead) -> User:
                 created_by=None,
                 **customer_profile_data,
             )
+
+        _sync_lead_profile_fields(lead, user, customer_profile)
 
         if lead.customer_profile_id is None:
             lead.customer_profile = customer_profile
@@ -143,6 +171,12 @@ def _finalize_lead_conversion(
     updated_by: User | None,
 ) -> CustomerProfile:
     with transaction.atomic():
+        _sync_lead_profile_fields(
+            lead,
+            customer_profile.customer.user,
+            customer_profile,
+        )
+
         if not customer_profile.is_converted:
             customer_profile.is_converted = True
             customer_profile.save(update_fields=["is_converted", "updated_at"])

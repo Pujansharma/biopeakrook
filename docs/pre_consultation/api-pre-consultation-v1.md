@@ -1,4 +1,4 @@
-# Pre-Consultation API
+# Pre-Consultation API — v1
 
 **Base:** `/pre-consultation/`
 
@@ -6,11 +6,13 @@
 
 **OpenAPI:** `/pre-consultation/openapi/` · Swagger UI `/pre-consultation/openapi/docs/`
 
+**v2 flow:** [api-pre-consultation-v2.md](./api-pre-consultation-v2.md)
+
 **Staff result API:** [api-pre-consultation-result.md](./api-pre-consultation-result.md)
 
 **Test scenarios:** [simulation.md](./simulation.md)
 
-**Flow:**
+### Flow
 
 ```
 1  POST session/start
@@ -20,14 +22,14 @@
 5  patient_symptom
 6  patient_concern_probe
 7  patient_medical_history_context
-8  patient_lifestyle_environment
-9  patient_cluster_probe          (conditional — see step 8)
+8  patient_lifestyle_environment     → next_layer: cluster_probe | goals_priorities
+9  patient_cluster_probe             (conditional)
 10 patient_goals_priorities
-11 patient_health_map              GET session/result
+11 GET session/result
 12 POST session/complete
 ```
 
-Steps 2–10: `GET` load → `PUT` save. Most PUTs return `{ "success": true }`. **Step 8** returns `{ "success": true, "data": { "next_layer" } }`. Step 7: optional `POST` file upload before `PUT`. Step 11: `GET /session/result/` when `current_layer` = `patient_health_map`.
+Steps: `GET` load → `PUT` save. Most PUTs return `{ "success": true }`. Lifestyle PUT returns `{ "success": true, "data": { "next_layer" } }`. Medical history: optional `POST` file upload before `PUT`. Result when `current_layer` = `patient_health_map`.
 
 ---
 
@@ -45,6 +47,8 @@ Steps 2–10: `GET` load → `PUT` save. Most PUTs return `{ "success": true }`.
 **Cascade on deselect:** Removing a category removes its concerns and downstream answers. Removing a concern removes its symptoms, impact, and probes.
 
 **Gender `other`:** Step 7 skips sex-gated reproductive + sexual-health catalogs. PUT rejects sexual-health payloads.
+
+**Lifestyle rewind:** Re-PUT lifestyle clears prior cluster-probe answers, wipes scores, recalculates provisional-only, then sets `next_layer`.
 
 ---
 
@@ -115,7 +119,7 @@ One session per user. Starts or resumes.
 
 ### PUT `/session/patient_baseline/`
 
-All fields required except `last_name`, `address.line_2` (default `""`).
+All fields required except `last_name`, `address.line_2` (default `""`). Advances `current_layer` to `patient_category`.
 
 | Status | Body |
 |---|---|
@@ -150,6 +154,8 @@ Returns full category catalog with `selected` flags.
 |---|---|
 | `category_ids` | string[]; may be `[]`; duplicates deduped; each id must exist in directive |
 
+Advances `current_layer` to `patient_concern`.
+
 ---
 
 ## Step 4 — `patient_concern`
@@ -168,6 +174,8 @@ Categories from step 3 only. Each has `concerns[]` with `id`, `label`, `selected
 |---|
 | Each id valid in directive |
 | Parent category must be selected in step 3 |
+
+Advances `current_layer` to `patient_symptom`.
 
 ---
 
@@ -201,6 +209,8 @@ Categories from step 3 only. Each has `concerns[]` with `id`, `label`, `selected
 | `lab_result` in sources | ↔ `selected_symptom_ids` non-empty |
 | `family` in sources | ↔ `selected_family_relations` non-empty |
 
+Advances `current_layer` to `patient_concern_probe`.
+
 ---
 
 ## Step 6 — `patient_concern_probe`
@@ -226,6 +236,8 @@ Categories from step 3 only. Each has `concerns[]` with `id`, `label`, `selected
   ]
 }
 ```
+
+Advances `current_layer` to `patient_medical_history_context`.
 
 ---
 
@@ -271,6 +283,8 @@ Response `data`: `id` (uuid), `filename`, `content_type`, `size_bytes`, `url`, `
 | `sexual_health_question[]` | `{ "id", "option_id" }`; `other` gender → `[]` |
 | `medical_report_ids` | uuid[]; max 10; must exist on session; omitted ids deleted |
 
+Advances `current_layer` to `patient_lifestyle_environment`.
+
 ---
 
 ## Step 8 — `patient_lifestyle_environment`
@@ -298,7 +312,7 @@ Flat JSON — **all** directive `lifestyle_field` ids required as keys.
 | `alcohol` | `none`, `occasional`, `frequent` |
 | `tobacco` | `none`, `smoked`, `smokeless`, `both`, `former` |
 
-Response:
+On PUT: clears prior cluster-probe answers, wipes scores, recalculates, then returns `next_layer`.
 
 ```json
 {
@@ -339,8 +353,11 @@ Concerns in flagged clusters only. Each has `cluster[]` with `cluster_probe[]` (
 
 | Validation |
 |---|
+| Concern id must be eligible (flagged cluster ∩ session concerns) |
 | All probe ids for concern required (no missing/extra) |
 | `value`: `yes`/`no`/`1`/`0`/`true`/`false` |
+
+Advances `current_layer` to `patient_goals_priorities`.
 
 ---
 
@@ -370,6 +387,8 @@ Concerns in flagged clusters only. Each has `cluster[]` with `cluster_probe[]` (
 |---|
 | 1 to `max_health_goal_count` entries |
 | Unique ids; priorities exactly `1`..`N` (no gaps) |
+
+Advances `current_layer` to `patient_health_map`.
 
 ---
 
