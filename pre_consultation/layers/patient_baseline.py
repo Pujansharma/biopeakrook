@@ -274,8 +274,8 @@ def persist_patient_baseline_payload(
 
         persist_customer_profile_address(customer_profile, address)
 
-    session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
-    session.save(update_fields=["current_layer", "updated_at"])
+        session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
+        session.save(update_fields=["current_layer", "updated_at"])
 
 
 def persist_patient_baseline_v2_payload(
@@ -318,5 +318,5 @@ def persist_patient_baseline_v2_payload(
         customer.contact_email = validated_data["email_address"]
         customer.save(update_fields=["contact_email", "updated_at"])
 
-    session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
-    session.save(update_fields=["current_layer", "updated_at"])
+        session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
+        session.save(update_fields=["current_layer", "updated_at"])
