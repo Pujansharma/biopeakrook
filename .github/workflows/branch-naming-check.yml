@@ -1,0 +1,33 @@
+name: Check PR Branch Name
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate branch name
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          echo "Branch: $BRANCH_NAME"
+
+          PATTERN='^(feat|hotfix)-[a-z0-9]+(_[a-z0-9]+)*-[0-9]{8}$'
+
+          if [[ "$BRANCH_NAME" =~ $PATTERN ]]; then
+            echo "✅ Branch name is valid."
+          else
+            echo "❌ Invalid branch name."
+            echo "Expected pattern: $PATTERN"
+            exit 1
+          fi

@@ -10,7 +10,11 @@ from rest_framework.permissions import IsAuthenticated
 from accounts.customers.utils.db import mark_customer_profile_onboarding_completed_for_user
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
-from pre_consultation.models import PreConsultationSession
+from leads.utils.db import mark_lead_onboarding_completed_for_user
+from pre_consultation.models import (
+    PreConsultationSession,
+    PreConsultationSessionArtifacts,
+)
 from pre_consultation.result import (
     PreConsultationSessionResultSerializer,
     PreConsultationSessionResultV2Serializer,
@@ -30,6 +34,7 @@ from pre_consultation.utils.api import pre_consultation_response
 from pre_consultation.utils.constants import (
     PreConsultationLayerProgression,
     PreConsultationSessionStatus,
+    PreConsultationArtifactGenerationStatus,
 )
 from pre_consultation.utils.directive import get_directive_schema_id
 from pre_consultation.utils.schema import (
@@ -38,6 +43,7 @@ from pre_consultation.utils.schema import (
     pre_consultation_data_envelope,
 )
 from leads.utils.db import mark_lead_onboarding_completed_for_user
+from pre_consultation.completion_worker import spawn_post_completion_generation
 
 SESSION_CONFLICT_ENVELOPE = PreConsultationSessionConflictEnvelope
 SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
@@ -208,6 +214,15 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
                 getattr(request, "customer_profile_id", None),
             )
             mark_lead_onboarding_completed_for_user(request.user)
+
+            PreConsultationSessionArtifacts.objects.update_or_create(
+                session=session,
+                defaults={"generation_status": PreConsultationArtifactGenerationStatus.PENDING},
+            )
+
+            transaction.on_commit(
+                lambda: spawn_post_completion_generation(session.pk, session.user_id)
+            )
 
         return pre_consultation_response(
             success=True,

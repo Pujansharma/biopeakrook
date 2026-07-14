@@ -35,7 +35,10 @@ class Lead(BaseUUIDModel):
     is_joined = models.BooleanField(default=False)
 
     packages = ArrayField(
-        models.CharField(choices=LeadPackages), null=True, blank=True, default=list
+        models.CharField(max_length=4, choices=LeadPackages),
+        null=True,
+        blank=True,
+        default=list,
     )
 
     customer_profile = models.OneToOneField(
