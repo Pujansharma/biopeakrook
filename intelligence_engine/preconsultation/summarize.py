@@ -85,9 +85,28 @@ async def _run_llm(stage: str, client_id: str, coro):
     return result
 
 
-WEBHOOK_URL = config("TOOLS_URL", default="http://localhost:8005") + config(
-    "PRECONS_TOOL_TRIGGER_API", default="/preconsultation/v1/onboarding-webhook"
-)
+def _webhook_url() -> str:
+    base = config("TOOLS_URL", default="").strip()
+    if not base:
+        raise ValueError(
+            "TOOLS_URL is not set. The onboarding webhook has no endpoint to post "
+            "to. Set it, or call with trigger_webhook=False."
+        )
+    path = config(
+        "PRECONS_TOOL_TRIGGER_API", default="/preconsultation/v1/onboarding-webhook"
+    )
+    return base + path
+
+
+def _webhook_secret() -> str:
+    secret = config("ONBOARDING_WEBHOOK_SECRET", default="").strip()
+    if not secret:
+        raise ValueError(
+            "ONBOARDING_WEBHOOK_SECRET is not set. The onboarding webhook signs a "
+            "payload containing patient PII with HMAC-SHA256; an empty secret. Set it, or call with "
+            "trigger_webhook=False."
+        )
+    return secret
 
 # Concern-mode axes: a node with pressing findings may warrant probing here.
 # Ordered by clinical urgency (see _CONCERN_TAG_WEIGHT).
@@ -356,36 +375,32 @@ async def areorder_family_risk_summary(
     return reordered or family_text
 
 
-def _post_webhook(payload: dict) -> None:
-    """Blocking POST to the preconsultation tool webhook; response is logged."""
+def _post_webhook(payload: dict, url: str, secret: str) -> None:
     try:
         body = json.dumps(payload, separators=(",", ":")).encode()
-        secret = config("ONBOARDING_WEBHOOK_SECRET", default="")
         signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
         headers = {
             "Content-Type": "application/json",
             "X-Onboarding-Signature": f"sha256={signature}",
         }
-        resp = requests.post(
-            WEBHOOK_URL, data=body, headers=headers, timeout=10
-        )
+        resp = requests.post(url, data=body, headers=headers, timeout=10)
         logger.info(
             "Webhook posted to %s: status=%s, response=%s",
-            WEBHOOK_URL,
+            url,
             resp.status_code,
             resp.text,
         )
     except Exception as exc:
-        logger.warning("Webhook post to %s failed: %s", WEBHOOK_URL, exc)
+        logger.warning("Webhook post to %s failed: %s", url, exc)
 
 
 def _fire_webhook(payload: dict) -> None:
-    """Fire-and-forget the webhook on a background daemon thread.
 
-    Returns immediately; the POST runs off-thread and is never awaited or
-    validated. Safe to call from both sync and async code paths.
-    """
-    threading.Thread(target=_post_webhook, args=(payload,), daemon=True).start()
+    url = _webhook_url()
+    secret = _webhook_secret()
+    threading.Thread(
+        target=_post_webhook, args=(payload, url, secret), daemon=True
+    ).start()
 
 
 def _patient_baseline(client_details: dict) -> dict:
@@ -778,8 +793,7 @@ async def asummarize_patient(
             "name": _patient_name(client_details),
         }
         logger.debug(
-            "[flow] firing webhook (fire-and-forget) to %s for client_id=%s",
-            WEBHOOK_URL,
+            "[flow] firing webhook (fire-and-forget) for client_id=%s",
             _client_id(client_details),
         )
         _fire_webhook(payload)

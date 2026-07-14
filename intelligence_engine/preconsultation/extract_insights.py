@@ -467,25 +467,41 @@ def _extension(filepath: str) -> str:
     return Path(filepath).suffix.lower().lstrip(".")
 
 
-# Model that runs the per-page extraction — drives the pre-flight cost estimate.
 _EXTRACT_MODEL = TASK_CONFIGS["extract_insights"].model
-# Flat per-image token allowance used only by the lightweight pre-read (real OCR
-# token usage is measured later by the actual pipeline).
 _IMAGE_TOKEN_ESTIMATE = 800
 
 
 def _token_limit() -> int | None:
-    """Per-file input-token ceiling from INSIGHT_EXTRACTION_TOKEN_LIMIT, or None."""
+    """Per-file input-token ceiling from INSIGHT_EXTRACTION_TOKEN_LIMIT, or None.
+    """
     raw = config("INSIGHT_EXTRACTION_TOKEN_LIMIT", default="")
-    return int(raw) if raw else None
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"INSIGHT_EXTRACTION_TOKEN_LIMIT must be an integer, got {raw!r}. "
+            "Unset it to disable the per-file token ceiling."
+        ) from exc
 
 
-def _resolve_budget(budget: float | None) -> float | None:
-    """Return the explicit `budget`, else INSIGHT_EXTRACTION_BUDGET, else None."""
+def _resolve_budget(budget: float | None) -> float:
+    """Return the explicit `budget`, else INSIGHT_EXTRACTION_BUDGET."""
     if budget is not None:
         return budget
     raw = config("INSIGHT_EXTRACTION_BUDGET", default="")
-    return float(raw) if raw else None
+    if not raw:
+        raise ValueError(
+            "INSIGHT_EXTRACTION_BUDGET is not set. Set it, or pass an explicit "
+            "budget."
+        )
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"INSIGHT_EXTRACTION_BUDGET must be a number, got {raw!r}."
+        ) from exc
 
 
 def _pre_read_text(ext: str, data: bytes) -> tuple[str, int]:
@@ -1595,7 +1611,7 @@ async def _run_doc_extraction(
 
 def _plan_reports(
     reports: list[dict],
-    budget: float | None,
+    budget: float,
     token_limit: int | None,
     environment: str,
 ) -> tuple[list[tuple[int, dict]], list[SkippedFile]]:
@@ -1647,31 +1663,30 @@ def _plan_reports(
         else:
             survivors.append(p)
 
-    if budget is not None:
-        by_client: dict[str, list[dict]] = {}
-        for p in survivors:
-            by_client.setdefault(p["client_id"], []).append(p)
-        kept_idxs: set[int] = set()
-        for client_id, items in by_client.items():
-            remaining = budget - fetch_client_spend(environment, client_id)
-            spent = 0.0
-            cutoff = False
-            for p in sorted(items, key=lambda x: x["input_cost"]):
-                if not cutoff and spent + p["est_cost"] <= remaining:
-                    spent += p["est_cost"]
-                    kept_idxs.add(p["idx"])
-                else:
-                    cutoff = True
-                    skipped_by_idx[p["idx"]] = SkippedFile(
-                        doc_id=p["doc_id"],
-                        filename=p["filename"],
-                        reason="over_budget",
-                        detail=(
-                            f"estimated cost ${p['est_cost']:.4f} does not fit the "
-                            f"remaining client budget ${max(remaining - spent, 0.0):.4f}"
-                        ),
-                    )
-        survivors = [p for p in survivors if p["idx"] in kept_idxs]
+    by_client: dict[str, list[dict]] = {}
+    for p in survivors:
+        by_client.setdefault(p["client_id"], []).append(p)
+    kept_idxs: set[int] = set()
+    for client_id, items in by_client.items():
+        remaining = budget - fetch_client_spend(environment, client_id)
+        spent = 0.0
+        cutoff = False
+        for p in sorted(items, key=lambda x: x["input_cost"]):
+            if not cutoff and spent + p["est_cost"] <= remaining:
+                spent += p["est_cost"]
+                kept_idxs.add(p["idx"])
+            else:
+                cutoff = True
+                skipped_by_idx[p["idx"]] = SkippedFile(
+                    doc_id=p["doc_id"],
+                    filename=p["filename"],
+                    reason="over_budget",
+                    detail=(
+                        f"estimated cost ${p['est_cost']:.4f} does not fit the "
+                        f"remaining client budget ${max(remaining - spent, 0.0):.4f}"
+                    ),
+                )
+    survivors = [p for p in survivors if p["idx"] in kept_idxs]
 
     to_process = [(p["idx"], p["report"]) for p in sorted(survivors, key=lambda x: x["idx"])]
     skipped = [skipped_by_idx[i] for i in sorted(skipped_by_idx)]
@@ -1885,8 +1900,8 @@ def extract_insights(
         strategy_name: label embedded in the Langfuse trace name and tags so
             runs from different strategies are distinguishable side by side.
         budget: per-client USD budget for this run. Falls back to the
-            INSIGHT_EXTRACTION_BUDGET env var; when neither is set, no budget
-            gating is applied. The document is skipped (reason "over_budget") if
+            INSIGHT_EXTRACTION_BUDGET env var; a ValueError is raised when
+            neither is set. The document is skipped (reason "over_budget") if
             its estimated cost plus the client's current Langfuse spend exceeds
             the budget. Independently, a document is skipped (reason
             "exceeds_token_limit") when its estimated input tokens exceed the
@@ -1943,11 +1958,12 @@ def extract_insights_batch(
             reports and ALL their pages (enforced via a single asyncio.Semaphore).
         ocr_config: OCR strategy applied to every document.
         budget: per-client USD budget applied to this batch (env fallback
-            INSIGHT_EXTRACTION_BUDGET). Files are cost-gated per client: within
-            each client's remaining budget the cheapest files (by estimated input
-            cost) are taken as a prefix; the first that does not fit and every
-            file after it are skipped ("over_budget"). Files whose estimated
-            input tokens exceed INSIGHT_EXTRACTION_TOKEN_LIMIT are skipped first
+            INSIGHT_EXTRACTION_BUDGET; a ValueError is raised when neither is
+            set). Files are cost-gated per client: within each client's
+            remaining budget the cheapest files (by estimated input cost) are
+            taken as a prefix; the first that does not fit and every file after
+            it are skipped ("over_budget"). Files whose estimated input tokens
+            exceed INSIGHT_EXTRACTION_TOKEN_LIMIT are skipped first
             ("exceeds_token_limit").
         mock: when True, skip file reading and all LLM calls for every report
             and return dummy results derived from each report's metadata.
