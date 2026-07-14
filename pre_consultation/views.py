@@ -13,7 +13,9 @@ from core.utils.views import BaseGenericAPIView
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.result import (
     PreConsultationSessionResultSerializer,
+    PreConsultationSessionResultV2Serializer,
     build_session_result_payload,
+    build_session_result_v2_payload,
 )
 from pre_consultation.serializers import (
     PreConsultationSessionResponseSerializer,
@@ -43,6 +45,9 @@ SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
 )
 SESSION_RESULT_ENVELOPE = pre_consultation_data_envelope(
     PreConsultationSessionResultSerializer
+)
+SESSION_RESULT_V2_ENVELOPE = pre_consultation_data_envelope(
+    PreConsultationSessionResultV2Serializer
 )
 
 
@@ -126,6 +131,34 @@ class PreConsultationSessionResultView(BaseGenericAPIView, GetMethodMixin):
 
         result_payload = build_session_result_payload(session)
         response_data = PreConsultationSessionResultSerializer(result_payload).data
+        return pre_consultation_response(
+            success=True,
+            data=response_data,
+            status_code=status.HTTP_200_OK,
+        )
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=[PRE_CONSULTATION_SESSION_TAG],
+        description=(
+            "Step 11 v2 — Health map summary plus previous_layer "
+            "(same routing as patient_goals_priorities)."
+        ),
+        responses={
+            200: SESSION_RESULT_V2_ENVELOPE,
+            404: None,
+        },
+    ),
+)
+class PreConsultationSessionResultV2View(BaseGenericAPIView, GetMethodMixin):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        session = get_user_pre_consultation_session(request.user)
+
+        result_payload = build_session_result_v2_payload(session)
+        response_data = PreConsultationSessionResultV2Serializer(result_payload).data
         return pre_consultation_response(
             success=True,
             data=response_data,

@@ -189,6 +189,16 @@ def resolve_next_layer_from_cluster_confidence(
     return PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
 
 
+def resolve_next_layer_from_cluster_confidence_v2(
+    session: PreConsultationSession,
+) -> str:
+    from pre_consultation.cluster_probe_session import session_requires_cluster_probe
+
+    if session_requires_cluster_probe(session):
+        return PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE
+    return PreConsultationLayerProgression.PATIENT_HEALTH_MAP
+
+
 def load_patient_lifestyle_environment_payload(
     user,
     session: PreConsultationSession,
@@ -207,6 +217,15 @@ def load_patient_lifestyle_environment_put_payload(
 ) -> dict:
     return {
         "next_layer": resolve_next_layer_from_cluster_confidence(session),
+    }
+
+
+def load_patient_lifestyle_environment_v2_put_payload(
+    user,
+    session: PreConsultationSession,
+) -> dict:
+    return {
+        "next_layer": resolve_next_layer_from_cluster_confidence_v2(session),
     }
 
 
@@ -229,5 +248,28 @@ def persist_patient_lifestyle_environment_payload(
     persist_session_cluster_scores(session, validated_data)
 
     session.current_layer = resolve_next_layer_from_cluster_confidence(session)
+    session.updated_at = timezone.now()
+    session.save(update_fields=["current_layer", "updated_at"])
+
+
+def persist_patient_lifestyle_environment_v2_payload(
+    user,
+    session: PreConsultationSession,
+    validated_data: dict,
+) -> None:
+    session.lifestyle_answers.all().delete()
+    PreConsultationLifestyleAnswer.objects.bulk_create(
+        [
+            PreConsultationLifestyleAnswer(
+                session=session,
+                field_id=field_id,
+                option_value=option_value,
+            )
+            for field_id, option_value in validated_data.items()
+        ]
+    )
+    persist_session_cluster_scores(session, validated_data)
+
+    session.current_layer = resolve_next_layer_from_cluster_confidence_v2(session)
     session.updated_at = timezone.now()
     session.save(update_fields=["current_layer", "updated_at"])

@@ -50,6 +50,11 @@ class PatientGoalsPrioritiesResponseSerializer(serializers.Serializer):
     previous_layer = serializers.CharField()
 
 
+class PatientGoalsPrioritiesV2ResponseSerializer(serializers.Serializer):
+    max_health_goal_count = serializers.IntegerField()
+    health_goals = PatientGoalsPrioritiesGoalResponseSerializer(many=True)
+
+
 def resolve_previous_layer_for_session(session: PreConsultationSession) -> str:
     from pre_consultation.cluster_probe_session import session_requires_cluster_probe
 
@@ -136,6 +141,18 @@ def load_patient_goals_priorities_payload(
     }
 
 
+def load_patient_goals_priorities_v2_payload(
+    user,
+    session: PreConsultationSession,
+) -> dict:
+    return {
+        "max_health_goal_count": get_health_goal_count(),
+        "health_goals": build_health_goals_response(
+            get_session_stored_health_goals(session)
+        ),
+    }
+
+
 def persist_patient_goals_priorities_payload(
     user,
     session: PreConsultationSession,
@@ -154,4 +171,25 @@ def persist_patient_goals_priorities_payload(
     )
 
     session.current_layer = PreConsultationLayerProgression.PATIENT_HEALTH_MAP
+    session.save(update_fields=["current_layer", "updated_at"])
+
+
+def persist_patient_goals_priorities_v2_payload(
+    user,
+    session: PreConsultationSession,
+    validated_data: list[dict],
+) -> None:
+    session.health_goals.all().delete()
+    PreConsultationHealthGoal.objects.bulk_create(
+        [
+            PreConsultationHealthGoal(
+                session=session,
+                goal_id=selection["id"],
+                priority=selection["priority"],
+            )
+            for selection in validated_data
+        ]
+    )
+
+    session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
     session.save(update_fields=["current_layer", "updated_at"])

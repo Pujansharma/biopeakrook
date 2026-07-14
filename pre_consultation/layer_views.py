@@ -11,7 +11,13 @@ from core.utils.view_types import GetMethodMixin, PutMethodMixin
 from core.utils.views import BaseGenericAPIView
 from pre_consultation.layer_execution import execute_layer_get, execute_layer_put
 from pre_consultation.layers.base import LayerHandler
-from pre_consultation.layers.registry import LAYER_HANDLERS, PATIENT_BASELINE_V2_HANDLER
+from pre_consultation.layers.registry import (
+    LAYER_HANDLERS,
+    PATIENT_BASELINE_V2_HANDLER,
+    PATIENT_CONCERN_PROBE_V2_HANDLER,
+    PATIENT_GOALS_PRIORITIES_V2_HANDLER,
+    PATIENT_LIFESTYLE_ENVIRONMENT_V2_HANDLER,
+)
 from pre_consultation.utils.constants import PreConsultationLayerProgression
 from pre_consultation.layers.patient_goals_priorities import (
     PatientGoalsPrioritiesGoalRequestSerializer,
@@ -173,13 +179,28 @@ PatientCategoryLayerView = _LAYER_VIEW_REGISTRY["PatientCategoryLayerView"]
 PatientConcernLayerView = _LAYER_VIEW_REGISTRY["PatientConcernLayerView"]
 PatientSymptomLayerView = _LAYER_VIEW_REGISTRY["PatientSymptomLayerView"]
 PatientConcernProbeLayerView = _LAYER_VIEW_REGISTRY["PatientConcernProbeLayerView"]
+PatientConcernProbeV2LayerView = build_layer_view_from_handler(
+    PATIENT_CONCERN_PROBE_V2_HANDLER,
+    "PatientConcernProbeV2LayerView",
+    PreConsultationLayerProgression.PATIENT_CONCERN_PROBE,
+)
 PatientClusterProbeLayerView = _LAYER_VIEW_REGISTRY["PatientClusterProbeLayerView"]
 PatientLifestyleEnvironmentLayerView = _LAYER_VIEW_REGISTRY[
     "PatientLifestyleEnvironmentLayerView"
 ]
+PatientLifestyleEnvironmentV2LayerView = build_layer_view_from_handler(
+    PATIENT_LIFESTYLE_ENVIRONMENT_V2_HANDLER,
+    "PatientLifestyleEnvironmentV2LayerView",
+    PreConsultationLayerProgression.PATIENT_LIFESTYLE_ENVIRONMENT,
+)
 PatientGoalsPrioritiesLayerView = _LAYER_VIEW_REGISTRY[
     "PatientGoalsPrioritiesLayerView"
 ]
+PatientGoalsPrioritiesV2LayerView = build_layer_view_from_handler(
+    PATIENT_GOALS_PRIORITIES_V2_HANDLER,
+    "PatientGoalsPrioritiesV2LayerView",
+    PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES,
+)
 
 __all__ = [
     "PatientBaselineLayerView",
@@ -188,7 +209,10 @@ __all__ = [
     "PatientConcernLayerView",
     "PatientSymptomLayerView",
     "PatientConcernProbeLayerView",
+    "PatientConcernProbeV2LayerView",
     "PatientClusterProbeLayerView",
     "PatientLifestyleEnvironmentLayerView",
+    "PatientLifestyleEnvironmentV2LayerView",
     "PatientGoalsPrioritiesLayerView",
+    "PatientGoalsPrioritiesV2LayerView",
 ]

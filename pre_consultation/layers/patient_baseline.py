@@ -317,5 +317,5 @@ def persist_patient_baseline_v2_payload(
         customer.contact_email = validated_data["email_address"]
         customer.save(update_fields=["contact_email", "updated_at"])
 
-    session.current_layer = PreConsultationLayerProgression.PATIENT_CATEGORY
+    session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
     session.save(update_fields=["current_layer", "updated_at"])
