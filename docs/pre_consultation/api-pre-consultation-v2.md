@@ -12,11 +12,11 @@
 
 **Test scenarios:** [simulation.md](./simulation.md)
 
-### Flow
+## Flow
 
 Remixes order and merges symptom into concern probe. Shared layers keep v1 GET paths where payloads match.
 
-```
+```text
 1  POST session/start
 2  patient_baseline/v2               → current_layer: goals_priorities
 3  patient_goals_priorities/v2       → current_layer: patient_category
