@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import json
 import logging
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from time import perf_counter
 from typing import Literal
@@ -379,44 +379,58 @@ async def areorder_family_risk_summary(
     reordered = (out.summary or "").strip()
     return reordered or family_text
 
+# Single-worker pool for fire-and-forget webhook delivery.
+_webhook_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="webhook")
+
 
 def _post_webhook(payload: dict, url: str, secret: str) -> None:
-    """Runs on a background thread. The actual network call (DNS, connect,
-    timeout, non-2xx, etc.) is swallowed and logged as a warning only — it
-    must NOT propagate, since there is nothing on the main thread left to
-    catch it and a delivery failure here is not fatal to the summary run."""
+    """Runs on a pool worker thread. Each expected failure boundary
+    (serialization, the network call, a non-2xx/redirect response) is handled
+    individually and logged as a warning — nothing propagates, since there is
+    no caller left to catch it and a delivery failure is not fatal to the
+    summary run. Programming errors are intentionally NOT caught here."""
     try:
         body = json.dumps(payload, separators=(",", ":")).encode()
-        signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-        headers = {
-            "Content-Type": "application/json",
-            "X-Onboarding-Signature": f"sha256={signature}",
-        }
-        resp = requests.post(url, data=body, headers=headers, timeout=10)
-        logger.info(
-            "Webhook posted to %s: status=%s",
-            url,
-            resp.status_code,
+    except (TypeError, ValueError) as exc:
+        logger.warning("Webhook payload not serializable, not posted to %s: %s", url, exc)
+        return
+    signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-Onboarding-Signature": f"sha256={signature}",
+    }
+    try:
+        resp = requests.post(
+            url, data=body, headers=headers, timeout=10, allow_redirects=False
         )
-    except Exception as exc:
+    except requests.RequestException as exc:
         logger.warning("Webhook post to %s failed: %s", url, exc)
+        return
+    if not 200 <= resp.status_code < 300:
+        logger.warning(
+            "Webhook post to %s not delivered: status=%s", url, resp.status_code
+        )
+        return
+    logger.info("Webhook posted to %s: status=%s", url, resp.status_code)
 
 
 def _fire_webhook(payload: dict) -> None:
-    """Fire-and-forget: NOTHING webhook-related may block or abort the rest
-    of asummarize_patient. Every failure — misconfigured URL/secret
-    (TOOLS_URL, ONBOARDING_WEBHOOK_SECRET), or the OS refusing to start the
-    background thread — is caught and logged here, never propagated. The
-    actual POST runs on a daemon thread and its failures are handled the
-    same way inside _post_webhook."""
+    """Fire-and-forget: NOTHING webhook-related may block or abort the rest of
+    asummarize_patient. A misconfigured URL/secret (TOOLS_URL,
+    ONBOARDING_WEBHOOK_SECRET) raises ValueError, and submitting to a
+    shut-down pool raises RuntimeError; both are caught and logged here, never
+    propagated. The POST itself runs on a bounded pool worker and its failures
+    are handled the same way inside _post_webhook."""
     try:
         url = _webhook_url()
         secret = _webhook_secret()
-        threading.Thread(
-            target=_post_webhook, args=(payload, url, secret), daemon=True
-        ).start()
-    except Exception as exc:
+    except ValueError as exc:
         logger.warning("Webhook not fired: %s", exc)
+        return
+    try:
+        _webhook_executor.submit(_post_webhook, payload, url, secret)
+    except RuntimeError as exc:
+        logger.warning("Webhook not queued: %s", exc)
 
 
 def _patient_baseline(client_details: dict) -> dict:
