@@ -70,16 +70,18 @@ deliberately omit everything moderate or minor. In the family-risk summary \
 include ONLY the most significant hereditary conditions, those tied to the \
 strongest current patterns. A doctor with fifteen seconds must get only what \
 cannot be skipped.
-HARD LIMIT: the preconsultation summary must be AT MOST 45 words. If it would \
-run longer, drop the least critical facts — never exceed the cap.""",
+HARD LIMIT: the preconsultation summary must be AT MOST 56 words. If it would \
+run longer, DROP the least critical facts — never buy space by stripping grammar \
+into fragments, and never exceed the cap.""",
     "medium": """\
 COVERAGE — MEDIUM (balanced, default): Lead with the most critical findings and \
 cover the clinically significant ones; mention weaker patterns only briefly, or \
 omit them if they add no value. Include the pertinent diagnoses, medications, \
 goals, and lifestyle context, and the clinically significant hereditary \
 conditions.
-HARD LIMIT: the preconsultation summary must be AT MOST 90 words. If it would \
-run longer, drop the least critical facts — never exceed the cap.""",
+HARD LIMIT: the preconsultation summary must be AT MOST 113 words. If it would \
+run longer, DROP the least critical facts — never buy space by stripping grammar \
+into fragments, and never exceed the cap.""",
     "large": """\
 COVERAGE — LARGE (exhaustive): Leave nothing out. In the preconsultation summary \
 include EVERY finding present in the data — every reported concern with its \
@@ -87,8 +89,9 @@ duration and trend, every diagnosis, medication, allergy, surgery, reproductive 
 finding, and notable lifestyle factor — ordered most-critical-first. In the \
 family-risk summary include EVERY hereditary condition from any concern's family \
 history. Stay dense and non-repetitive, but omit nothing recorded.
-HARD LIMIT: the preconsultation summary must be AT MOST 160 words. If it would \
-run longer, condense aggressively — never exceed the cap.""",
+HARD LIMIT: the preconsultation summary must be AT MOST 200 words. If it would \
+run longer, DROP the least critical facts — never buy space by stripping grammar \
+into fragments, and never exceed the cap.""",
 }
 
 # FORMAT knob (output_style) for section 1 (preconsultation summary).
@@ -98,11 +101,20 @@ _SUMMARY_FORMATS = {
 dense clinical statements. No headings, no markdown, no bullet points, no line \
 breaks, no labels. Each sentence states facts directly and flows into the next.
    Target style:
-   - Telegraphic, information-dense clinical register — short declarative \
-sentences, minimal connective filler, the tone of a clinician's handover note.
+   - Information-dense but GRAMMATICAL clinical prose — complete, well-formed \
+sentences with real verbs, in the tone of a clinician's handover note. Dense \
+means every word earns its place, NOT that words are missing.
+   - NEVER chain facts into a semicolon-separated list. A run like "worsening \
+hypertension >3 yrs with high readings; hypercholesterolemia and elevated HbA1c \
+>3 yrs; central obesity; urinary symptoms" is a data dump, not a summary — it is \
+the single worst failure mode here. Write those facts as sentences instead.
    - Each sentence packs several related facts together (e.g. a finding with its \
 duration and trend, or a diagnosis with its medication and treatment setting) \
-rather than spreading one fact per sentence.
+rather than spreading one fact per sentence — but it must still READ as a \
+sentence, not as fragments glued together.
+   - If everything will not fit inside the word cap, state FEWER findings \
+properly rather than more findings as fragments. Cutting a minor finding is \
+always better than degrading the prose.
    - Move through the picture in a natural order: presenting findings first, \
 then family history, then current diagnoses/treatment, then goals, then \
 lifestyle context — as one unbroken paragraph.
@@ -188,29 +200,36 @@ markdown bullets ("- ") only.""",
 }
 
 # Style-independent rules for section 2.
+_FAMILY_WORD_CAP = {"small": 44, "medium": 44, "large": 90}
+
 _FAMILY_COMMON_RULES = """\
    Do not use the word "patient" at all in this summary — write entirely in \
 subjectless clauses or refer to the family directly. Rules:
-   - For each hereditary condition, name the affected relatives and the \
-condition DIRECTLY — e.g. "Maternal hypercholesterolemia (mother, 50-60)", \
-"Paternal type 2 diabetes". This is a family-history summary, so the hereditary \
-nature is already implied by context; do NOT wrap every clause in a filler frame \
+   - WRITE IT AS SENTENCES, NOT AS A LEDGER. This is prose a doctor reads, not a \
+table serialized into text. NEVER use the "Relative — condition (onset X), \
+condition (onset Y); Relative — ..." form: a line like "Father — hypertension \
+(onset >60) and high cholesterol (onset >60); Mother — high cholesterol (onset \
+50-60)" is exactly the ugly output to avoid. Say it the way a clinician would \
+speak it: "Father developed hypertension and high cholesterol after 60; mother \
+developed high cholesterol in her fifties and diabetes after 60." No em-dash \
+ledgers, no parenthetical onset tags, no semicolon-delimited lists of conditions.
+   - Name the affected relatives and the condition DIRECTLY. The hereditary \
+nature is already implied by context, so do NOT wrap clauses in a filler frame \
 like "family history shows signs of...", "hereditary risk of...", "signals of \
 familial...", or "runs in the family". Give the relative and condition once, \
 plainly.
    - CONSOLIDATE relatives, NOT ages. State each relative once and group their \
 conditions together, and when several relatives share a condition name them \
-together once. Turn "Father: hypertension. Father: high cholesterol." into one \
-clause about the father. Every relative-to-condition link in the data must \
-survive — merge for brevity, never drop a pairing.
+together once ("both parents developed high cholesterol..."). Every \
+relative-to-condition link in the data must survive — merge for brevity, never \
+drop a pairing.
    - AGE = AGE OF ONSET, PER CONDITION. Each age band is the age at which that \
-relative DEVELOPED that specific condition, NOT their current age. Attach the \
-onset age to EACH condition, e.g. "Father developed hypertension at over 60 and \
-high cholesterol at 55–60", or "Father — hypertension (onset over 60), high \
-cholesterol (onset 55–60)". A relative can have different onset ages for \
-different conditions; keep each condition's own onset age and never collapse them \
-to a single per-relative age. Two different onset ages for the same relative are \
-NOT a contradiction — they are different conditions.
+relative DEVELOPED that specific condition, NOT their current age. Fold the onset \
+age for EACH condition into the sentence as words — "developed hypertension after \
+60", "in her fifties" — never as a parenthetical tag. A relative can have \
+different onset ages for different conditions; keep each condition's own onset age \
+and never collapse them to a single per-relative age. Two different onset ages for \
+the same relative are NOT a contradiction — they are different conditions.
    - Frame it as what is present in the family, NOT as a verdict on the patient. \
 Do NOT state that the patient "is at high risk", "is at risk", or similar, and \
 do NOT conclude anything about the patient's own likelihood — just name who in \
@@ -222,10 +241,10 @@ gives.
    - Do NOT mention absent family history, no-risk conditions, or empty fields.
    - Do NOT mention confidence scores or any internal scoring.
    - Do NOT tell the doctor what to do.
-   - Keep it natural language but SUPER CONCISE — the fewest words that name each \
-relative and their condition(s) with onset ages. HARD LIMIT: at most 35 words. \
-If it would run longer, keep only the most significant hereditary conditions — \
-never exceed the cap.
+   - Keep it natural language and tight, but it must READ WELL — flowing clinical \
+sentences, never a compressed ledger. HARD LIMIT: at most {family_word_cap} words. If it would \
+run longer, keep only the most significant hereditary conditions — drop a \
+condition rather than degrade the prose into fragments, and never exceed the cap.
    - If there is no family history to report, return an empty string — never \
 state that there is none, and never invent one.
    - Also set the boolean `family_risk_present`: true ONLY when the family \
@@ -284,6 +303,9 @@ def build_summary_system_prompt(
     """
     style = output_style if output_style in _SUMMARY_FORMATS else "paragraph"
     size = output_size if output_size in _COVERAGE else "medium"
+    family_common_rules = _FAMILY_COMMON_RULES.format(
+        family_word_cap=_FAMILY_WORD_CAP[size]
+    )
     return "\n\n".join(
         [
             _SUMMARY_PREAMBLE,
@@ -292,7 +314,7 @@ def build_summary_system_prompt(
             _SUMMARY_FORMATS[style],
             _SUMMARY_COMMON_RULES,
             _FAMILY_FORMATS[style],
-            _FAMILY_COMMON_RULES,
+            family_common_rules,
             _QUICK_SUMMARY,
             _CLOSING[style],
         ]
@@ -912,22 +934,33 @@ clinical content.
 Then the `summary`: a single paragraph stating the VISIBLE issues in the report \
 — the objective findings actually present, with their measured values — and \
 NOTHING you infer on your own. Rules:
+- READ LIKE A CLINICIAN WROTE IT, NOT LIKE A SPREADSHEET. Write complete, \
+flowing sentences with real verbs, the way a doctor would describe the report to \
+a colleague. NEVER a chain of "analyte value flag" fragments strung together with \
+semicolons or commas. WRONG (a keyword/value ledger): "HbA1c 6.1% high; fasting \
+glucose 112 mg/dL; vitamin D 8 ng/mL low; LDL 145 mg/dL." RIGHT (natural prose): \
+"HbA1c is mildly elevated at 6.1% and fasting glucose sits in the prediabetic \
+range at 112 mg/dL. Vitamin D is severely deficient at 8 ng/mL, and LDL is \
+borderline high at 145 mg/dL against a low HDL of 38." Same facts, same numbers — \
+but sentences a person can read aloud.
 - VISIBLE ISSUES ONLY, NO SPECULATION: report only what the findings objectively \
 state. Do NOT add your own interpretation, diagnosis, mechanism, cause, risk \
 judgment, or any conclusion the report itself did not state. If the report gives \
-a value, give the value; do not explain what it "means" beyond what is written.
-- INCLUDE THE MEASUREMENTS: for every quantitative finding keep its number and \
-unit — e.g. "HbA1c 6.1%", "fasting glucose 112 mg/dL", "vitamin D 8 ng/mL", "ALT \
-56 U/L". A lab summary without its numbers is unacceptable. Model example: \
-"Fasting glucose 112 mg/dL and HbA1c 6.1% in the prediabetic range; vitamin D \
-severely deficient at 8 ng/mL; borderline LDL 145 mg/dL with low HDL 38 mg/dL."
+a value, give the value; do not explain what it "means" beyond what is written. \
+(Describing a value as "elevated", "low", or "within range" is fine — that is the \
+finding itself, not an inference.)
+- INCLUDE THE MEASUREMENTS: every quantitative finding keeps its number and unit, \
+woven into the sentence — "HbA1c is elevated at 6.1%", "ALT is high at 56 U/L", \
+"vitamin D is severely deficient at 8 ng/mL". A lab summary without its numbers is \
+unacceptable, but the numbers live inside sentences, never as bare tags.
 - PRIORITIZE: lead with the most abnormal or clinically critical findings — \
 out-of-range values, red-flag findings, acute or active diagnoses — then the \
-moderate ones, then the minor/informational. The first clause carries what \
+moderate ones, then the minor/informational. The first sentence carries what \
 matters most.
-- CONDENSE: merge facts about the SAME clinical subject (same organ, study, \
-analyte group) into one statement; never repeat a finding. A dense paragraph, \
-not a list.
+- CONDENSE by MERGING, not by dropping grammar: combine facts about the SAME \
+clinical subject (same organ, study, analyte group) into one sentence; never \
+repeat a finding. If everything will not fit the word cap, state FEWER findings \
+as proper sentences rather than more findings as fragments.
 - Demographic sanity: a finding clearly incompatible with or extremely atypical \
 for the patient's age/gender is likely a data error — mention it LAST (or as \
 needing verification), never lead with it.
@@ -937,14 +970,19 @@ Strict content rules:
 - Use ONLY language that appears, verbatim or very closely paraphrased, in the \
 source facts. No inferences and no hedged language ("could", "may", "suggest", \
 "possible", "likely", "consistent with") unless the report itself used it.
-- State every fact DIRECTLY. Never use meta-phrasing such as "the report \
-shows/indicates/reveals/notes", "mentioned in report", "documented in", "as per \
-the report", or patient-attribution filler like "patient reports"/"reports". \
-Write "ALT elevated at 56 U/L", not "the report shows ALT is elevated".
+- Prefer stating facts DIRECTLY, but an occasional natural report-framing is \
+fine for readability — "the report notes a low vitamin D" or "the panel shows an \
+elevated ALT" reads well ONCE. Do NOT overuse it: never open more than one \
+sentence that way, and never let "the report shows/indicates/reveals", "mentioned \
+in report", "documented in", or "as per the report" become a repeated crutch on \
+every clause. Vary the phrasing; most findings should simply be stated ("ALT is \
+elevated at 56 U/L"). Never use patient-attribution filler ("patient \
+reports"/"reports").
 - Do NOT tell the doctor what to do, and do NOT invent content beyond the facts.
 - Write flowing clinical prose (no bullet list, no headings, no page numbers).
-- HARD LIMIT: at most 60 words. If it would run longer, keep the most critical \
-findings with their values and drop the rest — never exceed the cap.
+- HARD LIMIT: at most 75 words. If it would run longer, keep the most critical \
+findings with their values as proper sentences and drop the least important — \
+never buy space by collapsing prose into fragments, and never exceed the cap.
 - If there are no patient-specific facts at all, return an empty string.
 
 Before anything else, judge `has_findings`:

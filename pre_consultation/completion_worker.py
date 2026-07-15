@@ -18,7 +18,11 @@ from django.db import connections
 from django.utils import timezone
 
 from accounts.users.utils.helper import calculate_age
-from intelligence_engine.preconsultation import extract_insights_batch, summarize_patient
+from intelligence_engine.preconsultation import (
+    extract_insights_batch,
+    summarize_patient,
+)
+from pre_consultation.gender_mapping import profile_gender_to_baseline_gender
 from pre_consultation.models import (
     PreConsultationMedicalReport,
     PreConsultationMedicalReportSummary,
@@ -30,7 +34,9 @@ from pre_consultation.result_session import (
     ResultSessionContext,
     get_result_session_context,
 )
-from pre_consultation.utils.constants import PreConsultationArtifactGenerationStatus
+from pre_consultation.utils.constants import (
+    PreConsultationArtifactGenerationStatus,
+)
 from pre_consultation.utils.directive import (
     get_concern_cluster_ids_map,
     get_directive_age_band_label_map,
@@ -49,6 +55,7 @@ from pre_consultation.utils.directive import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 def spawn_post_completion_generation(session_id: str, user_id: str) -> None:
     """Spawn a daemon thread that runs both post-completion generation steps."""
@@ -92,13 +99,16 @@ def _run_post_completion_generation(session_id: str, user_id: str) -> None:
     finally:
         connections.close_all()
 
+
 def run_summarization(session_id: str, user_id: str) -> None:
     logger.info(
         f"Starting summarization for session {session_id}",
         extra={"session_id": session_id},
     )
     try:
-        session = PreConsultationSession.objects.get(pk=session_id, user_id=user_id)
+        session = PreConsultationSession.objects.get(
+            pk=session_id, user_id=user_id
+        )
 
         artifacts, _ = PreConsultationSessionArtifacts.objects.get_or_create(
             session=session
@@ -134,7 +144,9 @@ def run_summarization(session_id: str, user_id: str) -> None:
         )
         try:
             session = PreConsultationSession.objects.get(pk=session_id)
-            artifacts = PreConsultationSessionArtifacts.objects.get(session=session)
+            artifacts = PreConsultationSessionArtifacts.objects.get(
+                session=session
+            )
             artifacts.generation_status = (
                 PreConsultationArtifactGenerationStatus.FAILED
             )
@@ -158,13 +170,16 @@ def _persist_summarization_result(
     result: dict,
 ) -> None:
     summary = result.get("preconsultation_summary", "")
+    quick_summary = result.get("quick_summary", "")
     family_risk_summary = result.get("family_risk_summary", "")
     checklist_items = result.get("preconsultation_checklist", [])
 
     artifacts.summary = summary
-    artifacts.quick_summary = summary
+    artifacts.quick_summary = quick_summary
     artifacts.family_risk_summary = family_risk_summary
-    artifacts.generation_status = PreConsultationArtifactGenerationStatus.COMPLETED
+    artifacts.generation_status = (
+        PreConsultationArtifactGenerationStatus.COMPLETED
+    )
     artifacts.generation_completed_at = timezone.now()
     artifacts.save(
         update_fields=[
@@ -177,7 +192,9 @@ def _persist_summarization_result(
         ]
     )
 
-    PreConsultationPreparationChecklistItem.objects.filter(session=session).delete()
+    PreConsultationPreparationChecklistItem.objects.filter(
+        session=session
+    ).delete()
 
     checklist_rows = [
         PreConsultationPreparationChecklistItem(
@@ -195,6 +212,7 @@ def _persist_summarization_result(
         f"summary={len(summary)} chars, checklist={len(checklist_rows)} item(s)",
         extra={"session_id": str(session.pk)},
     )
+
 
 def build_summarize_client_details(context: ResultSessionContext) -> dict:
     """Transform ResultSessionContext into LLM-required client_details shape.
@@ -255,7 +273,9 @@ def _concerns_payload(context: ResultSessionContext) -> list[dict]:
     concern_label_map = get_directive_concern_label_map()
     functional_impact_map = get_directive_impact_label_map("functional_impact")
     duration_impact_map = get_directive_impact_label_map("duration_impact")
-    progression_impact_map = get_directive_impact_label_map("progression_impact")
+    progression_impact_map = get_directive_impact_label_map(
+        "progression_impact"
+    )
     symptom_label_map = get_directive_symptom_label_map()
     concern_source_label_map = _build_concern_source_label_map()
     family_relation_label_map = get_directive_family_relation_label_map()
@@ -376,7 +396,8 @@ def _medical_history_payload(context: ResultSessionContext) -> dict:
     ]
 
     allergies = [
-        {"name": allergy.name} for allergy in context.medical_history.allergies.all()
+        {"name": allergy.name}
+        for allergy in context.medical_history.allergies.all()
     ]
 
     surgeries = [
@@ -408,7 +429,7 @@ def _sexual_health_answers_payload(context: ResultSessionContext) -> list[dict]:
         return []
 
     profile = context.customer_profile
-    gender = profile.gender
+    gender = profile_gender_to_baseline_gender(profile.gender)
     if not gender:
         return []
 
@@ -432,7 +453,9 @@ def _sexual_health_answers_payload(context: ResultSessionContext) -> list[dict]:
 
     answers = []
     for sha in context.medical_history.sexual_health_answers.all():
-        question_label = question_label_map.get(sha.question_id, sha.question_id)
+        question_label = question_label_map.get(
+            sha.question_id, sha.question_id
+        )
         option_labels = option_label_map.get(sha.question_id, {})
         option_label = option_labels.get(sha.option_id, sha.option_id)
 
@@ -496,7 +519,9 @@ def _lifestyle_answers_payload(context: ResultSessionContext) -> list[dict]:
 
     return [
         {
-            "field_label": field_label_map.get(answer.field_id, answer.field_id),
+            "field_label": field_label_map.get(
+                answer.field_id, answer.field_id
+            ),
             "option_value": answer.option_value,
             "option_label": option_label_map.get(answer.field_id, {}).get(
                 answer.option_value,
@@ -513,6 +538,7 @@ def _build_concern_source_label_map() -> dict[str, str]:
 
 def _build_health_goal_label_map() -> dict[str, str]:
     return {hg["id"]: hg["label"] for hg in get_directive_health_goals()}
+
 
 def run_report_insights_extraction(session_id: str, user_id: str) -> None:
     """Fetch uploaded reports, call extraction LLM, persist results."""
@@ -545,7 +571,7 @@ def run_report_insights_extraction(session_id: str, user_id: str) -> None:
             f"Report insight extraction completed for session {session_id}: "
             f"{len(result.get('results', []))} processed, "
             f"{len(result.get('skipped', []))} skipped",
-            extra={"session_id": session_id, "result": result},
+            extra={"session_id": session_id},
         )
 
     except Exception as e:
@@ -583,6 +609,7 @@ def build_extract_insights_reports(context: ResultSessionContext) -> list[dict]:
         for report in context.medical_history.medical_reports.all()
     ]
 
+
 def _extraction_client_identity(
     context: ResultSessionContext,
 ) -> tuple[str, int | None, str]:
@@ -591,8 +618,11 @@ def _extraction_client_identity(
 
     profile = context.customer_profile
     name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
-    age = calculate_age(profile.date_of_birth) if profile.date_of_birth else None
+    age = (
+        calculate_age(profile.date_of_birth) if profile.date_of_birth else None
+    )
     return name, age, profile.gender or ""
+
 
 def _parse_testing_date(report_date: str | None) -> date | None:
     if not report_date:
@@ -600,7 +630,10 @@ def _parse_testing_date(report_date: str | None) -> date | None:
     try:
         return date.fromisoformat(report_date)
     except ValueError:
-        logger.warning(f"Could not parse report_date {report_date!r} as ISO date")
+        # Log a stable failure event only — the report date is report-derived
+        # health data and must not appear in logs (see .coderabbit.yaml
+        # pre_consultation/** PHI rule).
+        logger.warning("Could not parse medical report date as ISO date")
         return None
 
 
@@ -617,7 +650,9 @@ def _persist_extraction_results(result: dict) -> None:
 
     reports_by_id = {
         str(report.pk): report
-        for report in PreConsultationMedicalReport.objects.filter(pk__in=doc_ids)
+        for report in PreConsultationMedicalReport.objects.filter(
+            pk__in=doc_ids
+        )
     }
 
     for doc in processed:
@@ -644,11 +679,15 @@ def _persist_extraction_results(result: dict) -> None:
             continue
         report = reports_by_id.get(doc_id)
         if report is None:
-            logger.warning(f"Medical report {doc_id} not found for skipped extraction")
+            logger.warning(
+                f"Medical report {doc_id} not found for skipped extraction"
+            )
             continue
         PreConsultationMedicalReportSummary.objects.update_or_create(
             medical_report=report,
-            defaults={"generation_status": PreConsultationArtifactGenerationStatus.FAILED},
+            defaults={
+                "generation_status": PreConsultationArtifactGenerationStatus.FAILED
+            },
         )
 
     logger.info(
@@ -656,11 +695,16 @@ def _persist_extraction_results(result: dict) -> None:
         f"{len(skipped)} skipped/failed"
     )
 
+
 def _mark_reports_failed(doc_ids: list[str]) -> None:
     reports = PreConsultationMedicalReport.objects.filter(pk__in=doc_ids)
     for report in reports:
         PreConsultationMedicalReportSummary.objects.update_or_create(
             medical_report=report,
-            defaults={"generation_status": PreConsultationArtifactGenerationStatus.FAILED},
+            defaults={
+                "generation_status": PreConsultationArtifactGenerationStatus.FAILED
+            },
         )
-    logger.info(f"Marked {len(reports)} report(s) as FAILED after extraction call error")
+    logger.info(
+        f"Marked {len(reports)} report(s) as FAILED after extraction call error"
+    )
