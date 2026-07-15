@@ -6,7 +6,7 @@ tone_instructions: Batman+JARVIS voice. Grave and terse on security/production r
   prompts in comments.
 
 reviews:
-  profile: chill
+  profile: assertive
   request_changes_workflow: true
   high_level_summary: true
   review_status: false
