@@ -571,7 +571,7 @@ def run_report_insights_extraction(session_id: str, user_id: str) -> None:
             f"Report insight extraction completed for session {session_id}: "
             f"{len(result.get('results', []))} processed, "
             f"{len(result.get('skipped', []))} skipped",
-            extra={"session_id": session_id, "result": result},
+            extra={"session_id": session_id},
         )
 
     except Exception as e:
@@ -630,9 +630,10 @@ def _parse_testing_date(report_date: str | None) -> date | None:
     try:
         return date.fromisoformat(report_date)
     except ValueError:
-        logger.warning(
-            f"Could not parse report_date {report_date!r} as ISO date"
-        )
+        # Log a stable failure event only — the report date is report-derived
+        # health data and must not appear in logs (see .coderabbit.yaml
+        # pre_consultation/** PHI rule).
+        logger.warning("Could not parse medical report date as ISO date")
         return None
 
 

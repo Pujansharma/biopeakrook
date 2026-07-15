@@ -200,6 +200,8 @@ markdown bullets ("- ") only.""",
 }
 
 # Style-independent rules for section 2.
+_FAMILY_WORD_CAP = {"small": 44, "medium": 44, "large": 90}
+
 _FAMILY_COMMON_RULES = """\
    Do not use the word "patient" at all in this summary — write entirely in \
 subjectless clauses or refer to the family directly. Rules:
@@ -240,7 +242,7 @@ gives.
    - Do NOT mention confidence scores or any internal scoring.
    - Do NOT tell the doctor what to do.
    - Keep it natural language and tight, but it must READ WELL — flowing clinical \
-sentences, never a compressed ledger. HARD LIMIT: at most 44 words. If it would \
+sentences, never a compressed ledger. HARD LIMIT: at most {family_word_cap} words. If it would \
 run longer, keep only the most significant hereditary conditions — drop a \
 condition rather than degrade the prose into fragments, and never exceed the cap.
    - If there is no family history to report, return an empty string — never \
@@ -301,6 +303,9 @@ def build_summary_system_prompt(
     """
     style = output_style if output_style in _SUMMARY_FORMATS else "paragraph"
     size = output_size if output_size in _COVERAGE else "medium"
+    family_common_rules = _FAMILY_COMMON_RULES.format(
+        family_word_cap=_FAMILY_WORD_CAP[size]
+    )
     return "\n\n".join(
         [
             _SUMMARY_PREAMBLE,
@@ -309,7 +314,7 @@ def build_summary_system_prompt(
             _SUMMARY_FORMATS[style],
             _SUMMARY_COMMON_RULES,
             _FAMILY_FORMATS[style],
-            _FAMILY_COMMON_RULES,
+            family_common_rules,
             _QUICK_SUMMARY,
             _CLOSING[style],
         ]
