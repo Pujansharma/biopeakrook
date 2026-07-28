@@ -4,6 +4,8 @@ from django.db import models
 class ProgramType(models.TextChoices):
     THERAPY = "therapy", "Therapy Program"
     ASSESSMENT = "assessment", "Assessment Program"
+    CONSULTATION = "consultation", "Consultation"
+    COMPOSITE = "composite", "Composite"
 
 
 class RedemptionType(models.TextChoices):
