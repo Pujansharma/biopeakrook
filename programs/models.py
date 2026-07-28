@@ -86,7 +86,7 @@ class ProgramService(BaseUUIDModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["program", "service"], name="unique_program_service"
-            )
+            ),
         ]
 
     def __str__(self):
@@ -139,6 +139,70 @@ class TherapyProgramService(BaseModel):
         return f"{self.pk}"
 
 
+class AssessmentProgram(BaseModel):
+    program = models.OneToOneField(
+        Program,
+        on_delete=models.CASCADE,
+        related_name="assessment_program",
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AssessmentProgramService(BaseModel):
+    program_service = models.OneToOneField(
+        ProgramService,
+        related_name="assessment_service",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ConsultationProgram(BaseModel):
+    program = models.OneToOneField(
+        Program,
+        on_delete=models.CASCADE,
+        related_name="consultation_program",
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ConsultationProgramService(BaseModel):
+    program_service = models.OneToOneField(
+        ProgramService,
+        related_name="consultation_service",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class RedemptionHistory(BaseUUIDModel):
     therapy_program_service = models.ForeignKey(
         TherapyProgramService, on_delete=models.PROTECT, related_name="redemptions"
@@ -164,6 +228,29 @@ class RedemptionHistory(BaseUUIDModel):
     class Meta:
         ordering = ["-created_at"]
         verbose_name_plural = "Redemption Histories"
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CompositeProgram(BaseModel):
+    program = models.OneToOneField(
+        Program,
+        on_delete=models.CASCADE,
+        related_name="composite_program",
+        primary_key=True,
+        db_index=True,
+    )
+    composite_template = models.ForeignKey(
+        "composites.CompositeTemplate",
+        related_name="assigned_programs",
+        on_delete=models.PROTECT,
+    )
+    template_name = models.CharField(max_length=200, editable=False)
+    template_description = models.TextField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"
