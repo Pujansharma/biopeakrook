@@ -70,6 +70,7 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
             "service",
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "redeem_code",
             "created_date",
             "created_at",
@@ -82,6 +83,7 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
         read_only_fields = [
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "redeem_code",
         ]
 
