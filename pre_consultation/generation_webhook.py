@@ -28,21 +28,22 @@ _webhook_executor = ThreadPoolExecutor(
 
 
 def _webhook_url() -> str:
-    url = config("PRECONS_GENERATION_WEBHOOK_URL", default="").strip()
-    if not url:
-        raise ValueError("PRECONS_GENERATION_WEBHOOK_URL is not set")
+    base = config("TOOLS_URL", default="").strip()
+    if not base:
+        raise ValueError("TOOLS_URL is not set")
+    path = config("PRECONS_TOOL_TRIGGER_API", default="").strip()
+    if not path:
+        raise ValueError("PRECONS_TOOL_TRIGGER_API is not set")
 
-    if not url.lower().startswith("https://"):
-        raise ValueError(
-            f"PRECONS_GENERATION_WEBHOOK_URL must use https, got {url!r}."
-        )
-    return url
+    # if not base.lower().startswith("https://"):
+    #     raise ValueError(f"TOOLS_URL must use https, got {base!r}.")
+    return base.rstrip("/") + "/" + path.lstrip("/")
 
 
 def _webhook_secret() -> str:
-    secret = config("PRECONS_GENERATION_WEBHOOK_SECRET", default="").strip()
+    secret = config("ONBOARDING_WEBHOOK_SECRET", default="").strip()
     if not secret:
-        raise ValueError("PRECONS_GENERATION_WEBHOOK_SECRET is not set.")
+        raise ValueError("ONBOARDING_WEBHOOK_SECRET is not set.")
     return secret
 
 
