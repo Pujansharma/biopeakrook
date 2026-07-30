@@ -503,6 +503,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     is_onboarding_complete = serializers.BooleanField(
         source='customer_profile.is_onboarding_complete', required=False
     )
+    home_center = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = CustomerCenterAssignment
@@ -523,6 +524,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "external_centers_count",
             "created_at",
             "updated_at",
+            "home_center",
         ]
         read_only_fields = [
             "is_main",
@@ -530,6 +532,14 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "centers_count",
             "external_centers_count",
         ]
+
+    def get_home_center(self, instance):
+        assignments = getattr(
+            instance.customer_profile, "primary_center_assignments", None
+        )
+        if not assignments:
+            return None
+        return MinimumCenterSerializer(assignments[0].center, context=self.context).data
 
     def update(self, instance: CustomerCenterAssignment, validated_data):
         profile_wrapper = validated_data.pop("customer_profile", {})
