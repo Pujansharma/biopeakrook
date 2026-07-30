@@ -1,6 +1,7 @@
 from django.db import models
 
-from core.utils.models import BaseUUIDModel
+from core.utils.models import BaseModel, BaseUUIDModel
+from programs.composites.utils.constants import PrerequisiteCondition
 
 
 class CompositeTemplate(BaseUUIDModel):
@@ -54,4 +55,38 @@ class CompositeTemplateService(BaseUUIDModel):
         ]
 
     def __str__(self):
+        return f"{self.pk}"
+
+
+class CompositeServicePrerequisite(BaseModel):
+    template_service = models.OneToOneField(
+        CompositeTemplateService,
+        on_delete=models.CASCADE,
+        related_name="prerequisite",
+    )
+    related_services = models.ManyToManyField(
+        CompositeTemplateService,
+        related_name="related_prerequisites",
+        blank=True,
+    )
+    related_services_count = models.PositiveIntegerField(
+        default=0,
+        editable=False,
+    )
+    condition = models.CharField(
+        choices=PrerequisiteCondition, default=PrerequisiteCondition.REQUIRE_ANY
+    )
+    created_by = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_composite_service_prerequisites",
+        editable=False,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
         return f"{self.pk}"
