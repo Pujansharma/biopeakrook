@@ -20,7 +20,7 @@ from accounts.customers.models import (
     CustomerCenterAssignment,
     CustomerProfile,
     CustomerAssociateAssignment,
-    CustomerProfileAddress,
+    CustomerProfileAddress, CustomerProfileFeature,
 )
 from accounts.customers.utils.db import (
     create_customer_user_account,
@@ -458,9 +458,6 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
 class BaseCustomerAssignedCenterSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="center.id", read_only=True)
     name = serializers.CharField(source="center.name", read_only=True)
-
-    # is_primary = serializers.BooleanField(source="customer_profile.is_primary", read_only=True)
-    # is_active = serializers.BooleanField(source="customer_profile.customer.user.is_active")
 
     class Meta:
         model = CustomerCenterAssignment
@@ -923,3 +920,14 @@ class CustomerProfileAddressSerializer(BaseModelSerializer):
                 ).update(is_default=False)
             instance = super().update(instance, validated_data)
         return instance
+
+
+class CustomerProfileFeatureSerializer(BaseModelSerializer):
+    class Meta:
+        model = CustomerProfileFeature
+        fields = [
+            "is_copilot_chat_enabled",
+            "is_stable",
+            "enabled_tabs",
+            "updated_at",
+        ]
