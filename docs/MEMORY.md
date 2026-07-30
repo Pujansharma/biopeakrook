@@ -21,7 +21,8 @@
 | Pre-consultation schema 3.0.0 (2026-06-30) | Normalized 15-table session-scoped model: `PreConsultationCategorySelection`, `PreConsultationConcern` (+ symptom/source/family/probe children), `PreConsultationMedicalHistory` (+ diagnosis/allergy/surgery/medication/sexual-health children), `PreConsultationLifestyleAnswer`, `PreConsultationHealthGoal`. Session fields: `directive_schema_id`, `current_layer`. Directive taxonomy: category/concern/symptom/concern_source/age_band. Layer ids renamed (`patient_category`, `patient_concern`, `patient_symptom`, `patient_concern_probe`). Cascade reset on layer edit via `layers/reset.py`. Squashed to `0001_initial`. |
 | Pre-consultation response envelope (2026-06-30) | `success` only at top level; never inside `data`. `pre_consultation_response()` strips stray `success` from `data`. |
 | Program/service/provider/composite ERD direction (2026-06-11) | User confirmed the ERD reflects newer business requirements and should keep the domain name `Client` rather than implementation naming. `Service` will be extended with type and products. Composite models are not yet defined and should be created from the ERD. Service definitions stay reusable, center availability uses `CenterServiceAssignment`, assigned quantities live on `ProgramService`, and assessment behavior comes from provider/product callbacks. |
-| Program subtype/service subtype split (2026-06-12) | `ProgramService` is the common assigned service line. `TherapyProgram.program` is the primary key, and `TherapyProgramService.program_service` is the primary key. Therapy-only session/redemption fields live on `TherapyProgramService`, and `RedemptionHistory` points to `TherapyProgramService`. `wellness_*` names are compatibility properties/API aliases only. User will discard old data and generate fresh migrations manually; do not create migration files for this change. |
+| Shared program-service allocation (2026-07-27) | Ordinary and composite programs use `ProgramService` as the common assigned service line. Preserve the established fields `sessions_count`, `sessions_used`, and `sessions_cancelled` on `ProgramService`; do not rename them or add model properties/aliases. `sessions_count=0` means unlimited sessions, so it must remain valid and must not have a positive-count check constraint. `TherapyProgramService` retains therapy-only runtime data such as `redeem_code`, while `RedemptionHistory` continues to point to it. Cancellation history is created only when the parent `Program.program_type` is `THERAPY`, not for composite programs. Composite list/create uses one `CompositeProgramSerializer`; `CompositeProgramSerializer.create()` returns the newly created `CompositeProgram` directly without rebuilding it through the composite-program queryset. Serializer object checks belong in `create()`/`update()`, and `SerializerMethodField` handlers do not need return annotations. The user generates and reviews migrations. |
+| Composite service prerequisites (2026-07-29) | `CompositeServicePrerequisite` is a singleton configuration attached to `CompositeTemplateService`. It retains `BaseModel`, permits an empty `related_services` M2M, defaults to `require_any`, and stores an ORM-subquery-maintained `related_services_count`. Composite-template-service responses include prerequisite metadata and a three-service `related_services` preview. Updates use `PUT programs/composites/services/<template_service_uuid>/prerequisites/`; complete linked and annotated available-service lists use the paginated `prerequisites/<template_service_uuid>/prerequisite-services/` and `available-prerequisite-services/` GET endpoints. |
 
 ---
 
@@ -87,3 +88,13 @@
 - **ALWAYS use `.pk`** via the relation (e.g. `program_service.program.pk`)
 - Added to CODING_RULES.md Section 11
 - Why: Explicit, consistent, avoids implicit Django column accessor confusion
+
+**ORM Single-Object Lookups (2026-07-27)**
+- Use `filter(...).first()` for serializer and utility object lookups.
+- Do not introduce direct `.get()` lookups; explicitly handle a missing result where required.
+
+**View Querysets (2026-07-27)**
+- Keep reusable endpoint queryset construction in a `*ViewMeta` mixin derived from `BaseGenericAPIView`.
+- Concrete views should subclass the mixin and call the queryset method through `self`, following `CenterViewMeta`; do not create standalone queryset utility functions for this pattern.
+- Use the established `filter_kwargs = {}` pattern for request/user-specific queryset scoping; do not introduce custom permission-queryset mixins.
+- Do not add `http_method_names`; rely on the project’s established base view classes.
