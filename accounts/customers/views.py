@@ -11,7 +11,7 @@ from accounts.customers.models import (
     CustomerAssociateAssignment,
     CustomerCenterAssignment,
     CustomerProfile,
-    CustomerProfileAddress,
+    CustomerProfileAddress, CustomerProfileFeature,
 )
 from accounts.customers.serializers import (
     CustomerAccountSerializer,
@@ -21,7 +21,7 @@ from accounts.customers.serializers import (
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
     BaseCustomerAssignedCenterSerializer,
-    CustomerProfileAddressSerializer,
+    CustomerProfileAddressSerializer, CustomerProfileFeatureSerializer,
 )
 from accounts.organizations.utils.db import (
     decrement_organization_clients_count,
@@ -30,40 +30,40 @@ from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerUser
 from core.utils.exceptions import get_object_or_404
+from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
     BaseListAPIView,
     BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
     BaseCreateAPIView,
-    BaseListCreateAPIView,
+    BaseListCreateAPIView, BaseGenericAPIView,
 )
 
 
-def get_customer_for_request(request):
-    qs = Customer.objects.select_related("user")
-    return get_object_or_404(
-        qs, detail="Invalid Customer profile", pk=request.user.pk
-    )
+class CustomerProfileMeta(BaseGenericAPIView):
+
+    def get_customer_for_user(self):
+        qs = Customer.objects.select_related("user")
+        return get_object_or_404(
+            qs, detail="Invalid Customer profile", pk=self.request.user.pk
+        )
 
 
-class CustomerAccountProfileView(BaseRetrieveUpdateAPIView):
+class CustomerAccountProfileView(BaseRetrieveUpdateAPIView, CustomerProfileMeta):
     """Views for customers to update their profiles"""
 
     permission_classes = [IsCustomerUser]
     serializer_class = CustomerAccountSerializer
 
     def get_object(self):
-        return get_customer_for_request(self.request)
+        return self.get_customer_for_user()
 
 
-class CustomerProfilesListView(BaseListAPIView):
+class CustomerProfilesListView(BaseListAPIView, CustomerProfileMeta):
     """View for customers to List all profiles"""
 
     permission_classes = [IsCustomerUser]
     serializer_class = CustomerProfileSerializer
-
-    def get_customer(self):
-        return get_customer_for_request(self.request)
 
     def get_queryset(self):
         filter_kwargs = {}
@@ -73,7 +73,7 @@ class CustomerProfilesListView(BaseListAPIView):
             filter_kwargs["is_active"] = bool(int(is_active_query))
 
         return CustomerProfile.objects.select_related("customer__user").filter(
-            customer=self.get_customer(), **filter_kwargs
+            customer=self.get_customer_for_user(), **filter_kwargs
         )
 
 
@@ -341,3 +341,27 @@ class CustomerProfileAddressView(BaseListCreateAPIView):
         serializer.save(
             customer_profile=self.get_customer_profile(),
         )
+
+
+class CustomerProfileFeatureView(BaseRetrieveUpdateAPIView):
+    serializer_class = CustomerProfileFeatureSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser | (IsCustomerUser & ReadOnly)]
+
+    def get_customer_profile(self):
+        filter_kwargs = {}
+        user = self.request.user
+        account_type = get_user_account_type(user)
+        if account_type == UserType.CUSTOMER:
+            customer = getattr(user, 'customer')
+            filter_kwargs['customer'] = customer
+
+        qs = CustomerProfile.objects.filter(
+            **filter_kwargs
+        )
+        return get_object_or_404(qs, "Customer profile not found", pk=self.kwargs['pk'])
+
+    def get_object(self):
+        instance, _ = CustomerProfileFeature.objects.get_or_create(
+            customer_profile=self.get_customer_profile()
+        )
+        return instance
