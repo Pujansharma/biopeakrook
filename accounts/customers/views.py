@@ -1,5 +1,6 @@
 from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
 from django.db.models.functions import Coalesce, Concat
+from django.db.models.query import Prefetch
 
 from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
@@ -92,6 +93,14 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
 
         return CustomerCenterAssignment.objects.select_related(
             "customer_profile__customer__user",
+        ).prefetch_related(
+            Prefetch(
+                "customer_profile__center_assignments",
+                queryset=CustomerCenterAssignment.objects.filter(
+                    is_primary=True
+                ).select_related("center"),
+                to_attr="primary_center_assignments",
+            ),
         ).filter(**filter_kwargs)
 
     def get_object(self):
