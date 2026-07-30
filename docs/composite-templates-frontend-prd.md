@@ -1,0 +1,940 @@
+# Frontend API PRD: Programs → Composite Templates → Composite Programs
+
+## Composite Templates
+
+### GET Composite Templates
+
+#### URL
+
+```text
+<baseURL>/programs/composites/templates/?page=<page>&limit=<limit>
+```
+
+#### Request Payload
+
+```json
+null
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "All data.",
+  "count": "<integer>",
+  "next": "<url|null>",
+  "previous": "<url|null>",
+  "data": [
+    {
+      "id": "<uuid>",
+      "name": "<string>",
+      "description": "<string|null>",
+      "services": [
+        {
+          "id": "<service_uuid>",
+          "name": "<string>",
+          "quantity": "<integer>",
+          "is_global": "<boolean>",
+          "service_category": "<string>",
+          "service_category_code": "<therapy|assessment|consultation>",
+          "image": "<url|null>",
+          "is_active": "<boolean>",
+          "is_locked": "<boolean>",
+          "centers": [
+            {
+              "id": "<uuid>",
+              "code": "<string>",
+              "name": "<string>"
+            }
+          ],
+          "centers_count": "<integer>",
+          "redeemable_centers": [
+            {
+              "id": "<uuid>",
+              "code": "<string>",
+              "name": "<string>"
+            }
+          ],
+          "redeemable_centers_count": "<integer>",
+          "products": [
+            {
+              "id": "<uuid>",
+              "name": "<string>",
+              "code": "<string>"
+            }
+          ],
+          "products_count": "<integer>",
+          "created_at": "<datetime>",
+          "updated_at": "<datetime>",
+          "created_by": {
+            "id": "<uuid>",
+            "email": "<string|null>",
+            "first_name": "<string>",
+            "last_name": "<string>",
+            "image": "<url|null>",
+            "last_login": "<datetime|null>"
+          }
+        }
+      ],
+      "services_count": "<integer>",
+      "is_active": "<boolean>",
+      "created_at": "<datetime>",
+      "updated_at": "<datetime>",
+      "created_by": {
+        "id": "<uuid>",
+        "email": "<string|null>",
+        "first_name": "<string>",
+        "last_name": "<string>",
+        "image": "<url|null>",
+        "last_login": "<datetime|null>"
+      }
+    }
+  ]
+}
+```
+
+### POST Composite Template
+
+#### URL
+
+```text
+<baseURL>/programs/composites/templates/
+```
+
+#### Request Payload
+
+```json
+{
+  "name": "<string>",
+  "description": "<string|null>",
+  "add_services": [
+    {
+      "id": "<service_uuid>",
+      "quantity": "<integer>"
+    }
+  ],
+  "is_active": "<boolean>"
+}
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "Create success.",
+  "data": {
+    "id": "<uuid>",
+    "name": "<string>",
+    "description": "<string|null>",
+    "services": [
+      {
+        "id": "<service_uuid>",
+        "name": "<string>",
+        "quantity": "<integer>",
+        "is_global": "<boolean>",
+        "service_category": "<string>",
+        "service_category_code": "<therapy|assessment|consultation>",
+        "image": "<url|null>",
+        "is_active": "<boolean>",
+        "is_locked": "<boolean>",
+        "centers": [
+          {
+            "id": "<uuid>",
+            "code": "<string>",
+            "name": "<string>"
+          }
+        ],
+        "centers_count": "<integer>",
+        "redeemable_centers": [
+          {
+            "id": "<uuid>",
+            "code": "<string>",
+            "name": "<string>"
+          }
+        ],
+        "redeemable_centers_count": "<integer>",
+        "products": [
+          {
+            "id": "<uuid>",
+            "name": "<string>",
+            "code": "<string>"
+          }
+        ],
+        "products_count": "<integer>",
+        "created_at": "<datetime>",
+        "updated_at": "<datetime>",
+        "created_by": {
+          "id": "<uuid>",
+          "email": "<string|null>",
+          "first_name": "<string>",
+          "last_name": "<string>",
+          "image": "<url|null>",
+          "last_login": "<datetime|null>"
+        }
+      }
+    ],
+    "services_count": "<integer>",
+    "is_active": "<boolean>",
+    "created_at": "<datetime>",
+    "updated_at": "<datetime>",
+    "created_by": {
+      "id": "<uuid>",
+      "email": "<string|null>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "image": "<url|null>",
+      "last_login": "<datetime|null>"
+    }
+  }
+}
+```
+
+### GET Composite Template
+
+#### URL
+
+```text
+<baseURL>/programs/composites/templates/<template_id>/
+```
+
+#### Request Payload
+
+```json
+null
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "Details.",
+  "data": {
+    "id": "<uuid>",
+    "name": "<string>",
+    "description": "<string|null>",
+    "services": [
+      {
+        "id": "<service_uuid>",
+        "name": "<string>",
+        "quantity": "<integer>",
+        "is_global": "<boolean>",
+        "service_category": "<string>",
+        "service_category_code": "<therapy|assessment|consultation>",
+        "image": "<url|null>",
+        "is_active": "<boolean>",
+        "is_locked": "<boolean>",
+        "centers": [
+          {
+            "id": "<uuid>",
+            "code": "<string>",
+            "name": "<string>"
+          }
+        ],
+        "centers_count": "<integer>",
+        "redeemable_centers": [
+          {
+            "id": "<uuid>",
+            "code": "<string>",
+            "name": "<string>"
+          }
+        ],
+        "redeemable_centers_count": "<integer>",
+        "products": [
+          {
+            "id": "<uuid>",
+            "name": "<string>",
+            "code": "<string>"
+          }
+        ],
+        "products_count": "<integer>",
+        "created_at": "<datetime>",
+        "updated_at": "<datetime>",
+        "created_by": {
+          "id": "<uuid>",
+          "email": "<string|null>",
+          "first_name": "<string>",
+          "last_name": "<string>",
+          "image": "<url|null>",
+          "last_login": "<datetime|null>"
+        }
+      }
+    ],
+    "services_count": "<integer>",
+    "is_active": "<boolean>",
+    "created_at": "<datetime>",
+    "updated_at": "<datetime>",
+    "created_by": {
+      "id": "<uuid>",
+      "email": "<string|null>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "image": "<url|null>",
+      "last_login": "<datetime|null>"
+    }
+  }
+}
+```
+
+### PUT/PATCH Composite Template
+
+#### URL
+
+```text
+<baseURL>/programs/composites/templates/<template_id>/
+```
+
+#### Request Payload
+
+```json
+{
+  "name": "<string>",
+  "description": "<string|null>",
+  "is_active": "<boolean>"
+}
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "<Modified successfully.|Updated successfully.>",
+  "data": {
+    "id": "<uuid>",
+    "name": "<string>",
+    "description": "<string|null>",
+    "services": [
+      {
+        "id": "<service_uuid>",
+        "name": "<string>",
+        "quantity": "<integer>",
+        "is_global": "<boolean>",
+        "service_category": "<string>",
+        "service_category_code": "<therapy|assessment|consultation>",
+        "image": "<url|null>",
+        "is_active": "<boolean>",
+        "is_locked": "<boolean>",
+        "centers": [
+          {
+            "id": "<uuid>",
+            "code": "<string>",
+            "name": "<string>"
+          }
+        ],
+        "centers_count": "<integer>",
+        "redeemable_centers": [
+          {
+            "id": "<uuid>",
+            "code": "<string>",
+            "name": "<string>"
+          }
+        ],
+        "redeemable_centers_count": "<integer>",
+        "products": [
+          {
+            "id": "<uuid>",
+            "name": "<string>",
+            "code": "<string>"
+          }
+        ],
+        "products_count": "<integer>",
+        "created_at": "<datetime>",
+        "updated_at": "<datetime>",
+        "created_by": {
+          "id": "<uuid>",
+          "email": "<string|null>",
+          "first_name": "<string>",
+          "last_name": "<string>",
+          "image": "<url|null>",
+          "last_login": "<datetime|null>"
+        }
+      }
+    ],
+    "services_count": "<integer>",
+    "is_active": "<boolean>",
+    "created_at": "<datetime>",
+    "updated_at": "<datetime>",
+    "created_by": {
+      "id": "<uuid>",
+      "email": "<string|null>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "image": "<url|null>",
+      "last_login": "<datetime|null>"
+    }
+  }
+}
+```
+
+### GET Composite Template Services
+
+#### URL
+
+```text
+<baseURL>/programs/composites/templates/<template_id>/services/?page=<page>&limit=<limit>
+```
+
+#### Request Payload
+
+```json
+null
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "All data.",
+  "count": "<integer>",
+  "next": "<url|null>",
+  "previous": "<url|null>",
+  "data": [
+    {
+      "id": "<service_uuid>",
+      "name": "<string>",
+      "quantity": "<integer>",
+      "is_global": "<boolean>",
+      "service_category": "<string>",
+      "service_category_code": "<therapy|assessment|consultation>",
+      "image": "<url|null>",
+      "is_active": "<boolean>",
+      "is_locked": "<boolean>",
+      "centers": [
+        {
+          "id": "<uuid>",
+          "code": "<string>",
+          "name": "<string>"
+        }
+      ],
+      "centers_count": "<integer>",
+      "redeemable_centers": [
+        {
+          "id": "<uuid>",
+          "code": "<string>",
+          "name": "<string>"
+        }
+      ],
+      "redeemable_centers_count": "<integer>",
+      "products": [
+        {
+          "id": "<uuid>",
+          "name": "<string>",
+          "code": "<string>"
+        }
+      ],
+      "products_count": "<integer>",
+      "created_at": "<datetime>",
+      "updated_at": "<datetime>",
+      "created_by": {
+        "id": "<uuid>",
+        "email": "<string|null>",
+        "first_name": "<string>",
+        "last_name": "<string>",
+        "image": "<url|null>",
+        "last_login": "<datetime|null>"
+      }
+    }
+  ]
+}
+```
+
+## Composite Programs
+
+### GET Composite Programs
+
+#### URL
+
+```text
+<baseURL>/centers/<center_id>/composite-programs/?search=<search>&active=<0|1>&expired=<0|1>&page=<page>&limit=<limit>
+```
+
+#### Request Payload
+
+```json
+null
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "All data.",
+  "count": "<integer>",
+  "next": "<url|null>",
+  "previous": "<url|null>",
+  "data": [
+    {
+      "id": "<uuid>",
+      "profile": {
+        "id": "<uuid>",
+        "contact_email": "<string|null>",
+        "phone": "<string>",
+        "first_name": "<string>",
+        "last_name": "<string>",
+        "gender": "<string|null>",
+        "date_of_birth": "<date|null>",
+        "image": "<url|null>",
+        "home_center": {
+          "id": "<uuid>",
+          "code": "<string>",
+          "name": "<string>"
+        },
+        "created_at": "<datetime>",
+        "updated_at": "<datetime>"
+      },
+      "center": {
+        "id": "<uuid>",
+        "code": "<string>",
+        "name": "<string>"
+      },
+      "composite_template": {
+        "id": "<uuid>",
+        "name": "<string>",
+        "description": "<string|null>",
+        "is_active": "<boolean>"
+      },
+      "template_name": "<string>",
+      "template_description": "<string|null>",
+      "program_type": "composite",
+      "notes": "<string|null>",
+      "expires_at": "<date>",
+      "is_complimentary": "<boolean>",
+      "price": "<decimal_string|null>",
+      "redeemable_centers": [
+        {
+          "id": "<uuid>",
+          "code": "<string>",
+          "name": "<string>"
+        }
+      ],
+      "redeemable_centers_count": "<integer>",
+      "services": [
+        {
+          "id": "<uuid>",
+          "service": {
+            "id": "<uuid>",
+            "name": "<string>",
+            "service_category": "<string>",
+            "service_category_code": "<therapy|assessment|consultation>",
+            "image": "<url|null>"
+          },
+          "sessions_count": "<integer|null>",
+          "sessions_used": "<integer|null>",
+          "sessions_cancelled": "<integer|null>",
+          "redeem_code": "<string|null>",
+          "can_redeem": "<boolean>",
+          "cancellation_reason": "<string|null>",
+          "cancelled_by": "<user_object|null>",
+          "cancelled_at": "<datetime|null>",
+          "cancelled_date": "<date|null>",
+          "created_date": "<date>",
+          "created_by": "<user_object|null>",
+          "is_active": "<boolean>",
+          "created_at": "<datetime>",
+          "updated_at": "<datetime>"
+        }
+      ],
+      "services_count": "<integer>",
+      "cancellation_reason": "<string|null>",
+      "cancelled_by": "<user_object|null>",
+      "cancelled_at": "<datetime|null>",
+      "cancelled_date": "<date|null>",
+      "created_date": "<date>",
+      "is_active": "<boolean>",
+      "created_at": "<datetime>",
+      "updated_at": "<datetime>",
+      "created_by": "<user_object|null>"
+    }
+  ]
+}
+```
+
+### POST Composite Program
+
+#### URL
+
+```text
+<baseURL>/centers/<center_id>/composite-programs/
+```
+
+#### Request Payload
+
+```json
+{
+  "profile_id": "<customer_profile_uuid>",
+  "composite_template_id": "<composite_template_uuid>",
+  "notes": "<string|null>",
+  "expires_at": "<date>",
+  "is_complimentary": "<boolean>",
+  "price": "<decimal|null>",
+  "redeemable_centers": [
+    {
+      "id": "<center_uuid>"
+    }
+  ],
+  "created_date": "<date>"
+}
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "Create success.",
+  "data": {
+    "id": "<uuid>",
+    "profile": {
+      "id": "<uuid>",
+      "contact_email": "<string|null>",
+      "phone": "<string>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "gender": "<string|null>",
+      "date_of_birth": "<date|null>",
+      "image": "<url|null>",
+      "home_center": {
+        "id": "<uuid>",
+        "code": "<string>",
+        "name": "<string>"
+      },
+      "created_at": "<datetime>",
+      "updated_at": "<datetime>"
+    },
+    "center": {
+      "id": "<uuid>",
+      "code": "<string>",
+      "name": "<string>"
+    },
+    "composite_template": {
+      "id": "<uuid>",
+      "name": "<string>",
+      "description": "<string|null>",
+      "is_active": "<boolean>"
+    },
+    "template_name": "<string>",
+    "template_description": "<string|null>",
+    "program_type": "composite",
+    "notes": "<string|null>",
+    "expires_at": "<date>",
+    "is_complimentary": "<boolean>",
+    "price": "<decimal_string|null>",
+    "redeemable_centers": [
+      {
+        "id": "<uuid>",
+        "code": "<string>",
+        "name": "<string>"
+      }
+    ],
+    "redeemable_centers_count": "<integer>",
+    "services": [
+      {
+        "id": "<uuid>",
+        "service": {
+          "id": "<uuid>",
+          "name": "<string>",
+          "service_category": "<string>",
+          "service_category_code": "<therapy|assessment|consultation>",
+          "image": "<url|null>"
+        },
+        "sessions_count": "<integer|null>",
+        "sessions_used": "<integer|null>",
+        "sessions_cancelled": "<integer|null>",
+        "redeem_code": "<string|null>",
+        "can_redeem": "<boolean>",
+        "cancellation_reason": "<string|null>",
+        "cancelled_by": "<user_object|null>",
+        "cancelled_at": "<datetime|null>",
+        "cancelled_date": "<date|null>",
+        "created_date": "<date>",
+        "created_by": "<user_object|null>",
+        "is_active": "<boolean>",
+        "created_at": "<datetime>",
+        "updated_at": "<datetime>"
+      }
+    ],
+    "services_count": "<integer>",
+    "cancellation_reason": "<string|null>",
+    "cancelled_by": "<user_object|null>",
+    "cancelled_at": "<datetime|null>",
+    "cancelled_date": "<date|null>",
+    "created_date": "<date>",
+    "is_active": "<boolean>",
+    "created_at": "<datetime>",
+    "updated_at": "<datetime>",
+    "created_by": "<user_object|null>"
+  }
+}
+```
+
+### GET Composite Program
+
+#### URL
+
+```text
+<baseURL>/programs/composites/programs/<program_id>/
+```
+
+#### Request Payload
+
+```json
+null
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "Details.",
+  "data": {
+    "id": "<uuid>",
+    "profile": {
+      "id": "<uuid>",
+      "contact_email": "<string|null>",
+      "phone": "<string>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "gender": "<string|null>",
+      "date_of_birth": "<date|null>",
+      "image": "<url|null>",
+      "home_center": {
+        "id": "<uuid>",
+        "code": "<string>",
+        "name": "<string>"
+      },
+      "created_at": "<datetime>",
+      "updated_at": "<datetime>"
+    },
+    "center": {
+      "id": "<uuid>",
+      "code": "<string>",
+      "name": "<string>"
+    },
+    "composite_template": {
+      "id": "<uuid>",
+      "name": "<string>",
+      "description": "<string|null>",
+      "is_active": "<boolean>"
+    },
+    "template_name": "<string>",
+    "template_description": "<string|null>",
+    "program_type": "composite",
+    "notes": "<string|null>",
+    "expires_at": "<date|null>",
+    "is_complimentary": "<boolean>",
+    "price": "<decimal_string|null>",
+    "redeemable_centers": [
+      {
+        "id": "<uuid>",
+        "code": "<string>",
+        "name": "<string>"
+      }
+    ],
+    "redeemable_centers_count": "<integer>",
+    "services": [
+      {
+        "id": "<uuid>",
+        "service": {
+          "id": "<uuid>",
+          "name": "<string>",
+          "service_category": "<string>",
+          "service_category_code": "<therapy|assessment|consultation>",
+          "image": "<url|null>"
+        },
+        "sessions_count": "<integer|null>",
+        "sessions_used": "<integer|null>",
+        "sessions_cancelled": "<integer|null>",
+        "redeem_code": "<string|null>",
+        "can_redeem": "<boolean>",
+        "cancellation_reason": "<string|null>",
+        "cancelled_by": "<user_object|null>",
+        "cancelled_at": "<datetime|null>",
+        "cancelled_date": "<date|null>",
+        "created_date": "<date>",
+        "created_by": "<user_object|null>",
+        "is_active": "<boolean>",
+        "created_at": "<datetime>",
+        "updated_at": "<datetime>"
+      }
+    ],
+    "services_count": "<integer>",
+    "cancellation_reason": "<string|null>",
+    "cancelled_by": "<user_object|null>",
+    "cancelled_at": "<datetime|null>",
+    "cancelled_date": "<date|null>",
+    "created_date": "<date>",
+    "is_active": "<boolean>",
+    "created_at": "<datetime>",
+    "updated_at": "<datetime>",
+    "created_by": "<user_object|null>"
+  }
+}
+```
+
+### PUT/PATCH Composite Program
+
+#### URL
+
+```text
+<baseURL>/programs/composites/programs/<program_id>/
+```
+
+#### Request Payload
+
+```json
+{
+  "notes": "<string|null>",
+  "expires_at": "<date|null>"
+}
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "<Modified successfully.|Updated successfully.>",
+  "data": {
+    "id": "<uuid>",
+    "profile": "<customer_profile_object>",
+    "center": "<center_object>",
+    "composite_template": "<composite_template_reference_object>",
+    "template_name": "<string>",
+    "template_description": "<string|null>",
+    "program_type": "composite",
+    "notes": "<string|null>",
+    "expires_at": "<date|null>",
+    "is_complimentary": "<boolean>",
+    "price": "<decimal_string|null>",
+    "redeemable_centers": [
+      {
+        "id": "<uuid>",
+        "code": "<string>",
+        "name": "<string>"
+      }
+    ],
+    "redeemable_centers_count": "<integer>",
+    "services": [
+      "<composite_program_service_object>"
+    ],
+    "services_count": "<integer>",
+    "cancellation_reason": "<string|null>",
+    "cancelled_by": "<user_object|null>",
+    "cancelled_at": "<datetime|null>",
+    "cancelled_date": "<date|null>",
+    "created_date": "<date>",
+    "is_active": "<boolean>",
+    "created_at": "<datetime>",
+    "updated_at": "<datetime>",
+    "created_by": "<user_object|null>"
+  }
+}
+```
+
+### GET Composite Program Services
+
+#### URL
+
+```text
+<baseURL>/programs/composites/programs/<program_id>/services/?page=<page>&limit=<limit>
+```
+
+#### Request Payload
+
+```json
+null
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "All data.",
+  "count": "<integer>",
+  "next": "<url|null>",
+  "previous": "<url|null>",
+  "data": [
+    {
+      "id": "<uuid>",
+      "service": {
+        "id": "<uuid>",
+        "name": "<string>",
+        "service_category": "<string>",
+        "service_category_code": "<therapy|assessment|consultation>",
+        "image": "<url|null>"
+      },
+      "sessions_count": "<integer|null>",
+      "sessions_used": "<integer|null>",
+      "sessions_cancelled": "<integer|null>",
+      "redeem_code": "<string|null>",
+      "can_redeem": "<boolean>",
+      "cancellation_reason": "<string|null>",
+      "cancelled_by": "<user_object|null>",
+      "cancelled_at": "<datetime|null>",
+      "cancelled_date": "<date|null>",
+      "created_date": "<date>",
+      "created_by": "<user_object|null>",
+      "is_active": "<boolean>",
+      "created_at": "<datetime>",
+      "updated_at": "<datetime>"
+    }
+  ]
+}
+```
+
+### POST Cancel Composite Program
+
+#### URL
+
+```text
+<baseURL>/programs/composites/programs/<program_id>/cancel/
+```
+
+#### Request Payload
+
+```json
+{
+  "cancellation_reason": "<string|null>",
+  "cancelled_date": "<date>"
+}
+```
+
+#### Response Structure
+
+```json
+{
+  "detail": "Create success.",
+  "data": {
+    "cancellation_reason": "<string|null>",
+    "cancelled_date": "<date>",
+    "cancelled_by": {
+      "id": "<uuid>",
+      "email": "<string|null>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "image": "<url|null>",
+      "last_login": "<datetime|null>"
+    },
+    "cancelled_at": "<datetime|null>"
+  }
+}
+```
+
+## Error Response
+
+### URL
+
+```text
+<baseURL>/<requested_path>/
+```
+
+### Request Payload
+
+```json
+"<endpoint_request_payload|null>"
+```
+
+### Response Structure
+
+```json
+{
+  "detail": "<string|object>"
+}
+```
