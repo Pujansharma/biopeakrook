@@ -268,10 +268,3 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
             ) from error
 
         return assignments
-
-    def to_representation(self, instance: list[TestKitAssignment]) -> list[dict]:
-        return TestKitAssignmentHistorySerializer(
-            instance,
-            many=True,
-            context=self.context,
-        ).data

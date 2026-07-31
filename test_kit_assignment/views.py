@@ -24,6 +24,12 @@ class TestKitAssignmentCreateView(BaseCreateAPIView):
     serializer_class = TestKitAssignmentCreateSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return self.send_response(self.get_create_success_message(), status=201)
+
 
 class TestKitAssignmentHistoryListView(BaseListAPIView):
     serializer_class = TestKitAssignmentHistorySerializer
