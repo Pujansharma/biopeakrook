@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.CustomerProfilesListView.as_view()),
     path("account/", views.CustomerAccountProfileView.as_view()),
     path("<uuid:pk>/", views.CustomerProfileDetailView.as_view()),
+    path("<uuid:pk>/programs/", include('accounts.customers.programs.urls')),
     path("<uuid:pk>/associates/", views.CustomerAssociateListView.as_view()),
     path(
         "<uuid:pk>/available-associates/",
