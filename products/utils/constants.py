@@ -11,6 +11,8 @@ class ProviderCallbackFunction(models.TextChoices):
     BUGSPEAKS = "bugspeaks", "BugSpeaks"
     FIVE_C_NETWORK = "5c_network", "5C Network"
     STRAND_LIFE_SCIENCES = "strand_life_sciences", "Strand Life Sciences"
+    NEUBERG_ANAND = "neuberg_anand", "Neuberg Anand"
+    META_OMICS_LABS = "meta_omics_labs", "Meta Omics Labs"
 
 
 class ProductCallbackFunction(models.TextChoices):
