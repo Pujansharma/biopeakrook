@@ -6,6 +6,7 @@
 
 - Never revert or alter code the user has manually edited. If the user changes something back, that is the final state — do not touch those lines again unless explicitly asked.
 - Never create Django migration files manually and never run `makemigrations`. The user handles all migration generation.
+- Always use `<uuid:pk>/` for UUID detail URL path parameters.
 
 ---
 
