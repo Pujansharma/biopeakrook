@@ -102,7 +102,11 @@ class TestKitAssignmentHistorySerializer(BaseModelSerializer):
 
 
 class TestKitAssignmentCreateSerializer(BaseModelSerializer):
-    assigned_to = serializers.UUIDField(write_only=True)
+    assigned_to = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+        write_only=True,
+    )
     products = serializers.ListField(
         child=serializers.UUIDField(),
         allow_empty=False,
@@ -137,6 +141,14 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
         valid_values = {choice.value for choice in TestKitHandoverType}
         if value not in valid_values:
             raise serializers.ValidationError("Invalid handover type.")
+        return value
+
+    def validate_assigned_to(self, value: list) -> list:
+        unique_profile_ids = list(dict.fromkeys(value))
+        if len(unique_profile_ids) != len(value):
+            raise serializers.ValidationError(
+                "Duplicate customer profiles are not allowed."
+            )
         return value
 
     def validate(self, attrs: dict) -> dict:
@@ -174,15 +186,24 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
         return attrs
 
     @staticmethod
-    def get_customer_profile_or_error(profile_id) -> CustomerProfile:
-        customer_profile = (
-            CustomerProfile.objects.select_related("customer__user")
-            .filter(pk=profile_id)
-            .first()
+    def get_customer_profiles_or_error(profile_ids: list) -> list[CustomerProfile]:
+        customer_profiles = list(
+            CustomerProfile.objects.select_related("customer__user").filter(
+                pk__in=profile_ids
+            )
         )
-        if customer_profile is None:
+        profiles_by_id = {
+            customer_profile.pk: customer_profile
+            for customer_profile in customer_profiles
+        }
+        missing_profile_ids = [
+            profile_id
+            for profile_id in profile_ids
+            if profile_id not in profiles_by_id
+        ]
+        if missing_profile_ids:
             raise serializers.ValidationError({"assigned_to": "Invalid customer profile."})
-        return customer_profile
+        return [profiles_by_id[profile_id] for profile_id in profile_ids]
 
     @staticmethod
     def assert_customer_profile_eligible(customer_profile: CustomerProfile) -> None:
@@ -211,38 +232,46 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
             )
         return products
 
-    def create(self, validated_data: dict) -> TestKitAssignment:
+    def create(self, validated_data: dict) -> list[TestKitAssignment]:
         product_ids = validated_data.pop("products")
         validated_data.pop("clinic_id", None)
-        assigned_to_id = validated_data.pop("assigned_to")
+        assigned_to_ids = validated_data.pop("assigned_to")
 
-        customer_profile = self.get_customer_profile_or_error(assigned_to_id)
-        self.assert_customer_profile_eligible(customer_profile)
+        customer_profiles = self.get_customer_profiles_or_error(assigned_to_ids)
+        for customer_profile in customer_profiles:
+            self.assert_customer_profile_eligible(customer_profile)
         products = self.get_products_or_error(product_ids)
 
         request = self.context["request"]
         try:
             with transaction.atomic():
-                assignment = TestKitAssignment.objects.create(
-                    assigned_to=customer_profile,
-                    handover_type=validated_data["handover_type"],
-                    is_kit_journey_visible=validated_data.get(
-                        "is_kit_journey_visible",
-                        True,
-                    ),
-                    clinic=validated_data.get("clinic"),
-                    assigned_on=validated_data["assigned_on"],
-                    notes=validated_data.get("notes"),
-                    status=TestKitAssignmentStatus.ACTIVE,
-                    created_by=request.user,
-                )
-                assignment.products.set(products)
+                assignments = []
+                for customer_profile in customer_profiles:
+                    assignment = TestKitAssignment.objects.create(
+                        assigned_to=customer_profile,
+                        handover_type=validated_data["handover_type"],
+                        is_kit_journey_visible=validated_data.get(
+                            "is_kit_journey_visible",
+                            True,
+                        ),
+                        clinic=validated_data.get("clinic"),
+                        assigned_on=validated_data["assigned_on"],
+                        notes=validated_data.get("notes"),
+                        status=TestKitAssignmentStatus.ACTIVE,
+                        created_by=request.user,
+                    )
+                    assignment.products.set(products)
+                    assignments.append(assignment)
         except IntegrityError as error:
             raise ConflictError(
                 "Customer profile already has an active test-kit assignment."
             ) from error
 
-        return assignment
+        return assignments
 
-    def to_representation(self, instance: TestKitAssignment) -> dict:
-        return TestKitAssignmentHistorySerializer(instance, context=self.context).data
+    def to_representation(self, instance: list[TestKitAssignment]) -> list[dict]:
+        return TestKitAssignmentHistorySerializer(
+            instance,
+            many=True,
+            context=self.context,
+        ).data
