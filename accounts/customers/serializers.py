@@ -8,7 +8,7 @@ from accounts.associates.serializers import (
     BaseAssociateRoleSerializer,
 )
 from accounts.centers.models import Center
-from accounts.centers.serializers import MinimumCenterSerializer
+from accounts.centers.serializers import MinimumCenterSerializer, BaseCenterSerializer
 from accounts.centers.utils.db import (
     increment_customer_count,
     decrement_customer_count,
@@ -462,6 +462,17 @@ class BaseCustomerAssignedCenterSerializer(BaseModelSerializer):
     class Meta:
         model = CustomerCenterAssignment
         fields = ["id", "name", "is_primary", "created_at"]
+
+
+class MinimalCustomerAssignedCenterSerializer(BaseModelSerializer):
+    # id = serializers.UUIDField(source="center.id", read_only=True)
+    # name = serializers.CharField(source="center.name", read_only=True)
+    center = BaseCenterSerializer(read_only=True)
+    created_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = CustomerCenterAssignment
+        fields = ["id", "center", "is_primary", "created_at", "created_by"]
 
 
 class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
