@@ -21,8 +21,7 @@ from accounts.customers.serializers import (
     CustomerProfileSerializer,
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
-    BaseCustomerAssignedCenterSerializer,
-    CustomerProfileAddressSerializer, CustomerProfileFeatureSerializer,
+    CustomerProfileAddressSerializer, CustomerProfileFeatureSerializer, MinimalCustomerAssignedCenterSerializer,
 )
 from accounts.organizations.utils.db import (
     decrement_organization_clients_count,
@@ -301,7 +300,7 @@ class CustomerCenterLinkView(BaseCreateAPIView):
 
 
 class CustomerCenterListView(BaseListAPIView):
-    serializer_class = BaseCustomerAssignedCenterSerializer
+    serializer_class = MinimalCustomerAssignedCenterSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
@@ -318,6 +317,7 @@ class CustomerCenterListView(BaseListAPIView):
             CustomerCenterAssignment.objects.select_related("center")
             .prefetch_related()
             .filter(search, customer_profile_id=self.kwargs["pk"])
+            .order_by('-is_primary', '-created_at')
         )
         return qs
 
