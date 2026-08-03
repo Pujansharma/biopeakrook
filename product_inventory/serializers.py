@@ -157,7 +157,8 @@ class ProductInventoryConsignmentCreateSerializer(BaseModelSerializer):
         return (
             ProductInventoryBatch.objects.select_related("provider")
             .prefetch_related("items__product")
-            .get(pk=batch.pk)
+            .filter(pk=batch.pk)
+            .first()
         )
 
     def build_batch_items(
@@ -172,6 +173,8 @@ class ProductInventoryConsignmentCreateSerializer(BaseModelSerializer):
                 batch=batch,
                 product=product_map[product_payload["id"]],
                 quantity=product_payload["quantity"],
+                qc_ack_packaging=product_payload["qc_ack_packaging"],
+                qc_ack_all_components=product_payload["qc_ack_all_components"],
                 created_by=created_by,
             )
             for product_payload in products_payload

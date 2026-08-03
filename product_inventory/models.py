@@ -41,6 +41,8 @@ class ProductInventoryBatchItem(BaseUUIDModel):
         Product, on_delete=models.PROTECT, related_name="inventory_batch_items"
     )
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    qc_ack_packaging = models.BooleanField(default=True)
+    qc_ack_all_components = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

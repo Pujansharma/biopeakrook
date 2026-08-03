@@ -18,10 +18,17 @@ from test_kit_assignment.utils.db import (
 )
 
 
+ACTIVE_TEST_KIT_UNIQUE_CONSTRAINT = "uniq_active_test_kit_per_profile"
+
+
 class ConflictError(APIException):
     status_code = 409
     default_detail = "Conflict."
     default_code = "conflict"
+
+
+def is_active_test_kit_unique_violation(error: IntegrityError) -> bool:
+    return ACTIVE_TEST_KIT_UNIQUE_CONSTRAINT in str(error)
 
 
 class EligibleCustomerProfileSerializer(BaseModelSerializer):
@@ -61,22 +68,6 @@ class TestKitAssignmentHistorySerializer(BaseModelSerializer):
             "clinic",
             "created_by",
         ]
-
-    def to_representation(self, instance: TestKitAssignment) -> dict:
-        return {
-            "handover_type": instance.handover_type,
-            "assigned_on": serializers.DateTimeField().to_representation(
-                instance.assigned_on
-            ),
-            "is_kit_journey_visible": instance.is_kit_journey_visible,
-            "products": TestKitAssignmentProductNameSerializer(
-                instance.products.all(),
-                many=True,
-            ).data,
-            "customer": self.get_customer(instance),
-            "clinic": self.get_clinic(instance),
-            "created_by": self.get_created_by(instance),
-        }
 
     @staticmethod
     def get_customer(instance: TestKitAssignment) -> dict:
@@ -232,21 +223,19 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
             )
         return products
 
-    def create(self, validated_data: dict) -> list[TestKitAssignment]:
+    def create(self, validated_data: dict) -> None:
         product_ids = validated_data.pop("products")
         validated_data.pop("clinic_id", None)
         assigned_to_ids = validated_data.pop("assigned_to")
 
         customer_profiles = self.get_customer_profiles_or_error(assigned_to_ids)
-        for customer_profile in customer_profiles:
-            self.assert_customer_profile_eligible(customer_profile)
         products = self.get_products_or_error(product_ids)
 
         request = self.context["request"]
         try:
             with transaction.atomic():
-                assignments = []
                 for customer_profile in customer_profiles:
+                    self.assert_customer_profile_eligible(customer_profile)
                     assignment = TestKitAssignment.objects.create(
                         assigned_to=customer_profile,
                         handover_type=validated_data["handover_type"],
@@ -261,10 +250,9 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
                         created_by=request.user,
                     )
                     assignment.products.set(products)
-                    assignments.append(assignment)
         except IntegrityError as error:
+            if not is_active_test_kit_unique_violation(error):
+                raise
             raise ConflictError(
                 "Customer profile already has an active test-kit assignment."
             ) from error
-
-        return assignments
