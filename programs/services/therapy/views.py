@@ -26,7 +26,7 @@ from programs.services.utils.constants import ServiceCategory
 
 class TherapyServicesListView(BaseListCreateAPIView):
     serializer_class = TherapyServiceSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser|IsAssociateUser]
 
     def get_queryset(self):
         search = Q()
@@ -38,6 +38,12 @@ class TherapyServicesListView(BaseListCreateAPIView):
             search |= Q(name__icontains=search_query)
         if active_query and active_query in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_query))
+        user = self.request.user
+        account_type = get_user_account_type(user)
+        if account_type == UserType.ASSOCIATE:
+            filter_kwargs[
+                "center_assignments__center__associate_assignments__associate"
+            ] = user.associate
 
         qs = (
             Service.objects.filter(
@@ -47,6 +53,7 @@ class TherapyServicesListView(BaseListCreateAPIView):
                 "center_assignments__center", "center_assignments__center__created_by"
             )
             .select_related("created_by")
+            .distinct()
         )
         return qs
 
