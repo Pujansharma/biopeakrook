@@ -4,17 +4,6 @@ from uuid import UUID
 
 from sequences.utils import get_next_sequence
 
-PRODUCT_CODE_MAP = {
-    "genetics": "GEN",
-    "cortisol": "COR",
-    "gut microbiome": "GUT",
-    "metabolomics": "MET",
-    "hardcover kit": "HCV",
-    "hardcover genetics": "HCG",
-    "hardcover cortisol": "HCC",
-    "hardcover gut microbiome": "HCB",
-    "hardcover metabolomics": "HCM",
-}
 IGNORED_PRODUCT_CODE_WORDS = {"and", "for", "of", "the", "with"}
 
 
@@ -49,11 +38,7 @@ def build_fallback_product_code(product_name: str) -> str:
 
 
 def get_product_inventory_code(product_name: str) -> str:
-    normalized_name = normalize_inventory_text(product_name)
-    return PRODUCT_CODE_MAP.get(
-        normalized_name,
-        build_fallback_product_code(product_name),
-    )
+    return build_fallback_product_code(product_name)
 
 
 def get_product_inventory_sequence_name(provider_id: UUID, received_on: date) -> str:
