@@ -66,9 +66,8 @@ class ProductInventoryConsignmentView(BaseGenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        batch = serializer.save()
-        data = serializer.to_representation(batch)
-        return self.send_response("Create success.", data, status=201)
+        serializer.save()
+        return self.send_response("Create success.", serializer.data, status=201)
 
 
 class ProductInventoryAllView(BaseListAPIView):
@@ -78,7 +77,7 @@ class ProductInventoryAllView(BaseListAPIView):
     def get_queryset(self):
         search = Q()
         filter_kwargs = {}
-        search_query = self.request.query_params.get("search_query", "").strip()
+        search_query = self.request.query_params.get("search", "").strip()
         provider_filters = get_identifier_filters(
             self.request.query_params,
             "provider",
@@ -124,7 +123,7 @@ class ProductInventoryBatchesView(BaseListAPIView):
     def get_queryset(self):
         search = Q()
         filter_kwargs = {}
-        search_query = self.request.query_params.get("search_query", "").strip()
+        search_query = self.request.query_params.get("search", "").strip()
         provider_filters = get_identifier_filters(
             self.request.query_params,
             "provider",
