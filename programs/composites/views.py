@@ -247,6 +247,7 @@ class CompositeAvailablePrerequisiteServicesListView(
                 composite_template=prerequisite.template_service.composite_template,
                 **filter_kwargs,
             )
+            .exclude(pk=self.kwargs['pk'])
             .annotate(is_exists=Exists(existing_related_services))
             .order_by("-is_exists", "-created_at")
         )
