@@ -223,7 +223,7 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
             )
         return products
 
-    def create(self, validated_data: dict) -> None:
+    def create(self, validated_data: dict) -> TestKitAssignment:
         product_ids = validated_data.pop("products")
         validated_data.pop("clinic_id", None)
         assigned_to_ids = validated_data.pop("assigned_to")
@@ -232,6 +232,7 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
         products = self.get_products_or_error(product_ids)
 
         request = self.context["request"]
+        assignment = None
         try:
             with transaction.atomic():
                 for customer_profile in customer_profiles:
@@ -256,3 +257,4 @@ class TestKitAssignmentCreateSerializer(BaseModelSerializer):
             raise ConflictError(
                 "Customer profile already has an active test-kit assignment."
             ) from error
+        return assignment
