@@ -109,3 +109,6 @@
 - Concrete views should subclass the mixin and call the queryset method through `self`, following `CenterViewMeta`; do not create standalone queryset utility functions for this pattern.
 - Use the established `filter_kwargs = {}` pattern for request/user-specific queryset scoping; do not introduce custom permission-queryset mixins.
 - Do not add `http_method_names`; rely on the project’s established base view classes.
+- Keep a strict serializer/view queryset boundary: serializers must never import or reuse queryset builders from views or `*ViewMeta` classes. Serializers resolve their own required models directly through model managers.
+- Serializer imports from `utils/db.py` should be limited to state-changing utilities such as count refreshes, increments, decrements, cancellations, and related mutation helpers; object/queryset resolution belongs directly in the serializer, while optimized response querysets belong exclusively in `*ViewMeta`.
+- Serializer representation methods must consume prefetched `to_attr` data supplied by the view queryset and must not query related models or managers per serialized object. Create views that need an optimized nested response should reload the saved instance through their own `*ViewMeta` queryset and assign it to `serializer.instance`.

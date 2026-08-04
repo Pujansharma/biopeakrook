@@ -1,20 +1,13 @@
 from uuid import UUID
 
 from django.db.models import (
-    BooleanField,
-    Case,
     Count,
-    Exists,
     OuterRef,
-    Prefetch,
-    QuerySet,
     Subquery,
     Value,
-    When,
 )
 from django.db.models.functions import Coalesce
 
-from accounts.customers.models import CustomerCenterAssignment
 from programs.composites.models import (
     CompositeServicePrerequisite,
     CompositeTemplate,
@@ -22,40 +15,12 @@ from programs.composites.models import (
 )
 from programs.models import (
     AssessmentProgramService,
-    CompositeProgram,
     ConsultationProgramService,
     ProgramService,
     TherapyProgramService,
 )
-from programs.services.models import CenterServiceAssignment, Service
+from programs.services.models import Service
 from programs.services.utils.constants import ServiceCategory
-
-
-def get_composite_template_for_assignment(
-        composite_template_identifier: UUID,
-) -> CompositeTemplate | None:
-    assignment_services = (
-        CompositeTemplateService.objects.filter(
-            is_active=True,
-            service__is_active=True,
-        )
-        .select_related("service")
-        .order_by("created_at")
-    )
-    return (
-        CompositeTemplate.objects.filter(
-            pk=composite_template_identifier,
-            is_active=True,
-        )
-        .prefetch_related(
-            Prefetch(
-                "services",
-                queryset=assignment_services,
-                to_attr="assignment_services",
-            )
-        )
-        .first()
-    )
 
 
 def update_composite_template_services_count(
@@ -202,62 +167,3 @@ def create_program_service_extensions(
         )
     for service_category, extension_creator in SERVICE_EXTENSION_CREATORS.items():
         extension_creator(services_by_category[service_category])
-
-
-def get_composite_program_service_queryset(
-        center_id: UUID | str | None = None,
-) -> QuerySet[ProgramService]:
-    program_services = ProgramService.objects.select_related(
-        "service",
-        "created_by",
-        "cancelled_by",
-        "therapy_service",
-        "assessment_service",
-        "consultation_service",
-    )
-
-    center_service_assignment = CenterServiceAssignment.objects.filter(
-        service=OuterRef("service"),
-        center__pk=center_id,
-        is_active=True,
-        center__is_active=True,
-    )
-    return program_services.annotate(
-        can_redeem=Case(
-            When(service__is_global=True, then=Value(True)),
-            default=Exists(center_service_assignment),
-            output_field=BooleanField(),
-        )
-    )
-
-
-def get_composite_program_queryset(
-        center_id: UUID | str | None = None,
-) -> QuerySet[CompositeProgram]:
-    primary_center_assignments = CustomerCenterAssignment.objects.filter(
-        is_primary=True
-    ).select_related("center")
-    qs = (
-        CompositeProgram.objects.select_related(
-            "program",
-            "program__center",
-            "program__created_by",
-            "program__cancelled_by",
-            "program__customer_profile__customer__user",
-            "composite_template",
-        )
-        .prefetch_related(
-            "program__redeemable_centers",
-            Prefetch(
-                "program__program_services",
-                queryset=get_composite_program_service_queryset(center_id)[:3],
-                to_attr="service_preview",
-            ),
-            Prefetch(
-                "program__customer_profile__center_assignments",
-                queryset=primary_center_assignments,
-                to_attr="primary_center_assignments",
-            ),
-        )
-    )
-    return qs
