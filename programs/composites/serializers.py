@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -17,15 +19,17 @@ from programs.composites.models import (
 from programs.composites.utils.constants import PrerequisiteCondition
 from programs.composites.utils.db import (
     create_program_service_extensions,
+    get_composite_program_queryset,
     get_composite_template_for_assignment,
     update_composite_template_services_count,
     update_prerequisite_related_service_count,
 )
+from programs.composites.utils.helper import get_composite_template_uid
 from programs.models import CompositeProgram, Program, ProgramService
 from programs.services.models import Service
 from programs.services.serializers import BaseServiceSerializer
 from programs.services.utils.constants import ServiceCategory
-from programs.utils.constants import ProgramType
+from programs.utils.constants import ProgramType, ServiceAssignment
 from programs.utils.db import (
     cancel_all_program_services,
     update_program_redeemable_centers_count,
@@ -43,7 +47,6 @@ class CompositePrerequisiteServiceReferenceSerializer(BaseSerializer):
 
 
 class CompositePrerequisiteServiceSerializer(BaseModelSerializer):
-    id = serializers.UUIDField(source='service.pk', read_only=True)
     name = serializers.CharField(source="service.name", read_only=True)
     service_category = serializers.CharField(
         source="service.get_service_category_display",
@@ -264,61 +267,69 @@ class CompositeServicePrerequisiteSerializer(
         ]
 
     @classmethod
-    def _get_related_template_service_ids(
-            cls,
-            template_service: CompositeTemplateService,
-            related_services: list[dict],
-    ) -> set:
-        related_service_ids = {
-            related_service["id"]
-            for related_service in related_services
-        }
-        related_service_ids.discard(template_service.pk)
-        valid_related_service_ids = set(
-            CompositeTemplateService.objects.filter(
-                pk__in=related_service_ids,
-                composite_template=template_service.composite_template,
-            ).values_list("pk", flat=True)
+    def _get_invalid_template_service_ids(
+            cls, related_services, composite_template
+    ):
+        _ids = [i['id'] for i in related_services]
+        qs = CompositeTemplateService.objects.filter(
+            pk__in=_ids,
+            composite_template=composite_template,
+        ).values_list("pk", flat=True)
+        invalid_ids = set(_ids) - set(qs)
+        return invalid_ids
+
+    def _perform_add_related_services_action(
+            self,
+            add_related_service_data,
+            composite_template,
+            prerequisite
+    ):
+        if not add_related_service_data:
+            return
+        _invalid_add_service_ids = self._get_invalid_template_service_ids(
+            add_related_service_data, composite_template
         )
-        invalid_related_service_ids = (
-                related_service_ids - valid_related_service_ids
-        )
-        if invalid_related_service_ids:
-            invalid_identifiers = ", ".join(
-                str(service_identifier)
-                for service_identifier in sorted(
-                    invalid_related_service_ids,
-                    key=str,
+        if _invalid_add_service_ids:
+            raise serializers.ValidationError({
+                "add_related_services": (
+                    "Invalid composite template service IDs provided: "
+                    f"{", ".join(map(str, _invalid_add_service_ids))}"
                 )
-            )
-            raise serializers.ValidationError(
-                {
-                    "related_services": (
-                        "Invalid composite template service IDs provided: "
-                        f"{invalid_identifiers}"
-                    )
-                }
-            )
-        return valid_related_service_ids
+            })
+        prerequisite.related_services.add(
+            *[i['id'] for i in add_related_service_data]
+        )
+
+    def _perform_remove_related_services_action(
+            self,
+            remove_related_service_data,
+            composite_template,
+            prerequisite
+
+    ):
+        if not remove_related_service_data:
+            return
+        _invalid_remove_service_ids = self._get_invalid_template_service_ids(
+            remove_related_service_data, composite_template
+        )
+        if _invalid_remove_service_ids:
+            raise serializers.ValidationError({
+                "remove_related_services": (
+                    "Invalid composite template service IDs provided: "
+                    f"{", ".join(map(str, _invalid_remove_service_ids))}"
+                )
+            })
+        prerequisite.related_services.remove(
+            *[i['id'] for i in remove_related_service_data]
+        )
 
     def create(self, validated_data: dict) -> CompositeServicePrerequisite:
         template_service = validated_data.pop("template_service", None)
         created_by = validated_data.get('created_by')
         add_related_service_data = validated_data.pop("add_related_services", None) or []
         remove_related_service_data = validated_data.pop("remove_related_services", None) or []
+        condition = validated_data.get("condition", PrerequisiteCondition.REQUIRE_ANY)
 
-        add_related_template_service_ids = self._get_related_template_service_ids(
-            template_service,
-            add_related_service_data,
-        )
-        remove_related_template_service_ids = self._get_related_template_service_ids(
-            template_service,
-            remove_related_service_data,
-        )
-        condition = validated_data.get(
-            "condition",
-            PrerequisiteCondition.REQUIRE_ANY,
-        )
         with transaction.atomic():
             prerequisite, _ = CompositeServicePrerequisite.objects.update_or_create(
                 template_service=template_service,
@@ -327,13 +338,17 @@ class CompositeServicePrerequisiteSerializer(
                     "created_by": created_by,
                 },
             )
-            if add_related_template_service_ids:
-                prerequisite.related_services.add(
-                    *add_related_template_service_ids
+            if remove_related_service_data:
+                self._perform_remove_related_services_action(
+                    remove_related_service_data,
+                    template_service.composite_template,
+                    prerequisite
                 )
-            if remove_related_template_service_ids:
-                prerequisite.related_services.remove(
-                    *remove_related_template_service_ids
+            if add_related_service_data:
+                self._perform_add_related_services_action(
+                    add_related_service_data,
+                    template_service.composite_template,
+                    prerequisite
                 )
             update_prerequisite_related_service_count(
                 prerequisite.template_service.pk
@@ -352,23 +367,23 @@ class CompositeServicePrerequisiteSerializer(
     ) -> CompositeServicePrerequisite:
         add_related_service_data = validated_data.pop("add_related_services", None) or []
         remove_related_service_data = validated_data.pop("remove_related_services", None) or []
-        add_related_template_service_ids = self._get_related_template_service_ids(
-            instance.template_service,
-            add_related_service_data,
-        )
-        remove_related_template_service_ids = self._get_related_template_service_ids(
-            instance.template_service,
-            remove_related_service_data,
-        )
 
         with transaction.atomic():
             instance = super().update(instance, validated_data)
-            if add_related_template_service_ids:
-                instance.related_services.add(*add_related_template_service_ids)
-            if remove_related_template_service_ids:
-                instance.related_services.remove(
-                    *remove_related_template_service_ids
+            if remove_related_service_data:
+                self._perform_remove_related_services_action(
+                    remove_related_service_data,
+                    instance.template_service.composite_template,
+                    instance
                 )
+
+            if add_related_service_data:
+                self._perform_add_related_services_action(
+                    add_related_service_data,
+                    instance.template_service.composite_template,
+                    instance
+                )
+
             update_prerequisite_related_service_count(
                 instance.template_service.pk
             )
@@ -468,7 +483,9 @@ class CompositeTemplateSerializer(BaseModelSerializer):
             service_data["id"]: service_data.get('quantity', None)
             for service_data in add_services
         }
+
         with transaction.atomic():
+            validated_data['uid'] = get_composite_template_uid()
             composite_template = super().create(validated_data)
             CompositeTemplateService.objects.bulk_create(
                 [
@@ -519,6 +536,11 @@ class CompositeTemplateSerializer(BaseModelSerializer):
 
 class CompositeProgramServiceSerializer(BaseModelSerializer):
     service = BaseServiceSerializer(read_only=True)
+    service_assignment_type = serializers.SerializerMethodField(read_only=True)
+    service_assignment_type_code = serializers.CharField(
+        source="assignment_type",
+        read_only=True,
+    )
     can_redeem = serializers.BooleanField(default=True, read_only=True)
     sessions_count = serializers.SerializerMethodField(read_only=True)
     sessions_used = serializers.SerializerMethodField(read_only=True)
@@ -532,6 +554,8 @@ class CompositeProgramServiceSerializer(BaseModelSerializer):
         fields = [
             "id",
             "service",
+            "service_assignment_type",
+            "service_assignment_type_code",
             "sessions_count",
             "sessions_used",
             "sessions_cancelled",
@@ -548,6 +572,13 @@ class CompositeProgramServiceSerializer(BaseModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+    @classmethod
+    def get_service_assignment_type(
+            cls,
+            instance: ProgramService,
+    ):
+        return instance.get_assignment_type_display()
 
     def get_redeem_code(self, instance: ProgramService):
         therapy_program_service = getattr(instance, "therapy_service", None)
@@ -648,8 +679,6 @@ class CompositeProgramSerializer(BaseModelSerializer):
             "center",
             "composite_template",
             "composite_template_id",
-            "template_name",
-            "template_description",
             "program_type",
             "notes",
             "expires_at",
@@ -671,8 +700,6 @@ class CompositeProgramSerializer(BaseModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "template_name",
-            "template_description",
             "services_count",
             "redeemable_centers_count",
             "created_at",
@@ -992,3 +1019,323 @@ class CompositeProgramCancelSerializer(BaseModelSerializer):
             ]
         )
         return composite_program
+
+
+class CompositeAddOnSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="pk", read_only=True)
+    profile = CustomerProfileWithCenterSerializer(
+        source="program.customer_profile",
+        read_only=True,
+    )
+    center = MinimumCenterSerializer(source="program.center", read_only=True)
+    composite_template = CompositeTemplateReferenceSerializer(read_only=True)
+    program_type = serializers.ChoiceField(
+        source="program.program_type",
+        choices=ProgramType,
+        read_only=True,
+    )
+    notes = serializers.CharField(source="program.notes", read_only=True)
+    expires_at = serializers.DateField(
+        source="program.expires_at",
+        read_only=True,
+    )
+    is_complimentary = serializers.BooleanField(
+        source="program.is_complimentary",
+        read_only=True,
+    )
+    price = serializers.DecimalField(
+        source="program.price",
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+    )
+    redeemable_centers = CompositeProgramCenterSerializer(
+        source="program.redeemable_centers",
+        many=True,
+        read_only=True,
+    )
+    services = serializers.SerializerMethodField(read_only=True)
+    services_count = serializers.IntegerField(
+        source="program.services_count",
+        read_only=True,
+    )
+    redeemable_centers_count = serializers.IntegerField(
+        source="program.redeemable_centers_count",
+        read_only=True,
+    )
+    cancellation_reason = serializers.CharField(
+        source="program.cancellation_reason",
+        read_only=True,
+    )
+    cancelled_by = BaseUserSerializer(
+        source="program.cancelled_by",
+        read_only=True,
+    )
+    cancelled_at = serializers.DateTimeField(
+        source="program.cancelled_at",
+        read_only=True,
+    )
+    cancelled_date = serializers.DateField(
+        source="program.cancelled_date",
+        read_only=True,
+    )
+    created_date = serializers.DateField(
+        source="program.created_date",
+        read_only=True,
+    )
+    is_active = serializers.BooleanField(
+        source="program.is_active",
+        read_only=True,
+    )
+    created_at = serializers.DateTimeField(
+        source="program.created_at",
+        read_only=True,
+    )
+    updated_at = serializers.DateTimeField(
+        source="program.updated_at",
+        read_only=True,
+    )
+    created_by = BaseUserSerializer(
+        source="program.created_by",
+        read_only=True,
+    )
+    composite_program_id = serializers.UUIDField(write_only=True, required=True)
+    add_services = CompositeTemplateServiceReferenceSerializer(
+        many=True,
+        required=True,
+        allow_empty=False,
+        write_only=True,
+    )
+
+    class Meta:
+        model = CompositeProgram
+        fields = [
+            "id",
+            "profile",
+            "center",
+            "composite_template",
+            "program_type",
+            "notes",
+            "expires_at",
+            "is_complimentary",
+            "price",
+            "redeemable_centers",
+            "redeemable_centers_count",
+            "services",
+            "services_count",
+            "cancellation_reason",
+            "cancelled_by",
+            "cancelled_at",
+            "cancelled_date",
+            "created_date",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "composite_program_id",
+            "add_services",
+        ]
+
+    @classmethod
+    def get_composite_program(
+            cls,
+            composite_program_identifier: UUID,
+    ):
+        return (
+            CompositeProgram.objects.select_for_update()
+            .select_related("program")
+            .filter(pk=composite_program_identifier)
+            .first()
+        )
+
+    @classmethod
+    def validate_composite_program(
+            cls,
+            composite_program: CompositeProgram | None,
+    ):
+        if not composite_program:
+            raise serializers.ValidationError(
+                {"composite_program_id": "Invalid composite program ID provided."}
+            )
+        if (
+                not composite_program.is_active
+                or not composite_program.program.is_active
+        ):
+            raise serializers.ValidationError(
+                {"composite_program_id": "Composite program is inactive or cancelled."}
+            )
+        expires_at = composite_program.program.expires_at
+        if expires_at and expires_at < timezone.localdate():
+            raise serializers.ValidationError(
+                {"composite_program_id": "Composite program has expired."}
+            )
+        return composite_program
+
+    @classmethod
+    def get_add_on_services(
+            cls,
+            service_data: list[dict],
+    ):
+        service_identifiers = {service["id"] for service in service_data}
+        services = list(
+            Service.objects.filter(
+                pk__in=service_identifiers,
+                is_active=True,
+            )
+        )
+        services_by_primary_key = {service.pk: service for service in services}
+        invalid_service_identifiers = service_identifiers - set(
+            services_by_primary_key
+        )
+        if invalid_service_identifiers:
+            invalid_identifiers = ", ".join(
+                str(service_identifier)
+                for service_identifier in sorted(
+                    invalid_service_identifiers,
+                    key=str,
+                )
+            )
+            raise serializers.ValidationError(
+                {
+                    "add_services": (
+                        "Invalid or inactive service IDs provided: "
+                        f"{invalid_identifiers}."
+                    )
+                }
+            )
+        return services, services_by_primary_key
+
+    @classmethod
+    def validate_existing_services(
+            cls,
+            composite_program: CompositeProgram,
+            service_identifiers: set[UUID],
+    ):
+        existing_service_identifiers = set(
+            ProgramService.objects.filter(
+                program=composite_program.program,
+                service__pk__in=service_identifiers,
+            ).values_list("service__pk", flat=True)
+        )
+        if not existing_service_identifiers:
+            return
+        existing_identifiers = ", ".join(
+            str(service_identifier)
+            for service_identifier in sorted(
+                existing_service_identifiers,
+                key=str,
+            )
+        )
+        raise serializers.ValidationError(
+            {
+                "add_services": (
+                    "Services are already assigned to this composite program: "
+                    f"{existing_identifiers}."
+                )
+            }
+        )
+
+    @classmethod
+    def get_service_quantities(
+            cls,
+            service_data: list[dict],
+            services_by_primary_key: dict[UUID, Service],
+    ):
+        service_quantities = {
+            service["id"]: service.get("quantity") for service in service_data
+        }
+        missing_quantity_service_identifiers = {
+            service_identifier
+            for service_identifier, service in services_by_primary_key.items()
+            if (
+                    service.service_category == ServiceCategory.THERAPY
+                    and service_quantities[service_identifier] is None
+            )
+        }
+        if missing_quantity_service_identifiers:
+            missing_identifiers = ", ".join(
+                str(service_identifier)
+                for service_identifier in sorted(
+                    missing_quantity_service_identifiers,
+                    key=str,
+                )
+            )
+            raise serializers.ValidationError(
+                {
+                    "add_services": (
+                        "Quantity is required for therapy service IDs: "
+                        f"{missing_identifiers}."
+                    )
+                }
+            )
+        return {
+            service_identifier: quantity
+            for service_identifier, quantity in service_quantities.items()
+            if (
+                    services_by_primary_key[
+                        service_identifier
+                    ].service_category == ServiceCategory.THERAPY
+            )
+        }
+
+    def create(self, validated_data: dict):
+        composite_program_identifier = validated_data.pop("composite_program_id")
+        service_data = validated_data.pop("add_services")
+        created_by = validated_data.pop("created_by")
+        request = self.context.get("request")
+        center_identifier = getattr(request, "center_id", None)
+
+        with transaction.atomic():
+            composite_program = self.validate_composite_program(
+                self.get_composite_program(composite_program_identifier)
+            )
+            services, services_by_primary_key = self.get_add_on_services(
+                service_data
+            )
+            service_identifiers = set(services_by_primary_key)
+            self.validate_existing_services(
+                composite_program,
+                service_identifiers,
+            )
+            service_quantities = self.get_service_quantities(
+                service_data,
+                services_by_primary_key,
+            )
+            program_services = [
+                ProgramService(
+                    program=composite_program.program,
+                    service=service,
+                    assignment_type=ServiceAssignment.ADD_ON,
+                    created_by=created_by,
+                )
+                for service in services
+            ]
+            ProgramService.objects.bulk_create(program_services)
+            create_program_service_extensions(
+                program_services,
+                service_quantities,
+            )
+            update_program_services_count(composite_program.program.pk)
+            composite_program.program.refresh_from_db(fields=["services_count"])
+            updated_composite_program = get_composite_program_queryset(
+                center_identifier
+            ).filter(pk=composite_program.pk).first()
+            if not updated_composite_program:
+                raise serializers.ValidationError(
+                    {
+                        "composite_program_id": (
+                            "Composite program could not be refreshed."
+                        )
+                    }
+                )
+            return updated_composite_program
+
+    def get_services(self, instance: CompositeProgram):
+        program_services = getattr(instance.program, "service_preview", None)
+        if not program_services:
+            return None
+        return CompositeProgramServiceSerializer(
+            program_services,
+            many=True,
+            context=self.context,
+        ).data
