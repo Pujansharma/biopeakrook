@@ -154,12 +154,7 @@ class ProductInventoryConsignmentCreateSerializer(BaseModelSerializer):
             batch_items = self.build_batch_items(batch, product_map, products_payload)
             ProductInventoryBatchItem.objects.bulk_create(batch_items)
 
-        return (
-            ProductInventoryBatch.objects.select_related("provider")
-            .prefetch_related("items__product")
-            .filter(pk=batch.pk)
-            .first()
-        )
+        return batch
 
     def build_batch_items(
         self,
@@ -179,49 +174,6 @@ class ProductInventoryConsignmentCreateSerializer(BaseModelSerializer):
             )
             for product_payload in products_payload
         ]
-
-    def to_representation(self, instance: ProductInventoryBatch) -> list[dict]:
-        item_queryset = instance.items.select_related("product", "batch__provider").all()
-        return ProductInventoryConsignmentResponseItemSerializer(
-            item_queryset,
-            many=True,
-            context=self.context,
-        ).data
-
-
-class ProductInventoryConsignmentResponseItemSerializer(BaseModelSerializer):
-    product_code = serializers.SerializerMethodField()
-    label = serializers.CharField(source="product.name", read_only=True)
-    available = serializers.SerializerMethodField()
-    received_on = serializers.DateField(source="batch.received_on", read_only=True)
-    batch_id = serializers.CharField(source="batch.batch_id", read_only=True)
-    provider = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ProductInventoryBatchItem
-        fields = [
-            "product_code",
-            "label",
-            "quantity",
-            "available",
-            "received_on",
-            "batch_id",
-            "provider",
-        ]
-
-    @staticmethod
-    def get_product_code(instance: ProductInventoryBatchItem) -> str:
-        return get_product_inventory_code(instance.product.name)
-
-    @staticmethod
-    def get_available(instance: ProductInventoryBatchItem) -> int:
-        return instance.quantity
-
-    def get_provider(self, instance: ProductInventoryBatchItem) -> dict:
-        return ProductInventoryProviderLabelSerializer(
-            instance.batch.provider,
-            context=self.context,
-        ).data
 
 
 class ProductInventoryAllProductSerializer(BaseModelSerializer):
