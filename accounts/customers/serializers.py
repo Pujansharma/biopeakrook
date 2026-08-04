@@ -114,7 +114,7 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "image",
             "is_main",
             "is_legacy",
-            "is_onboarding_complete",
+            "is_onboarding_completed",
             "created_at",
             "updated_at",
         ]
@@ -159,7 +159,7 @@ class CustomerProfileSerializer(BaseModelSerializer):
             "date_of_birth",
             "image",
             "is_main",
-            "is_onboarding_complete",
+            "is_onboarding_completed",
             "created_at",
             "updated_at",
         ]
