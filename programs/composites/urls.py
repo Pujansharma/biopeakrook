@@ -16,15 +16,15 @@ urlpatterns = [
         views.CompositeTemplateServicesListView.as_view(),
     ),
     path(
-        "services/<uuid:service_id>/prerequisites/",
+        "services/<uuid:pk>/prerequisites/",
         views.CompositeServicePrerequisiteDetailView.as_view(),
     ),
     path(
-        "prerequisites/<uuid:service_id>/prerequisite-services/",
+        "prerequisites/<uuid:pk>/prerequisite-services/",
         views.CompositePrerequisiteServicesListView.as_view(),
     ),
     path(
-        "prerequisites/<uuid:service_id>/available-prerequisite-services/",
+        "prerequisites/<uuid:pk>/available-prerequisite-services/",
         views.CompositeAvailablePrerequisiteServicesListView.as_view(),
     ),
     path(
@@ -38,5 +38,9 @@ urlpatterns = [
     path(
         "programs/<uuid:pk>/cancel/",
         views.CompositeProgramCancelView.as_view(),
+    ),
+    path(
+        "add-ons/",
+        views.CompositeAddOnView.as_view(),
     ),
 ]
