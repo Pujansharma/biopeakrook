@@ -24,6 +24,7 @@ from programs.composites.models import (
     CompositeTemplateService,
 )
 from programs.composites.serializers import (
+    CompositeAddOnSerializer,
     CompositeAvailablePrerequisiteServiceSerializer,
     CompositePrerequisiteServiceSerializer,
     CompositeProgramCancelSerializer,
@@ -37,7 +38,7 @@ from programs.composites.utils.db import (
     get_composite_program_queryset,
     get_composite_program_service_queryset,
 )
-from programs.models import CompositeProgram, Program, ProgramService
+from programs.models import Program, ProgramService
 from programs.services.models import (
     CenterServiceAssignment,
     ServiceProductAssignment,
@@ -99,6 +100,7 @@ class CompositeTemplateViewMeta(CompositeTemplateServiceViewMeta):
 
 
 class CompositeServicePrerequisiteViewMeta(BaseGenericAPIView):
+
     def get_template_service(self) -> CompositeTemplateService:
         qs = CompositeTemplateService.objects.select_related(
             "composite_template",
@@ -107,31 +109,33 @@ class CompositeServicePrerequisiteViewMeta(BaseGenericAPIView):
         return get_object_or_404(
             qs,
             "Composite template service not found",
-            pk=self.kwargs["service_id"],
+            pk=self.kwargs["pk"],
         )
 
     def get_object(self) -> CompositeServicePrerequisite:
         template_service = self.get_template_service()
-        instance, created = CompositeServicePrerequisite.objects.select_related(
-            "template_service",
-            "template_service__composite_template",
-            "template_service__service",
-            "created_by",
-        ).prefetch_related(
-            Prefetch(
-                "related_services",
-                queryset=CompositeTemplateService.objects.select_related(
-                    "service"
-                )[:3],
-                to_attr="related_service_preview",
+        prerequisite, _ = (
+            CompositeServicePrerequisite.objects.select_related(
+                "template_service",
+                "template_service__composite_template",
+                "template_service__service",
+                "created_by",
             )
-        ).get_or_create(
-            template_service=template_service,
+            .prefetch_related(
+                Prefetch(
+                    "related_services",
+                    queryset=CompositeTemplateService.objects.select_related(
+                        "service"
+                    )[:3],
+                    to_attr="related_service_preview",
+                )
+            )
+            .get_or_create(
+                template_service=template_service,
+            )
         )
-        if created:
-            instance.related_service_preview = []
-        self.check_object_permissions(self.request, instance)
-        return instance
+        self.check_object_permissions(self.request, prerequisite)
+        return prerequisite
 
 
 class CompositeTemplatesView(BaseListCreateAPIView, CompositeTemplateViewMeta):
@@ -228,7 +232,11 @@ class CompositeAvailablePrerequisiteServicesListView(
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self) -> QuerySet[CompositeTemplateService]:
+        filter_kwargs = {}
         prerequisite = self.get_object()
+        service_category_query = self.request.query_params.get('category')
+        if service_category_query:
+            filter_kwargs['service__service_category'] = service_category_query
         existing_related_services = CompositeTemplateService.objects.filter(
             pk=OuterRef("pk"),
             related_prerequisites=prerequisite,
@@ -236,9 +244,9 @@ class CompositeAvailablePrerequisiteServicesListView(
         return (
             CompositeTemplateService.objects.select_related("service")
             .filter(
-                composite_template=prerequisite.template_service.composite_template
+                composite_template=prerequisite.template_service.composite_template,
+                **filter_kwargs,
             )
-            .exclude(pk=prerequisite.template_service.pk)
             .annotate(is_exists=Exists(existing_related_services))
             .order_by("-is_exists", "-created_at")
         )
@@ -286,33 +294,24 @@ class CompositeProgramCancelView(BaseCreateAPIView):
     permission_classes = [IsAdminUser | PackagesPermission]
 
     def get_composite_program(self):
-        filter_kwargs = {
-            "pk": self.kwargs["pk"],
-        }
-        center_identifier = self.request.center_id
-        if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
-            filter_kwargs["program__in"] = Program.objects.filter(
-                Q(center__pk=center_identifier)
-                | Q(redeemable_centers__pk=center_identifier)
-            ).distinct()
-        qs = get_composite_program_queryset(center_identifier).filter()
+        center = self.get_center()
+        composite_programs = get_composite_program_queryset(center.pk).filter(
+            Q(program__center=center) | Q(program__redeemable_centers=center)
+        ).distinct()
         return get_object_or_404(
-            qs,
+            composite_programs,
             "Composite program not found with this ID.",
-            **filter_kwargs,
+            pk=self.kwargs["pk"],
         )
 
-    def get_center(self, composite_program: CompositeProgram) -> Center:
+    def get_center(self):
         center_identifier = self.request.center_id
         if not center_identifier:
             self.raise_bad_request("X-Center-ID header is required.")
-        centers = Center.objects.filter(
-            Q(pk=composite_program.program.center.pk)
-            | Q(redeemable_programs=composite_program.program)
-        ).distinct()
+        centers = Center.objects.filter()
         return get_object_or_404(
             centers,
-            "This composite program is not available at the selected center.",
+            "Center not found with this ID.",
             pk=center_identifier,
         )
 
@@ -323,6 +322,14 @@ class CompositeProgramCancelView(BaseCreateAPIView):
         composite_program = self.get_composite_program()
         serializer.save(
             composite_program=composite_program,
-            center=self.get_center(composite_program),
+            center=self.get_center(),
             cancelled_by=self.request.user,
         )
+
+
+class CompositeAddOnView(BaseCreateAPIView):
+    serializer_class = CompositeAddOnSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
