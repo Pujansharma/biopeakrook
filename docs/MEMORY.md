@@ -7,6 +7,10 @@
 - Never revert or alter code the user has manually edited. If the user changes something back, that is the final state — do not touch those lines again unless explicitly asked.
 - Never create Django migration files manually and never run `makemigrations`. The user handles all migration generation.
 - Always use `<uuid:pk>/` for UUID detail URL path parameters.
+- Do not add function return/output type annotations unless the user explicitly requests them.
+- Prefer an explicit `BaseModelSerializer` contract with `Meta.model` and declared fields over overriding `to_representation()` to delegate to another serializer.
+- Keep related-object response fields nested; do not duplicate their attributes as flattened top-level fields.
+- Do not repeat explicitly declared `read_only=True` serializer fields in `Meta.read_only_fields`.
 
 ---
 
@@ -93,6 +97,12 @@
 **ORM Single-Object Lookups (2026-07-27)**
 - Use `filter(...).first()` for serializer and utility object lookups.
 - Do not introduce direct `.get()` lookups; explicitly handle a missing result where required.
+
+**Serializer Add/Remove Actions (2026-08-04)**
+- Keep `add_*` and `remove_*` relation handling simple: accept write-only `{id}` lists, pop each list from `validated_data` with an empty-list fallback, and delegate each operation to a small action helper.
+- Each action helper should return immediately for empty input, validate the supplied IDs against the allowed parent scope with one ORM query and a set difference, raise an error on its own serializer field, then call the related manager's bulk `add()` or `remove()` with the validated IDs.
+- Keep `create()` and `update()` as transaction-level orchestration: save the main instance, run remove before add so add wins for IDs present in both inputs, update maintained counts, refresh only the required fields, rebuild any response preview, and return the instance.
+- Avoid duplicating relation-ID normalization and validation in `create()` and `update()`, and do not add prevalidation structures when the action helpers can perform the complete operation directly.
 
 **View Querysets (2026-07-27)**
 - Keep reusable endpoint queryset construction in a `*ViewMeta` mixin derived from `BaseGenericAPIView`.
