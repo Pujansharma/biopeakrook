@@ -19,8 +19,6 @@ from programs.composites.models import (
 from programs.composites.utils.constants import PrerequisiteCondition
 from programs.composites.utils.db import (
     create_program_service_extensions,
-    get_composite_program_queryset,
-    get_composite_template_for_assignment,
     update_composite_template_services_count,
     update_prerequisite_related_service_count,
 )
@@ -781,18 +779,21 @@ class CompositeProgramSerializer(BaseModelSerializer):
             for center_identifier in center_identifiers
         ]
 
-        composite_template = get_composite_template_for_assignment(
-            composite_template_identifier
-        )
+        composite_template = CompositeTemplate.objects.filter(
+            pk=composite_template_identifier,
+            is_active=True,
+        ).first()
         if not composite_template:
             raise serializers.ValidationError(
                 {"composite_template_id": "Invalid or inactive composite template."}
             )
 
-        template_services = getattr(
-            composite_template,
-            "assignment_services",
-            [],
+        template_services = list(
+            CompositeTemplateService.objects.filter(
+                composite_template=composite_template,
+                is_active=True,
+                service__is_active=True,
+            ).select_related("service").order_by("created_at")
         )
         if not template_services:
             raise serializers.ValidationError(
@@ -1282,8 +1283,6 @@ class CompositeAddOnSerializer(BaseModelSerializer):
         composite_program_identifier = validated_data.pop("composite_program_id")
         service_data = validated_data.pop("add_services")
         created_by = validated_data.pop("created_by")
-        request = self.context.get("request")
-        center_identifier = getattr(request, "center_id", None)
 
         with transaction.atomic():
             composite_program = self.validate_composite_program(
@@ -1317,18 +1316,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
             )
             update_program_services_count(composite_program.program.pk)
             composite_program.program.refresh_from_db(fields=["services_count"])
-            updated_composite_program = get_composite_program_queryset(
-                center_identifier
-            ).filter(pk=composite_program.pk).first()
-            if not updated_composite_program:
-                raise serializers.ValidationError(
-                    {
-                        "composite_program_id": (
-                            "Composite program could not be refreshed."
-                        )
-                    }
-                )
-            return updated_composite_program
+        return composite_program
 
     def get_services(self, instance: CompositeProgram):
         program_services = getattr(instance.program, "service_preview", None)
