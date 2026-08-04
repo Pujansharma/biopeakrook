@@ -11,3 +11,8 @@ class ProgramType(models.TextChoices):
 class RedemptionType(models.TextChoices):
     REDEEM = "redeem", "Redeem"
     CANCEL = "cancel", "Cancel"
+
+
+class ServiceAssignment(models.TextChoices):
+    STANDALONE = "standalone", "Standalone"
+    ADD_ON = "add_on", "Add On"

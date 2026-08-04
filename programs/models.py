@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 
 from core.utils.models import BaseUUIDModel, BaseModel
-from programs.utils.constants import ProgramType, RedemptionType
+from programs.utils.constants import ProgramType, RedemptionType, ServiceAssignment
 from programs.utils.helper import generate_redeemable_code
 
 
@@ -58,6 +58,9 @@ class ProgramService(BaseUUIDModel):
     )
     service = models.ForeignKey(
         "services.Service", related_name="program_services", on_delete=models.PROTECT
+    )
+    assignment_type = models.CharField(
+        choices=ServiceAssignment, default=ServiceAssignment.STANDALONE
     )
     created_by = models.ForeignKey(
         "users.User",
