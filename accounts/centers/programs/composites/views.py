@@ -10,11 +10,14 @@ from core.utils.db.functions import ExtractPartText
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import BaseListCreateAPIView
 from programs.composites.serializers import CompositeProgramSerializer
-from programs.composites.utils.db import get_composite_program_queryset
+from programs.composites.views import CompositeProgramViewMeta
 from programs.models import CompositeProgram
 
 
-class CenterCompositeProgramsView(BaseListCreateAPIView):
+class CenterCompositeProgramsView(
+    BaseListCreateAPIView,
+    CompositeProgramViewMeta,
+):
     serializer_class = CompositeProgramSerializer
     permission_classes = [IsAdminUser | PackagesPermission]
 
@@ -65,7 +68,7 @@ class CenterCompositeProgramsView(BaseListCreateAPIView):
             )
 
         return (
-            get_composite_program_queryset(center.pk)
+            self.get_composite_program_queryset(center.pk)
             .annotate(
                 full_name=Concat(
                     F("program__customer_profile__first_name"),
