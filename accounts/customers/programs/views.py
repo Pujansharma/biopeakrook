@@ -8,8 +8,10 @@ from django.db.models import (
 )
 from django.utils import timezone
 
+from accounts.centers.models import Center
 from accounts.customers.models import CustomerProfile
 from accounts.customers.programs.serializers import (
+    CustomerCompositeProgramSerializer,
     CustomerTherapyProgramSerializer,
 )
 from accounts.utils.constants import UserType
@@ -18,6 +20,7 @@ from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerU
 from core.utils.exceptions import get_object_or_404
 from core.utils.permissions import ReadOnly
 from core.utils.views.main import BaseGenericAPIView, BaseListCreateAPIView
+from programs.composites.views import CompositeProgramViewMeta
 from programs.models import ProgramService, TherapyProgram
 
 
@@ -50,6 +53,45 @@ class CustomerProgramViewMeta(BaseGenericAPIView):
         if get_user_account_type(user) == UserType.CUSTOMER:
             filter_kwargs["customer"] = user.customer
         customer_profiles = CustomerProfile.objects.filter(**filter_kwargs)
+        return get_object_or_404(
+            customer_profiles,
+            "Customer profile with this ID not found.",
+            pk=self.kwargs["pk"],
+        )
+
+
+class CustomerCompositeProgramViewMeta(CompositeProgramViewMeta):
+    def get_center(self):
+        center_identifier = self.request.headers.get("X-Center-ID")
+        centers = Center.objects.filter(is_active=True)
+        if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
+            centers = centers.filter(
+                associate_assignments__associate=self.request.user.associate,
+                associate_assignments__is_active=True,
+            )
+        return get_object_or_404(
+            centers.distinct(),
+            "No valid center found with the given ID.",
+            pk=center_identifier,
+        )
+
+    def get_customer_profile(self, center: Center):
+        filter_kwargs = {
+            "is_active": True,
+            "center_assignments__center": center,
+            "center_assignments__is_active": True,
+        }
+        if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
+            filter_kwargs.update(
+                {
+                    "associate_assignments__associate": self.request.user.associate,
+                    "associate_assignments__center": center,
+                    "associate_assignments__is_active": True,
+                }
+            )
+        customer_profiles = CustomerProfile.objects.filter(
+            **filter_kwargs
+        ).distinct()
         return get_object_or_404(
             customer_profiles,
             "Customer profile with this ID not found.",
@@ -97,10 +139,59 @@ class CustomerTherapyProgramsView(
         )
 
     def perform_create(
-        self,
-        serializer: CustomerTherapyProgramSerializer,
+            self,
+            serializer,
     ) -> None:
         serializer.save(
             customer_profile=self.get_customer_profile(),
+            created_by=self.request.user,
+        )
+
+
+class CustomerCompositeProgramsView(
+    BaseListCreateAPIView,
+    CustomerCompositeProgramViewMeta,
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = CustomerCompositeProgramSerializer
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        active_query = self.request.query_params.get("active")
+        expired_query = self.request.query_params.get("expired")
+        service_category_query = self.request.query_params.get('category')
+
+        if active_query in {"0", "1"}:
+            filter_kwargs["program__is_active"] = bool(int(active_query))
+
+        if service_category_query:
+            # program__program_services__service__service_category
+            # pass
+            filter_kwargs[
+                'program__program_services__service__service_category'
+            ] = service_category_query
+
+        expired_filters = {
+            "1": {"program__expires_at__lt": timezone.localdate()},
+            "0": {"program__expires_at__gte": timezone.localdate()},
+        }
+        if expired_query and expired_query in expired_filters:
+            filter_kwargs.update(expired_filters[expired_query])
+
+        center = self.get_center()
+        customer_profile = self.get_customer_profile(center)
+        return self.get_composite_program_queryset(center.pk).filter(
+            program__customer_profile=customer_profile,
+            **filter_kwargs,
+        ).distinct()
+
+    def perform_create(
+            self,
+            serializer,
+    ):
+        center = self.get_center()
+        serializer.save(
+            customer_profile=self.get_customer_profile(center),
+            center=center,
             created_by=self.request.user,
         )
