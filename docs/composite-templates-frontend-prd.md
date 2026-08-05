@@ -27,7 +27,7 @@ null
   "data": [
     {
       "id": "<uuid>",
-      "name": "<string>",
+      "name": "<string|null>",
       "description": "<string|null>",
       "services": [
         {
@@ -439,6 +439,17 @@ null
 
 ## Composite Programs
 
+Composite-program responses expose `services_count` as the authoritative total
+and the following read-only breakdown:
+
+- `assessment_services_count`, `therapy_services_count`, and
+  `consultation_services_count` count every assigned service in that category,
+  including add-ons.
+- `add_ons_count` counts services assigned with `add_on` assignment type. It is
+  an overlapping subset and must not be added to the total or category counts.
+- Counts include inactive and cancelled assigned services. The frontend must
+  display the API values and must not calculate or submit them.
+
 ### GET Composite Programs
 
 #### URL
@@ -492,7 +503,9 @@ null
         "description": "<string|null>",
         "is_active": "<boolean>"
       },
-      "template_name": "<string>",
+      "name": "<string>",
+      "assessment_type": "<Baseline|null>",
+      "assessment_type_code": "<baseline|null>",
       "template_description": "<string|null>",
       "program_type": "composite",
       "notes": "<string|null>",
@@ -534,6 +547,10 @@ null
         }
       ],
       "services_count": "<integer>",
+      "add_ons_count": "<integer>",
+      "assessment_services_count": "<integer>",
+      "therapy_services_count": "<integer>",
+      "consultation_services_count": "<integer>",
       "cancellation_reason": "<string|null>",
       "cancelled_by": "<user_object|null>",
       "cancelled_at": "<datetime|null>",
@@ -556,7 +573,31 @@ null
 <baseURL>/centers/<center_id>/composite-programs/
 ```
 
-#### Request Payload
+#### Request Payload Structure
+
+For a template containing at least one active assessment service:
+
+```json
+{
+  "profile_id": "<customer_profile_uuid>",
+  "composite_template_id": "<composite_template_uuid>",
+  "name": "<composite_program_name|null>",
+  "assessment_type": "baseline",
+  "notes": "<string|null>",
+  "expires_at": "<date>",
+  "is_complimentary": "<boolean>",
+  "price": "<decimal|null>",
+  "redeemable_centers": [
+    {
+      "id": "<center_uuid>"
+    }
+  ],
+  "created_date": "<date>"
+}
+```
+
+For a template without an active assessment service, omit the assessment-only
+fields:
 
 ```json
 {
@@ -574,6 +615,13 @@ null
   "created_date": "<date>"
 }
 ```
+
+`name` is currently used only for programs whose template contains an active
+assessment service. It is optional and accepts a string, an empty string, or
+`null`; the backend stores an empty string as `null`. `assessment_type` accepts
+`"baseline"` or `null`; it is required when the selected template contains at
+least one active assessment service. For templates without an active assessment
+service, the field may be omitted, set to `null`, or set to `"baseline"`.
 
 #### Response Structure
 
@@ -610,7 +658,9 @@ null
       "description": "<string|null>",
       "is_active": "<boolean>"
     },
-    "template_name": "<string>",
+    "name": "<string|null>",
+    "assessment_type": "<Baseline|null>",
+    "assessment_type_code": "<baseline|null>",
     "template_description": "<string|null>",
     "program_type": "composite",
     "notes": "<string|null>",
@@ -652,6 +702,10 @@ null
       }
     ],
     "services_count": "<integer>",
+    "add_ons_count": "<integer>",
+    "assessment_services_count": "<integer>",
+    "therapy_services_count": "<integer>",
+    "consultation_services_count": "<integer>",
     "cancellation_reason": "<string|null>",
     "cancelled_by": "<user_object|null>",
     "cancelled_at": "<datetime|null>",
@@ -714,7 +768,9 @@ null
       "description": "<string|null>",
       "is_active": "<boolean>"
     },
-    "template_name": "<string>",
+    "name": "<string|null>",
+    "assessment_type": "<Baseline|null>",
+    "assessment_type_code": "<baseline|null>",
     "template_description": "<string|null>",
     "program_type": "composite",
     "notes": "<string|null>",
@@ -756,6 +812,10 @@ null
       }
     ],
     "services_count": "<integer>",
+    "add_ons_count": "<integer>",
+    "assessment_services_count": "<integer>",
+    "therapy_services_count": "<integer>",
+    "consultation_services_count": "<integer>",
     "cancellation_reason": "<string|null>",
     "cancelled_by": "<user_object|null>",
     "cancelled_at": "<datetime|null>",
@@ -796,7 +856,9 @@ null
     "profile": "<customer_profile_object>",
     "center": "<center_object>",
     "composite_template": "<composite_template_reference_object>",
-    "template_name": "<string>",
+    "name": "<string|null>",
+    "assessment_type": "<Baseline|null>",
+    "assessment_type_code": "<baseline|null>",
     "template_description": "<string|null>",
     "program_type": "composite",
     "notes": "<string|null>",
@@ -815,6 +877,10 @@ null
       "<composite_program_service_object>"
     ],
     "services_count": "<integer>",
+    "add_ons_count": "<integer>",
+    "assessment_services_count": "<integer>",
+    "therapy_services_count": "<integer>",
+    "consultation_services_count": "<integer>",
     "cancellation_reason": "<string|null>",
     "cancelled_by": "<user_object|null>",
     "cancelled_at": "<datetime|null>",
@@ -827,6 +893,52 @@ null
   }
 }
 ```
+
+`name`, `assessment_type`, and `assessment_type_code` are immutable and must
+not be submitted through PUT or PATCH.
+
+### POST Composite Program Add-Ons
+
+#### URL
+
+```text
+<baseURL>/programs/composites/add-ons/
+```
+
+#### Request Payload
+
+```json
+{
+  "composite_program_id": "<composite_program_uuid>",
+  "add_services": [
+    {
+      "id": "<service_uuid>",
+      "quantity": "<positive_integer_required_for_therapy>"
+    }
+  ]
+}
+```
+
+`add_services` must be non-empty. Services must be active and must not already
+belong to the composite program. `quantity` is required for therapy services.
+
+#### Response Structure
+
+The response data uses the composite-program response structure documented
+above. The backend returns refreshed values for:
+
+```json
+{
+  "services_count": "<integer>",
+  "add_ons_count": "<integer>",
+  "assessment_services_count": "<integer>",
+  "therapy_services_count": "<integer>",
+  "consultation_services_count": "<integer>"
+}
+```
+
+After success, replace the local composite-program object with the response
+data. Do not increment or recompute any count in frontend state.
 
 ### GET Composite Program Services
 
