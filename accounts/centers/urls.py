@@ -17,4 +17,8 @@ urlpatterns = [
     path(
         "<uuid:pk>/therapy-programs/", include("accounts.centers.programs.therapy.urls")
     ),
+    path(
+        "<uuid:pk>/composite-programs/",
+        include("accounts.centers.programs.composites.urls"),
+    ),
 ]

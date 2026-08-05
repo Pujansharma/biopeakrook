@@ -2,11 +2,13 @@ from django.db import models
 from django.utils import timezone
 
 from core.utils.models import BaseUUIDModel, BaseModel
-from programs.utils.constants import ProgramType, RedemptionType
+from programs.composites.utils.constants import CompositeAssessmentType
+from programs.utils.constants import ProgramType, RedemptionType, ServiceAssignment
 from programs.utils.helper import generate_redeemable_code
 
 
 class Program(BaseUUIDModel):
+    uid = models.CharField(null=True, blank=True, editable=False)
     customer_profile = models.ForeignKey(
         "customers.CustomerProfile", related_name="programs", on_delete=models.PROTECT
     )
@@ -59,6 +61,9 @@ class ProgramService(BaseUUIDModel):
     service = models.ForeignKey(
         "services.Service", related_name="program_services", on_delete=models.PROTECT
     )
+    assignment_type = models.CharField(
+        choices=ServiceAssignment, default=ServiceAssignment.STANDALONE
+    )
     created_by = models.ForeignKey(
         "users.User",
         null=True,
@@ -86,7 +91,7 @@ class ProgramService(BaseUUIDModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["program", "service"], name="unique_program_service"
-            )
+            ),
         ]
 
     def __str__(self):
@@ -139,6 +144,70 @@ class TherapyProgramService(BaseModel):
         return f"{self.pk}"
 
 
+class AssessmentProgram(BaseModel):
+    program = models.OneToOneField(
+        Program,
+        on_delete=models.CASCADE,
+        related_name="assessment_program",
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AssessmentProgramService(BaseModel):
+    program_service = models.OneToOneField(
+        ProgramService,
+        related_name="assessment_service",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ConsultationProgram(BaseModel):
+    program = models.OneToOneField(
+        Program,
+        on_delete=models.CASCADE,
+        related_name="consultation_program",
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ConsultationProgramService(BaseModel):
+    program_service = models.OneToOneField(
+        ProgramService,
+        related_name="consultation_service",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class RedemptionHistory(BaseUUIDModel):
     therapy_program_service = models.ForeignKey(
         TherapyProgramService, on_delete=models.PROTECT, related_name="redemptions"
@@ -164,6 +233,38 @@ class RedemptionHistory(BaseUUIDModel):
     class Meta:
         ordering = ["-created_at"]
         verbose_name_plural = "Redemption Histories"
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CompositeProgram(BaseModel):
+    program = models.OneToOneField(
+        Program,
+        on_delete=models.CASCADE,
+        related_name="composite_program",
+        primary_key=True,
+        db_index=True,
+    )
+    composite_template = models.ForeignKey(
+        "composites.CompositeTemplate",
+        related_name="assigned_programs",
+        on_delete=models.PROTECT,
+    )
+    name = models.CharField(max_length=200, null=True, blank=True)
+    assessment_type = models.CharField(
+        choices=CompositeAssessmentType,
+        null=True,
+        blank=True,
+    )
+    template_description = models.TextField(null=True, blank=True, editable=False)
+    add_ons_count = models.PositiveBigIntegerField(default=0, editable=False)
+    assessment_services_count = models.PositiveBigIntegerField(default=0, editable=False)
+    therapy_services_count = models.PositiveBigIntegerField(default=0, editable=False)
+    consultation_services_count = models.PositiveBigIntegerField(default=0, editable=False)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"

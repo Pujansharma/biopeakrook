@@ -51,6 +51,7 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
     is_main = models.BooleanField(default=False, editable=False)
 
     is_legacy = models.BooleanField(default=False)
+
     is_onboarding_sent = models.BooleanField(default=True)
     is_onboarding_completed = models.BooleanField(default=False)
     is_converted = models.BooleanField(
