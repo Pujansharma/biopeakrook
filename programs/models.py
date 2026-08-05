@@ -2,11 +2,13 @@ from django.db import models
 from django.utils import timezone
 
 from core.utils.models import BaseUUIDModel, BaseModel
+from programs.composites.utils.constants import CompositeAssessmentType
 from programs.utils.constants import ProgramType, RedemptionType, ServiceAssignment
 from programs.utils.helper import generate_redeemable_code
 
 
 class Program(BaseUUIDModel):
+    uid = models.CharField(null=True, blank=True, editable=False)
     customer_profile = models.ForeignKey(
         "customers.CustomerProfile", related_name="programs", on_delete=models.PROTECT
     )
@@ -249,8 +251,17 @@ class CompositeProgram(BaseModel):
         related_name="assigned_programs",
         on_delete=models.PROTECT,
     )
-    template_name = models.CharField(max_length=200, editable=False)
+    name = models.CharField(max_length=200, null=True, blank=True)
+    assessment_type = models.CharField(
+        choices=CompositeAssessmentType,
+        null=True,
+        blank=True,
+    )
     template_description = models.TextField(null=True, blank=True, editable=False)
+    add_ons_count = models.PositiveBigIntegerField(default=0, editable=False)
+    assessment_services_count = models.PositiveBigIntegerField(default=0, editable=False)
+    therapy_services_count = models.PositiveBigIntegerField(default=0, editable=False)
+    consultation_services_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
