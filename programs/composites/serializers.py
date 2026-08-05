@@ -16,9 +16,13 @@ from programs.composites.models import (
     CompositeTemplate,
     CompositeTemplateService,
 )
-from programs.composites.utils.constants import PrerequisiteCondition
+from programs.composites.utils.constants import (
+    CompositeAssessmentType,
+    PrerequisiteCondition,
+)
 from programs.composites.utils.db import (
     create_program_service_extensions,
+    update_composite_program_service_counts,
     update_composite_template_services_count,
     update_prerequisite_related_service_count,
 )
@@ -33,6 +37,7 @@ from programs.utils.db import (
     update_program_redeemable_centers_count,
     update_program_services_count,
 )
+from programs.utils.helper import generate_program_unique_id
 
 
 class CompositeTemplateServiceReferenceSerializer(BaseSerializer):
@@ -597,6 +602,23 @@ class CompositeProgramServiceSerializer(BaseModelSerializer):
 
 class CompositeProgramSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
+    name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+    assessment_type = serializers.ChoiceField(
+        choices=CompositeAssessmentType,
+        required=False,
+        allow_null=True,
+    )
+    assessment_type_code = serializers.CharField(
+        source="assessment_type",
+        read_only=True,
+        allow_null=True,
+    )
     profile = CustomerProfileWithCenterSerializer(
         source="program.customer_profile",
         read_only=True,
@@ -639,6 +661,10 @@ class CompositeProgramSerializer(BaseModelSerializer):
         source="program.services_count",
         read_only=True,
     )
+    add_ons_count = serializers.IntegerField(read_only=True)
+    assessment_services_count = serializers.IntegerField(read_only=True)
+    therapy_services_count = serializers.IntegerField(read_only=True)
+    consultation_services_count = serializers.IntegerField(read_only=True)
     redeemable_centers_count = serializers.IntegerField(
         source="program.redeemable_centers_count",
         read_only=True,
@@ -672,6 +698,10 @@ class CompositeProgramSerializer(BaseModelSerializer):
         model = CompositeProgram
         fields = [
             "id",
+            "uid",
+            "name",
+            "assessment_type",
+            "assessment_type_code",
             "profile",
             "profile_id",
             "center",
@@ -686,6 +716,10 @@ class CompositeProgramSerializer(BaseModelSerializer):
             "redeemable_centers_count",
             "services",
             "services_count",
+            "add_ons_count",
+            "assessment_services_count",
+            "therapy_services_count",
+            "consultation_services_count",
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
@@ -706,6 +740,8 @@ class CompositeProgramSerializer(BaseModelSerializer):
         ]
 
     def create(self, validated_data: dict) -> CompositeProgram:
+        if validated_data.get("name") == "":
+            validated_data["name"] = None
         center = validated_data.pop("center")
         created_by = validated_data.pop("created_by")
         profile_identifier = validated_data.pop("profile_id")
@@ -800,6 +836,21 @@ class CompositeProgramSerializer(BaseModelSerializer):
                 {"composite_template_id": "Composite template has no active services."}
             )
 
+        has_assessment_service = any(
+            template_service.service.service_category
+            == ServiceCategory.ASSESSMENT
+            for template_service in template_services
+        )
+        if has_assessment_service and not validated_data.get("assessment_type"):
+            raise serializers.ValidationError(
+                {
+                    "assessment_type": (
+                        "Assessment type is required when the composite template "
+                        "contains an assessment service."
+                    )
+                }
+            )
+
         service_identifiers = [
             template_service.service.pk for template_service in template_services
         ]
@@ -836,20 +887,20 @@ class CompositeProgramSerializer(BaseModelSerializer):
             )
 
         with transaction.atomic():
+            program_uid = generate_program_unique_id()
             program = Program.objects.create(
                 **program_data,
+                uid=program_uid,
                 program_type=ProgramType.COMPOSITE,
                 customer_profile=customer_profile,
                 center=center,
                 created_by=created_by,
             )
             program.redeemable_centers.add(*redeemable_centers)
-            composite_program = CompositeProgram.objects.create(
-                program=program,
-                composite_template=composite_template,
-                template_name=composite_template.name,
-                template_description=composite_template.description,
-            )
+            validated_data["program"] = program
+            validated_data["composite_template"] = composite_template
+            validated_data["template_description"] = composite_template.description
+            composite_program = super().create(validated_data)
             service_quantities = {
                 template_service.service.pk: template_service.quantity
                 for template_service in template_services
@@ -868,7 +919,16 @@ class CompositeProgramSerializer(BaseModelSerializer):
                 service_quantities,
             )
             update_program_services_count(program.pk)
+            update_composite_program_service_counts(program.pk)
             update_program_redeemable_centers_count(program.pk)
+            composite_program.refresh_from_db(
+                fields=[
+                    "add_ons_count",
+                    "assessment_services_count",
+                    "therapy_services_count",
+                    "consultation_services_count",
+                ]
+            )
             program.refresh_from_db(
                 fields=["services_count", "redeemable_centers_count"]
             )
@@ -912,6 +972,9 @@ class CompositeProgramDetailSerializer(CompositeProgramSerializer):
             validated_data: dict,
     ) -> CompositeProgram:
         immutable_fields = {
+            "name",
+            "assessment_type",
+            "assessment_type_code",
             "profile_id",
             "composite_template_id",
             "redeemable_centers",
@@ -1024,6 +1087,18 @@ class CompositeProgramCancelSerializer(BaseModelSerializer):
 
 class CompositeAddOnSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
+    name = serializers.CharField(read_only=True)
+    assessment_type = serializers.ChoiceField(
+        choices=CompositeAssessmentType,
+        read_only=True,
+        allow_null=True,
+    )
+    assessment_type_code = serializers.CharField(
+        source="assessment_type",
+        read_only=True,
+        allow_null=True,
+    )
     profile = CustomerProfileWithCenterSerializer(
         source="program.customer_profile",
         read_only=True,
@@ -1060,6 +1135,10 @@ class CompositeAddOnSerializer(BaseModelSerializer):
         source="program.services_count",
         read_only=True,
     )
+    add_ons_count = serializers.IntegerField(read_only=True)
+    assessment_services_count = serializers.IntegerField(read_only=True)
+    therapy_services_count = serializers.IntegerField(read_only=True)
+    consultation_services_count = serializers.IntegerField(read_only=True)
     redeemable_centers_count = serializers.IntegerField(
         source="program.redeemable_centers_count",
         read_only=True,
@@ -1112,6 +1191,10 @@ class CompositeAddOnSerializer(BaseModelSerializer):
         model = CompositeProgram
         fields = [
             "id",
+            "uid",
+            "name",
+            "assessment_type",
+            "assessment_type_code",
             "profile",
             "center",
             "composite_template",
@@ -1124,6 +1207,10 @@ class CompositeAddOnSerializer(BaseModelSerializer):
             "redeemable_centers_count",
             "services",
             "services_count",
+            "add_ons_count",
+            "assessment_services_count",
+            "therapy_services_count",
+            "consultation_services_count",
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
@@ -1315,6 +1402,17 @@ class CompositeAddOnSerializer(BaseModelSerializer):
                 service_quantities,
             )
             update_program_services_count(composite_program.program.pk)
+            update_composite_program_service_counts(
+                composite_program.program.pk
+            )
+            composite_program.refresh_from_db(
+                fields=[
+                    "add_ons_count",
+                    "assessment_services_count",
+                    "therapy_services_count",
+                    "consultation_services_count",
+                ]
+            )
             composite_program.program.refresh_from_db(fields=["services_count"])
         return composite_program
 
