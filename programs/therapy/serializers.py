@@ -32,6 +32,7 @@ from programs.utils.db import (
     update_program_services_count,
     update_program_sessions_count,
 )
+from programs.utils.helper import generate_program_unique_id
 
 
 class BaseTherapyProgramSerializer(BaseModelSerializer):
@@ -115,6 +116,7 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
 
 class TherapyProgramDetailSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
     profile = CustomerProfileWithCenterSerializer(
         source="program.customer_profile", read_only=True
     )
@@ -161,6 +163,7 @@ class TherapyProgramDetailSerializer(BaseModelSerializer):
         model = TherapyProgram
         fields = [
             "id",
+            "uid",
             "profile",
             "program_type",
             "is_complimentary",
@@ -203,6 +206,7 @@ class TherapyProgramDetailSerializer(BaseModelSerializer):
 
 class TherapyProgramSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
     profile = CustomerProfileWithCenterSerializer(
         source="program.customer_profile", read_only=True
     )
@@ -252,6 +256,7 @@ class TherapyProgramSerializer(BaseModelSerializer):
         model = TherapyProgram
         fields = [
             "id",
+            "uid",
             "profile",
             "profile_id",
             # "center",
@@ -363,8 +368,10 @@ class TherapyProgramSerializer(BaseModelSerializer):
                 service_data.get("id"): service_data.get("sessions_count")
                 for service_data in add_services
             }
+            program_uid = generate_program_unique_id()
             program = Program.objects.create(
                 **program_data,
+                uid=program_uid,
                 customer_profile=profile,
                 center=center,
                 created_by=created_by,
