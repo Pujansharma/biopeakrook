@@ -15,12 +15,14 @@ from programs.composites.models import (
 )
 from programs.models import (
     AssessmentProgramService,
+    CompositeProgram,
     ConsultationProgramService,
     ProgramService,
     TherapyProgramService,
 )
 from programs.services.models import Service
 from programs.services.utils.constants import ServiceCategory
+from programs.utils.constants import ServiceAssignment
 
 
 def update_composite_template_services_count(
@@ -76,6 +78,62 @@ def update_composite_template_services_count(
         ),
         consultation_services_count=Coalesce(
             Subquery(consultation_services_count), Value(0)
+        ),
+    )
+
+
+def update_composite_program_service_counts(
+        program_id: UUID,
+) -> None:
+    add_ons_count = (
+        ProgramService.objects.filter(
+            program=OuterRef("program"),
+            assignment_type=ServiceAssignment.ADD_ON,
+        )
+        .values("program")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    assessment_services_count = (
+        ProgramService.objects.filter(
+            program=OuterRef("program"),
+            service__service_category=ServiceCategory.ASSESSMENT,
+        )
+        .values("program")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    therapy_services_count = (
+        ProgramService.objects.filter(
+            program=OuterRef("program"),
+            service__service_category=ServiceCategory.THERAPY,
+        )
+        .values("program")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    consultation_services_count = (
+        ProgramService.objects.filter(
+            program=OuterRef("program"),
+            service__service_category=ServiceCategory.CONSULTATION,
+        )
+        .values("program")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+    CompositeProgram.objects.filter(program__pk=program_id).update(
+        add_ons_count=Coalesce(Subquery(add_ons_count), Value(0)),
+        assessment_services_count=Coalesce(
+            Subquery(assessment_services_count),
+            Value(0),
+        ),
+        therapy_services_count=Coalesce(
+            Subquery(therapy_services_count),
+            Value(0),
+        ),
+        consultation_services_count=Coalesce(
+            Subquery(consultation_services_count),
+            Value(0),
         ),
     )
 
