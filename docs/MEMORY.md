@@ -25,6 +25,7 @@
 | Test kit assignment (2026-07-30) | New app `test_kit_assignment`. One active kit per `CustomerProfile`; assignee always profile id (leads via shell profile). Eligible = completed pre-consult session + no active assignment. Global APIs (no `X-Center-ID`). `created_by` from JWT. Products via M2M to `products.Product` (no stock, no name snapshot). `assigned_on` always set (auto now for delivery; body-required for manual_handover). Spec: `docs/superpowers/specs/2026-07-30-test-kit-assignment-design.md`. User owns migrations. |
 | Test kit multi-assign (2026-07-31) | POST `/assign` `assigned_to` = non-empty profile UUID array. N rows, one atomic txn; any fail → none created. Response = success `detail` only (no `data`). Model unchanged. Spec: `docs/superpowers/specs/2026-07-31-test-kit-multi-assign-design.md`. |
 | Product inventory QC acks (2026-08-04) | `qc_ack_packaging` / `qc_ack_all_components` are write gate (must be true) **and** persisted on `ProductInventoryBatchItem` for audit — not ack-only throwaway fields. User owns migration. |
+| Product inventory specs test_kit filter (2026-08-06) | `GET /product_inventory/specs/` returns only products with flat `tags.type == "test_kit"`. Providers with zero matches omitted. `product_code` from tags else name helper; `kit_type` omitted when absent. Consign/all/batches unchanged. Spec: `docs/superpowers/specs/2026-08-06-product-inventory-specs-test-kit-design.md`. |
 
 ---
 

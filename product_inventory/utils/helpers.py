@@ -5,6 +5,20 @@ from uuid import UUID
 from sequences.utils import get_next_sequence
 
 IGNORED_PRODUCT_CODE_WORDS = {"and", "for", "of", "the", "with"}
+TEST_KIT_TAG_TYPE = "test_kit"
+
+
+def get_product_tag_string(tags: object, key: str) -> str | None:
+    if not isinstance(tags, dict):
+        return None
+    value = tags.get(key)
+    if not isinstance(value, str):
+        return None
+    stripped_value = value.strip()
+    if not stripped_value:
+        return None
+    return stripped_value
+
 
 
 def normalize_inventory_text(value: str) -> str:
