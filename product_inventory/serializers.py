@@ -4,8 +4,10 @@ from rest_framework import serializers
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from product_inventory.models import ProductInventoryBatch, ProductInventoryBatchItem
 from product_inventory.utils import (
+    TEST_KIT_TAG_TYPE,
     generate_product_inventory_batch_id,
     get_product_inventory_code,
+    get_product_tag_string,
 )
 from products.models import Product, Provider
 
@@ -28,7 +30,17 @@ class ProductInventoryProductSummarySerializer(BaseModelSerializer):
 
     @staticmethod
     def get_product_code(instance: Product) -> str:
+        tagged_product_code = get_product_tag_string(instance.tags, "product_code")
+        if tagged_product_code is not None:
+            return tagged_product_code
         return get_product_inventory_code(instance.name)
+
+    def to_representation(self, instance: Product) -> dict:
+        representation = super().to_representation(instance)
+        kit_type = get_product_tag_string(instance.tags, "kit_type")
+        if kit_type is not None:
+            representation["kit_type"] = kit_type
+        return representation
 
 
 class ProductInventorySpecsProviderSerializer(BaseModelSerializer):
@@ -42,7 +54,10 @@ class ProductInventorySpecsProviderSerializer(BaseModelSerializer):
     def get_products(self, instance: Provider) -> list[dict]:
         product_queryset = getattr(instance, "active_products", None)
         if product_queryset is None:
-            product_queryset = instance.products.filter(is_active=True)
+            product_queryset = instance.products.filter(
+                is_active=True,
+                tags__type=TEST_KIT_TAG_TYPE,
+            )
         return ProductInventoryProductSummarySerializer(
             product_queryset,
             many=True,

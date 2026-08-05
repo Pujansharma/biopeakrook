@@ -9,6 +9,7 @@ from product_inventory.serializers import (
     ProductInventoryConsignmentCreateSerializer,
     ProductInventorySpecsProviderSerializer,
 )
+from product_inventory.utils import TEST_KIT_TAG_TYPE
 from products.models import Product, Provider
 
 
@@ -18,14 +19,21 @@ class ProductInventorySpecsView(BaseListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        active_products = Prefetch(
+        test_kit_products = Prefetch(
             "products",
-            queryset=Product.objects.filter(is_active=True).order_by("name"),
+            queryset=Product.objects.filter(
+                is_active=True,
+                tags__type=TEST_KIT_TAG_TYPE,
+            ).order_by("name"),
             to_attr="active_products",
         )
         return (
-            Provider.objects.filter(is_active=True, products__is_active=True)
-            .prefetch_related(active_products)
+            Provider.objects.filter(
+                is_active=True,
+                products__is_active=True,
+                products__tags__type=TEST_KIT_TAG_TYPE,
+            )
+            .prefetch_related(test_kit_products)
             .order_by("name")
             .distinct()
         )
