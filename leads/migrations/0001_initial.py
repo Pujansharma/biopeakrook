@@ -168,7 +168,8 @@ class Migration(migrations.Migration):
                                 ("P004", "Edge Plus Program"),
                                 ("P005", "Elite Longevity Programme"),
                                 ("P006", "Customised Program"),
-                            ]
+                            ],
+                            max_length=4,
                         ),
                         blank=True,
                         default=list,

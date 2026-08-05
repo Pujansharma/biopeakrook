@@ -159,5 +159,9 @@ GitHub.sublime-settings
 .aider
 .windsurf
 .continue
-/postman
+postman
+
+
+# MacOS #
 .DS_Store
+/postman

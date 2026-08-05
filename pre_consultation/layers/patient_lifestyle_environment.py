@@ -7,6 +7,7 @@ from pre_consultation.cluster_scoring import (
     build_cluster_score_response,
     persist_session_cluster_scores,
 )
+from pre_consultation.layers.reset import clear_session_cluster_probe_answers
 from pre_consultation.models import (
     PreConsultationLifestyleAnswer,
     PreConsultationSession,
@@ -189,6 +190,16 @@ def resolve_next_layer_from_cluster_confidence(
     return PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
 
 
+def resolve_next_layer_from_cluster_confidence_v2(
+    session: PreConsultationSession,
+) -> str:
+    from pre_consultation.cluster_probe_session import session_requires_cluster_probe
+
+    if session_requires_cluster_probe(session):
+        return PreConsultationLayerProgression.PATIENT_CLUSTER_PROBE
+    return PreConsultationLayerProgression.PATIENT_HEALTH_MAP
+
+
 def load_patient_lifestyle_environment_payload(
     user,
     session: PreConsultationSession,
@@ -210,11 +221,20 @@ def load_patient_lifestyle_environment_put_payload(
     }
 
 
-def persist_patient_lifestyle_environment_payload(
+def load_patient_lifestyle_environment_v2_put_payload(
     user,
+    session: PreConsultationSession,
+) -> dict:
+    return {
+        "next_layer": resolve_next_layer_from_cluster_confidence_v2(session),
+    }
+
+
+def write_patient_lifestyle_environment_answers(
     session: PreConsultationSession,
     validated_data: dict,
 ) -> None:
+    clear_session_cluster_probe_answers(session)
     session.lifestyle_answers.all().delete()
     PreConsultationLifestyleAnswer.objects.bulk_create(
         [
@@ -228,6 +248,26 @@ def persist_patient_lifestyle_environment_payload(
     )
     persist_session_cluster_scores(session, validated_data)
 
+
+def persist_patient_lifestyle_environment_payload(
+    user,
+    session: PreConsultationSession,
+    validated_data: dict,
+) -> None:
+    write_patient_lifestyle_environment_answers(session, validated_data)
+
     session.current_layer = resolve_next_layer_from_cluster_confidence(session)
+    session.updated_at = timezone.now()
+    session.save(update_fields=["current_layer", "updated_at"])
+
+
+def persist_patient_lifestyle_environment_v2_payload(
+    user,
+    session: PreConsultationSession,
+    validated_data: dict,
+) -> None:
+    write_patient_lifestyle_environment_answers(session, validated_data)
+
+    session.current_layer = resolve_next_layer_from_cluster_confidence_v2(session)
     session.updated_at = timezone.now()
     session.save(update_fields=["current_layer", "updated_at"])

@@ -19,7 +19,7 @@ from leads.utils.db import (
     increment_leads_inactive,
     increment_leads_total,
 )
-from leads.utils.helper import create_customer_profile_from_lead
+from leads.utils.helper import convert_lead_to_client
 
 User = get_user_model()
 
@@ -50,6 +50,7 @@ class BaseLeadSerializer(BaseModelSerializer):
             "is_client",
             "is_invited",
             "is_joined",
+            "is_onboarding_completed",
             "converted_on",
             "packages",
             "home_center",
@@ -134,6 +135,7 @@ class LeadDetailSerializer(BaseLeadSerializer):
     def update(self, instance: Lead, validated_data: dict) -> Lead:
         was_active = instance.is_active
         was_joined = instance.is_joined
+        was_invited = instance.is_invited
         was_converted = bool(instance.customer_profile or instance.converted_on)
         phone = validated_data.get('phone', instance.phone)
         exists = Lead.objects.exclude(pk=instance.pk).filter(phone=phone).exists()
@@ -167,6 +169,16 @@ class LeadDetailSerializer(BaseLeadSerializer):
                 increment_leads_assigned()
             if was_joined and not lead.is_joined and not was_converted:
                 decrement_leads_assigned()
+            if (
+                not was_invited
+                and lead.is_invited
+                and lead.customer_profile_id is not None
+                and not lead.customer_profile.is_onboarding_sent
+            ):
+                lead.customer_profile.is_onboarding_sent = True
+                lead.customer_profile.save(
+                    update_fields=["is_onboarding_sent", "updated_at"]
+                )
             if not lead_data.get("metsights_profile_id"):
                 metsights_profile_id = get_or_create_metsights_profile(
                     phone=lead.phone,
@@ -202,18 +214,18 @@ class LeadConvertClientSerializer(BaseModelSerializer):
         lead = validated_data["lead"]
         updated_by = validated_data.get("updated_by")
 
-        if lead.customer_profile or lead.converted_on:
+        if lead.customer_profile_id is not None and lead.customer_profile.is_converted:
             raise serializers.ValidationError("Lead is already converted to client.")
         if not lead.home_center:
             raise serializers.ValidationError(
                 {"home_center": "Home center is required before conversion."}
             )
-        if User.objects.filter(phone=lead.phone).exists():
-            raise serializers.ValidationError(
-                {"phone": "A customer user with this phone already exists."}
-            )
 
-        with transaction.atomic():
-            create_customer_profile_from_lead(lead, updated_by)
+        try:
+            with transaction.atomic():
+                convert_lead_to_client(lead, updated_by)
+        except ValueError as error:
+            raise serializers.ValidationError(str(error)) from error
 
+        lead.refresh_from_db()
         return lead

@@ -40,6 +40,7 @@ class Command(BaseCommand):
             Subquery(
                 CustomerCenterAssignment.objects.filter(
                     center=OuterRef("pk"),
+                    customer_profile__is_converted=True,
                 )
                 .values("center")
                 .annotate(c=Count("pk"))
@@ -53,6 +54,7 @@ class Command(BaseCommand):
                 CustomerCenterAssignment.objects.filter(
                     center=OuterRef("pk"),
                     customer_profile__customer__user__is_active=False,
+                    customer_profile__is_converted=True,
                 )
                 .values("center")
                 .annotate(c=Count("pk"))

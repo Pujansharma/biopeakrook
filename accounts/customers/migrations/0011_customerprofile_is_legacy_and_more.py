@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AlterField(
             model_name="customerprofile",
-            name="is_onboarding_complete",
+            name="is_onboarding_completed",
             field=models.BooleanField(default=False),
         ),
         migrations.CreateModel(

@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -37,9 +38,27 @@ from accounts.utils.db import get_user_account_type
 from accounts.verifications.models import PhoneVerification
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+from leads.models import Lead
 from integrations.metsights.helper import get_or_create_metsights_profile
 
 PROFILE_FIELDS = ["first_name", "last_name", "gender", "date_of_birth", "image"]
+
+
+def validate_phone_for_customer_create(phone: str) -> None:
+    if Lead.objects.filter(phone__iexact=phone).exists():
+        raise serializers.ValidationError(
+            {
+                "phone": "Phone belongs to a lead. Convert the lead to a client instead.",
+            }
+        )
+    phone_user = User.objects.filter(phone__iexact=phone).first()
+    if phone_user:
+        account_type = get_user_account_type(phone_user)
+        raise serializers.ValidationError(
+            {
+                "phone": f"A user with this phone number already exists as an {account_type} account."
+            }
+        )
 
 
 class CustomerAccountSerializer(BaseModelSerializer):
@@ -114,7 +133,9 @@ class BaseCustomerProfileSerializer(BaseModelSerializer):
             "image",
             "is_main",
             "is_legacy",
+            "is_onboarding_sent",
             "is_onboarding_completed",
+            "is_converted",
             "created_at",
             "updated_at",
         ]
@@ -159,6 +180,7 @@ class CustomerProfileSerializer(BaseModelSerializer):
             "date_of_birth",
             "image",
             "is_main",
+            "is_onboarding_sent",
             "is_onboarding_completed",
             "created_at",
             "updated_at",
@@ -254,14 +276,7 @@ class CenterCustomerProfileSerializer(BaseModelSerializer):
         phone = user_wrapper.get("phone")
         # email = user_wrapper.get("email")
 
-        phone_user = User.objects.filter(phone__iexact=phone).first()
-        if phone_user:
-            account_type = get_user_account_type(phone_user)
-            raise serializers.ValidationError(
-                {
-                    "phone": f"A user with this phone number already exists as an {account_type} account."
-                }
-            )
+        validate_phone_for_customer_create(phone)
 
         profile_data = {
             "first_name": profile_wrapper.get("first_name"),
@@ -348,8 +363,8 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
     external_centers_count = serializers.IntegerField(
         source="customer_profile.external_centers_count", read_only=True, default=0
     )
-    is_onboarding_complete = serializers.BooleanField(
-        source='customer_profile.is_onboarding_complete', required=False
+    is_onboarding_completed = serializers.BooleanField(
+        source='customer_profile.is_onboarding_completed', required=False
     )
 
     class Meta:
@@ -366,7 +381,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
-            "is_onboarding_complete",
+            "is_onboarding_completed",
             "centers_count",
             "external_centers_count",
             "created_at",
@@ -392,14 +407,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
         phone = user_wrapper.get("phone")
         contact_email = customer_wrapper.get("contact_email")
 
-        phone_user = User.objects.filter(phone__iexact=phone).first()
-        if phone_user:
-            account_type = get_user_account_type(phone_user)
-            raise serializers.ValidationError(
-                {
-                    "phone": f"A user with this phone number already exists as an {account_type} account."
-                }
-            )
+        validate_phone_for_customer_create(phone)
 
         profile_data = {
             "first_name": profile_wrapper.get("first_name"),
@@ -511,8 +519,8 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     external_centers_count = serializers.IntegerField(
         source="customer_profile.external_centers_count", read_only=True, default=0
     )
-    is_onboarding_complete = serializers.BooleanField(
-        source='customer_profile.is_onboarding_complete', required=False
+    is_onboarding_completed = serializers.BooleanField(
+        source='customer_profile.is_onboarding_completed', required=False
     )
     home_center = serializers.SerializerMethodField(read_only=True)
 
@@ -530,7 +538,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
-            "is_onboarding_complete",
+            "is_onboarding_completed",
             "centers_count",
             "external_centers_count",
             "created_at",
@@ -952,3 +960,97 @@ class CustomerProfileFeatureSerializer(BaseModelSerializer):
             "enabled_tabs",
             "updated_at",
         ]
+def get_main_customer_profile_for_user(user: User) -> CustomerProfile | None:
+    return (
+        CustomerProfile.objects.select_related("customer__user")
+        .prefetch_related(
+            Prefetch(
+                "center_assignments",
+                queryset=CustomerCenterAssignment.objects.filter(
+                    is_primary=True
+                ).select_related("center"),
+                to_attr="primary_center_assignments",
+            )
+        )
+        .filter(customer__user=user, is_main=True)
+        .first()
+    )
+
+
+def build_customer_lead_profile_fallback(
+    customer_profile: CustomerProfile, *, context: dict | None = None
+) -> dict:
+    context = context or {}
+    customer = customer_profile.customer
+    user = customer.user
+    primary_assignments = getattr(customer_profile, "primary_center_assignments", None)
+    home_center = primary_assignments[0].center if primary_assignments else None
+    home_center_data = (
+        MinimumCenterSerializer(home_center, context=context).data
+        if home_center
+        else None
+    )
+    gender_value = customer_profile.gender
+    gender_display = Gender.MAPPING.get(gender_value, gender_value)
+    linked_lead = Lead.objects.filter(phone=user.phone).first()
+    is_client = linked_lead.is_client if linked_lead else customer_profile.is_converted
+    is_joined = linked_lead.is_joined if linked_lead else customer_profile.is_converted
+    converted_on = linked_lead.converted_on if linked_lead else None
+    return {
+        "id": None,
+        "unique_id": None,
+        "first_name": customer_profile.first_name,
+        "last_name": customer_profile.last_name,
+        "gender": gender_display,
+        "date_of_birth": customer_profile.date_of_birth,
+        "phone": user.phone,
+        "email": customer.contact_email,
+        "description": None,
+        "is_active": customer_profile.is_active,
+        "is_client": is_client,
+        "is_invited": linked_lead.is_invited if linked_lead else False,
+        "is_joined": is_joined,
+        "is_onboarding_sent": customer_profile.is_onboarding_sent,
+        "is_onboarding_completed": customer_profile.is_onboarding_completed,
+        "converted_on": converted_on,
+        "packages": [],
+        "home_center": home_center_data,
+        "home_center_id": home_center.id if home_center else None,
+        "customer_profile": BaseCustomerProfileSerializer(
+            customer_profile, context=context
+        ).data,
+        "created_at": customer_profile.created_at,
+        "updated_at": customer_profile.updated_at,
+    }
+
+
+class CustomerLeadProfileSerializer(BaseModelSerializer):
+    customer_profile = BaseCustomerProfileSerializer(read_only=True)
+    home_center = MinimumCenterSerializer(read_only=True)
+
+    class Meta:
+        model = Lead
+        fields = [
+            "id",
+            "unique_id",
+            "first_name",
+            "last_name",
+            "gender",
+            "date_of_birth",
+            "phone",
+            "email",
+            "description",
+            "is_active",
+            "is_client",
+            "is_invited",
+            "is_joined",
+            "is_onboarding_completed",
+            "converted_on",
+            "packages",
+            "home_center",
+            "home_center_id",
+            "customer_profile",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

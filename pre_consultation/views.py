@@ -7,27 +7,34 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 
+from accounts.customers.utils.db import mark_customer_profile_onboarding_completed_for_user
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
-from pre_consultation.models import PreConsultationSession
+from leads.utils.db import mark_lead_onboarding_completed_for_user
+from pre_consultation.models import (
+    PreConsultationSession,
+    PreConsultationSessionArtifacts,
+)
 from pre_consultation.result import (
     PreConsultationSessionResultSerializer,
+    PreConsultationSessionResultV2Serializer,
     build_session_result_payload,
+    build_session_result_v2_payload,
 )
 from pre_consultation.serializers import (
     PreConsultationSessionResponseSerializer,
     PreConsultationSessionStartSerializer,
 )
-from pre_consultation.customer_profile import resolve_customer_profile_for_request
 from pre_consultation.session_utils import (
     get_user_pre_consultation_session,
-    guard_onboarding_incomplete_for_mutation,
+    guard_lead_onboarding_completed_for_start,
     is_session_completed,
 )
 from pre_consultation.utils.api import pre_consultation_response
 from pre_consultation.utils.constants import (
     PreConsultationLayerProgression,
     PreConsultationSessionStatus,
+    PreConsultationArtifactGenerationStatus,
 )
 from pre_consultation.utils.directive import get_directive_schema_id
 from pre_consultation.utils.schema import (
@@ -35,6 +42,8 @@ from pre_consultation.utils.schema import (
     PreConsultationSessionConflictEnvelope,
     pre_consultation_data_envelope,
 )
+from leads.utils.db import mark_lead_onboarding_completed_for_user
+from pre_consultation.completion_worker import spawn_post_completion_generation
 
 SESSION_CONFLICT_ENVELOPE = PreConsultationSessionConflictEnvelope
 SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
@@ -42,6 +51,9 @@ SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
 )
 SESSION_RESULT_ENVELOPE = pre_consultation_data_envelope(
     PreConsultationSessionResultSerializer
+)
+SESSION_RESULT_V2_ENVELOPE = pre_consultation_data_envelope(
+    PreConsultationSessionResultV2Serializer
 )
 
 
@@ -65,7 +77,7 @@ class PreConsultationSessionStartView(BaseGenericAPIView, PostMethodMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        onboarding_conflict = guard_onboarding_incomplete_for_mutation(request)
+        onboarding_conflict = guard_lead_onboarding_completed_for_start(request)
         if onboarding_conflict is not None:
             return onboarding_conflict
 
@@ -133,6 +145,34 @@ class PreConsultationSessionResultView(BaseGenericAPIView, GetMethodMixin):
 
 
 @extend_schema_view(
+    get=extend_schema(
+        tags=[PRE_CONSULTATION_SESSION_TAG],
+        description=(
+            "Step 11 v2 — Health map summary plus previous_layer "
+            "(same routing as patient_goals_priorities)."
+        ),
+        responses={
+            200: SESSION_RESULT_V2_ENVELOPE,
+            404: None,
+        },
+    ),
+)
+class PreConsultationSessionResultV2View(BaseGenericAPIView, GetMethodMixin):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        session = get_user_pre_consultation_session(request.user)
+
+        result_payload = build_session_result_v2_payload(session)
+        response_data = PreConsultationSessionResultV2Serializer(result_payload).data
+        return pre_consultation_response(
+            success=True,
+            data=response_data,
+            status_code=status.HTTP_200_OK,
+        )
+
+
+@extend_schema_view(
     post=extend_schema(
         tags=[PRE_CONSULTATION_SESSION_TAG],
         description=(
@@ -169,13 +209,19 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
             session.completed_at = timezone.now()
             session.save(update_fields=["status", "completed_at", "updated_at"])
 
-            customer_profile = resolve_customer_profile_for_request(
+            mark_customer_profile_onboarding_completed_for_user(
                 request.user,
                 getattr(request, "customer_profile_id", None),
             )
-            customer_profile.is_onboarding_complete = True
-            customer_profile.save(
-                update_fields=["is_onboarding_complete", "updated_at"]
+            mark_lead_onboarding_completed_for_user(request.user)
+
+            PreConsultationSessionArtifacts.objects.update_or_create(
+                session=session,
+                defaults={"generation_status": PreConsultationArtifactGenerationStatus.PENDING},
+            )
+
+            transaction.on_commit(
+                lambda: spawn_post_completion_generation(session.pk, session.user_id)
             )
 
         return pre_consultation_response(

@@ -1,6 +1,9 @@
 from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
 from django.db.models.functions import Coalesce, Concat
 from django.db.models.query import Prefetch
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.serializers import BaseCenterAssociateSerializer
@@ -22,6 +25,11 @@ from accounts.customers.serializers import (
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
     CustomerProfileAddressSerializer, CustomerProfileFeatureSerializer, MinimalCustomerAssignedCenterSerializer,
+    BaseCustomerAssignedCenterSerializer,
+    CustomerProfileAddressSerializer,
+    CustomerLeadProfileSerializer,
+    build_customer_lead_profile_fallback,
+    get_main_customer_profile_for_user,
 )
 from accounts.organizations.utils.db import (
     decrement_organization_clients_count,
@@ -33,11 +41,13 @@ from core.utils.exceptions import get_object_or_404
 from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
     BaseListAPIView,
+    BaseRetrieveAPIView,
     BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
     BaseCreateAPIView,
     BaseListCreateAPIView, BaseGenericAPIView,
 )
+from leads.models import Lead
 
 
 class CustomerProfileMeta(BaseGenericAPIView):
@@ -58,8 +68,34 @@ class CustomerAccountProfileView(BaseRetrieveUpdateAPIView, CustomerProfileMeta)
     def get_object(self):
         return self.get_customer_for_user()
 
+class CustomerLeadProfileView(BaseRetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomerLeadProfileSerializer
 
-class CustomerProfilesListView(BaseListAPIView, CustomerProfileMeta):
+    def get_queryset(self):
+        return Lead.objects.select_related(
+            "customer_profile__customer__user",
+            "home_center",
+        ).filter(phone=self.request.user.phone)
+
+    def get(self, request, *args, **kwargs):
+        lead = self.get_queryset().first()
+        if lead:
+            serializer = self.get_serializer(lead)
+            return Response({"success": True, "data": serializer.data})
+
+        customer_profile = get_main_customer_profile_for_user(request.user)
+        if customer_profile:
+            data = build_customer_lead_profile_fallback(
+                customer_profile,
+                context=self.get_serializer_context(),
+            )
+            return Response({"success": True, "data": data})
+
+        raise NotFound("Lead not found")
+
+
+class CustomerProfilesListView(BaseListAPIView):
     """View for customers to List all profiles"""
 
     permission_classes = [IsCustomerUser]
@@ -114,8 +150,9 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
         )
 
     def perform_destroy(self, instance: CustomerCenterAssignment):
-        decrement_customer_count(instance.center.pk)
-        decrement_organization_clients_count()
+        if instance.customer_profile.is_converted:
+            decrement_customer_count(instance.center.pk)
+            decrement_organization_clients_count()
         super().perform_destroy(instance)
 
 

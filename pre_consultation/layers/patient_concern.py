@@ -95,8 +95,8 @@ def load_patient_concern_payload(user, session: PreConsultationSession) -> dict:
     return build_patient_concern_payload(session)
 
 
-def persist_patient_concern_payload(
-    user, session: PreConsultationSession, validated_data: dict
+def write_patient_concern_selection(
+    session: PreConsultationSession, validated_data: dict
 ) -> None:
     concern_ids = validated_data["concern_ids"]
     PreConsultationConcern.objects.filter(session=session).exclude(
@@ -116,7 +116,20 @@ def persist_patient_concern_payload(
         ]
     )
 
+
+def persist_patient_concern_payload(
+    user, session: PreConsultationSession, validated_data: dict
+) -> None:
+    write_patient_concern_selection(session, validated_data)
     session.current_layer = PreConsultationLayerProgression.PATIENT_SYMPTOM
+    session.save(update_fields=["current_layer", "updated_at"])
+
+
+def persist_patient_concern_v2_payload(
+    user, session: PreConsultationSession, validated_data: dict
+) -> None:
+    write_patient_concern_selection(session, validated_data)
+    session.current_layer = PreConsultationLayerProgression.PATIENT_CONCERN_PROBE
     session.save(update_fields=["current_layer", "updated_at"])
 
 

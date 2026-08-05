@@ -5,12 +5,18 @@ from django.views.generic import RedirectView
 
 from pre_consultation.layer_views import (
     PatientBaselineLayerView,
+    PatientBaselineV2LayerView,
     PatientCategoryLayerView,
     PatientClusterProbeLayerView,
+    PatientClusterProbeV2LayerView,
     PatientConcernLayerView,
+    PatientConcernV2LayerView,
     PatientConcernProbeLayerView,
+    PatientConcernProbeV2LayerView,
     PatientGoalsPrioritiesLayerView,
+    PatientGoalsPrioritiesV2LayerView,
     PatientLifestyleEnvironmentLayerView,
+    PatientLifestyleEnvironmentV2LayerView,
     PatientSymptomLayerView,
 )
 from pre_consultation.medical_history_layer_view import (
@@ -38,6 +44,7 @@ from pre_consultation.result_views import (
 from pre_consultation.views import (
     PreConsultationSessionCompleteView,
     PreConsultationSessionResultView,
+    PreConsultationSessionResultV2View,
     PreConsultationSessionStartView,
 )
 
@@ -84,9 +91,19 @@ urlpatterns = [
         name="session-result",
     ),
     path(
+        "session/result/v2/",
+        PreConsultationSessionResultV2View.as_view(),
+        name="session-result-v2",
+    ),
+    path(
         "session/patient_baseline/",
         PatientBaselineLayerView.as_view(),
         name="session-patient-baseline",
+    ),
+    path(
+        "session/patient_baseline/v2/",
+        PatientBaselineV2LayerView.as_view(),
+        name="session-patient-baseline-v2",
     ),
     path(
         "session/patient_category/",
@@ -99,6 +116,11 @@ urlpatterns = [
         name="session-patient-concern",
     ),
     path(
+        "session/patient_concern/v2/",
+        PatientConcernV2LayerView.as_view(),
+        name="session-patient-concern-v2",
+    ),
+    path(
         "session/patient_symptom/",
         PatientSymptomLayerView.as_view(),
         name="session-patient-symptom",
@@ -109,9 +131,19 @@ urlpatterns = [
         name="session-patient-concern-probe",
     ),
     path(
+        "session/patient_concern_probe/v2/",
+        PatientConcernProbeV2LayerView.as_view(),
+        name="session-patient-concern-probe-v2",
+    ),
+    path(
         "session/patient_cluster_probe/",
         PatientClusterProbeLayerView.as_view(),
         name="session-patient-cluster-probe",
+    ),
+    path(
+        "session/patient_cluster_probe/v2/",
+        PatientClusterProbeV2LayerView.as_view(),
+        name="session-patient-cluster-probe-v2",
     ),
     path(
         "session/patient_medical_history_context/",
@@ -124,9 +156,19 @@ urlpatterns = [
         name="session-patient-lifestyle-environment",
     ),
     path(
+        "session/patient_lifestyle_environment/v2/",
+        PatientLifestyleEnvironmentV2LayerView.as_view(),
+        name="session-patient-lifestyle-environment-v2",
+    ),
+    path(
         "session/patient_goals_priorities/",
         PatientGoalsPrioritiesLayerView.as_view(),
         name="session-patient-goals-priorities",
+    ),
+    path(
+        "session/patient_goals_priorities/v2/",
+        PatientGoalsPrioritiesV2LayerView.as_view(),
+        name="session-patient-goals-priorities-v2",
     ),
     path(
         "result/list/",

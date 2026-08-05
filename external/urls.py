@@ -36,8 +36,4 @@ urlpatterns = [
         "customer-notifications/<uuid:pk>/",
         views.CustomerNotificationDetailView.as_view(),
     ),
-    path(
-        "customer-leads/",
-        views.CustomerLeadDetailView.as_view(),
-    ),
 ]
