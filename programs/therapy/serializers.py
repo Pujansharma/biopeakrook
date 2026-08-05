@@ -99,7 +99,7 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
     def get_service_assignment_type(
             cls, instance: TherapyProgramService,
     ):
-        return instance.program_service.get_service_assignment_type_display()
+        return instance.program_service.get_assignment_type_display()
 
     def create(self, validated_data):
         raise serializers.ValidationError("Create not allowed.")
