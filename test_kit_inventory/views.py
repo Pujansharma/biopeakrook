@@ -2,8 +2,7 @@ from django.db.models import Prefetch, Q
 
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.views.main import BaseCreateAPIView, BaseGenericAPIView, BaseListAPIView
-from products.models import Product, Provider
-from test_kit_inventory.models import TestKitAssignment, TestKitInventoryBatch, TestKitInventoryBatchItem
+from test_kit_inventory.models import Assignment, Batch, Item, Product, Provider
 from test_kit_inventory.serializers import (
     TestKitInventoryAllItemSerializer,
     TestKitInventoryAssignmentCreateSerializer,
@@ -12,8 +11,9 @@ from test_kit_inventory.serializers import (
     TestKitInventoryConsignmentCreateSerializer,
     TestKitInventoryEligibleCustomerProfileSerializer,
     TestKitInventorySpecsProviderSerializer,
+    ProviderCreateSerializer,
+    ProductCreateSerializer,
 )
-from test_kit_inventory.utils import TEST_KIT_TAG_TYPE
 from test_kit_inventory.utils.db import get_eligible_customer_profile_queryset
 
 
@@ -23,21 +23,14 @@ class TestKitInventorySpecsView(BaseListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        test_kit_products = Prefetch(
-            "products",
-            queryset=Product.objects.filter(
-                is_active=True,
-                tags__type=TEST_KIT_TAG_TYPE,
-            ).order_by("name"),
-            to_attr="active_products",
-        )
         return (
-            Provider.objects.filter(
-                is_active=True,
-                products__is_active=True,
-                products__tags__type=TEST_KIT_TAG_TYPE,
+            Provider.objects.filter(is_active=True, products__is_active=True)
+            .prefetch_related(
+                Prefetch(
+                    "products",
+                    queryset=Product.objects.filter(is_active=True).order_by("test_name"),
+                )
             )
-            .prefetch_related(test_kit_products)
             .order_by("name")
             .distinct()
         )
@@ -75,13 +68,13 @@ class TestKitInventoryAllView(BaseListAPIView):
 
         if search_query:
             search |= Q(batch__batch_id__icontains=search_query)
-            search |= Q(product__name__istartswith=search_query)
-            search |= Q(product__name__icontains=search_query)
+            search |= Q(product__test_name__istartswith=search_query)
+            search |= Q(product__test_name__icontains=search_query)
             search |= Q(batch__provider__name__istartswith=search_query)
             search |= Q(batch__provider__name__icontains=search_query)
 
         return (
-            TestKitInventoryBatchItem.objects.select_related(
+            Item.objects.select_related(
                 "batch",
                 "batch__provider",
                 "product",
@@ -115,11 +108,11 @@ class TestKitInventoryBatchesView(BaseListAPIView):
             search |= Q(batch_id__icontains=search_query)
             search |= Q(provider__name__istartswith=search_query)
             search |= Q(provider__name__icontains=search_query)
-            search |= Q(items__product__name__istartswith=search_query)
-            search |= Q(items__product__name__icontains=search_query)
+            search |= Q(items__product__test_name__istartswith=search_query)
+            search |= Q(items__product__test_name__icontains=search_query)
 
         return (
-            TestKitInventoryBatch.objects.select_related("provider")
+            Batch.objects.select_related("provider")
             .prefetch_related("items__product")
             .filter(search, **filter_kwargs)
             .order_by("-received_on", "-created_at")
@@ -154,7 +147,7 @@ class TestKitInventoryAssignmentHistoryListView(BaseListAPIView):
     def get_queryset(self):
         search = self.request.query_params.get("search", "").strip()
         queryset = (
-            TestKitAssignment.objects.select_related(
+            Assignment.objects.select_related(
                 "assigned_to__customer__user",
                 "clinic",
                 "created_by",
@@ -178,3 +171,13 @@ class TestKitInventoryAssignmentHistoryListView(BaseListAPIView):
         search_query |= Q(created_by__first_name__icontains=search)
         search_query |= Q(created_by__last_name__icontains=search)
         return queryset.filter(search_query).distinct()
+
+
+class ProviderCreateView(BaseCreateAPIView):
+    serializer_class = ProviderCreateSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+
+class ProductCreateView(BaseCreateAPIView):
+    serializer_class = ProductCreateSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]

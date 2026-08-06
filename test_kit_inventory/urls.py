@@ -28,4 +28,14 @@ urlpatterns = [
         views.TestKitInventoryAssignmentHistoryListView.as_view(),
         name="assignment-history",
     ),
+    path(
+        "providers/add/",
+        views.ProviderCreateView.as_view(),
+        name="provider-add",
+    ),
+    path(
+        "products/add/",
+        views.ProductCreateView.as_view(),
+        name="product-add",
+    ),
 ]

@@ -5,7 +5,7 @@ from accounts.centers.models import Center
 from accounts.customers.models import CustomerProfile
 from accounts.utils import get_user_model
 from core.utils.models import BaseUUIDModel
-from products.models import Product, Provider
+from products.models import Product as CatalogProduct, Provider as CatalogProvider
 from test_kit_inventory.utils.constants import (
     TestKitAssignmentStatus,
     TestKitHandoverType,
@@ -14,11 +14,49 @@ from test_kit_inventory.utils.constants import (
 User = get_user_model()
 
 
-class TestKitInventoryBatch(BaseUUIDModel):
+class Provider(BaseUUIDModel):
+    provider = models.OneToOneField(
+        CatalogProvider,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="test_kit_inventory_provider",
+    )
+    name = models.CharField(max_length=200)
+
+    class Meta:
+        db_table = "test_kit_inventory_provider"
+        ordering = ["name", "-created_at"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Product(BaseUUIDModel):
     provider = models.ForeignKey(
         Provider,
         on_delete=models.PROTECT,
-        related_name="test_kit_inventory_batches",
+        related_name="products",
+    )
+    test_name = models.CharField(max_length=200)
+    code = models.CharField(max_length=32, unique=True, db_index=True)
+
+    class Meta:
+        db_table = "test_kit_inventory_product"
+        ordering = ["test_name", "-created_at"]
+        indexes = [
+            models.Index(fields=["provider", "test_name"], name="tkinv_prod_prov_name_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.code} — {self.test_name}"
+
+
+class Batch(BaseUUIDModel):
+    provider = models.ForeignKey(
+        Provider,
+        on_delete=models.PROTECT,
+        related_name="batches",
     )
     received_on = models.DateField()
     batch_id = models.CharField(max_length=32, unique=True, db_index=True)
@@ -31,6 +69,7 @@ class TestKitInventoryBatch(BaseUUIDModel):
     )
 
     class Meta:
+        db_table = "test_kit_inventory_batch"
         ordering = ["-received_on", "-created_at"]
         indexes = [
             models.Index(fields=["provider", "received_on"], name="tkinv_batch_prov_dt_idx"),
@@ -41,16 +80,16 @@ class TestKitInventoryBatch(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class TestKitInventoryBatchItem(BaseUUIDModel):
+class Item(BaseUUIDModel):
     batch = models.ForeignKey(
-        TestKitInventoryBatch,
+        Batch,
         on_delete=models.CASCADE,
         related_name="items",
     )
     product = models.ForeignKey(
         Product,
         on_delete=models.PROTECT,
-        related_name="test_kit_inventory_batch_items",
+        related_name="batch_items",
     )
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     qc_ack_packaging = models.BooleanField(default=True)
@@ -64,6 +103,7 @@ class TestKitInventoryBatchItem(BaseUUIDModel):
     )
 
     class Meta:
+        db_table = "test_kit_inventory_item"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -80,43 +120,7 @@ class TestKitInventoryBatchItem(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class TestKitProvider(BaseUUIDModel):
-    provider = models.OneToOneField(
-        Provider,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="test_kit_provider",
-    )
-    name = models.CharField(max_length=200)
-
-    class Meta:
-        ordering = ["name", "-created_at"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class TestKitProduct(BaseUUIDModel):
-    provider = models.ForeignKey(
-        TestKitProvider,
-        on_delete=models.PROTECT,
-        related_name="test_kit_products",
-    )
-    test_name = models.CharField(max_length=200)
-    code = models.CharField(max_length=32, unique=True, db_index=True)
-
-    class Meta:
-        ordering = ["test_name", "-created_at"]
-        indexes = [
-            models.Index(fields=["provider", "test_name"], name="tkinv_prod_prov_name_idx"),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.code} — {self.test_name}"
-
-
-class TestKitAssignment(BaseUUIDModel):
+class Assignment(BaseUUIDModel):
     assigned_to = models.ForeignKey(
         CustomerProfile,
         on_delete=models.PROTECT,
@@ -151,10 +155,12 @@ class TestKitAssignment(BaseUUIDModel):
     )
     products = models.ManyToManyField(
         Product,
-        related_name="test_kit_assignments",
+        related_name="assignments",
+        db_table="test_kit_inventory_assignment_product",
     )
 
     class Meta:
+        db_table = "test_kit_inventory_assignment"
         ordering = ["-assigned_on", "-created_at"]
         constraints = [
             models.UniqueConstraint(

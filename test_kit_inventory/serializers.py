@@ -6,18 +6,15 @@ from rest_framework.exceptions import APIException
 from accounts.centers.models import Center
 from accounts.customers.models import CustomerProfile
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from products.models import Product, Provider
+from products.models import Product as CatalogProduct, Provider as CatalogProvider
 from test_kit_inventory.models import (
-    TestKitAssignment,
-    TestKitInventoryBatch,
-    TestKitInventoryBatchItem,
+    Assignment,
+    Batch,
+    Item,
+    Product,
+    Provider,
 )
-from test_kit_inventory.utils import (
-    TEST_KIT_TAG_TYPE,
-    generate_test_kit_inventory_batch_id,
-    get_product_tag_string,
-    get_test_kit_inventory_code,
-)
+from test_kit_inventory.utils import generate_test_kit_inventory_batch_id
 from test_kit_inventory.utils.constants import (
     TestKitAssignmentStatus,
     TestKitHandoverType,
@@ -48,49 +45,22 @@ class TestKitInventoryProviderLabelSerializer(BaseModelSerializer):
         fields = ["label"]
 
 
-class TestKitInventoryProductSummarySerializer(BaseModelSerializer):
-    label = serializers.CharField(source="name", read_only=True)
-    product_code = serializers.SerializerMethodField()
+class TestKitInventorySpecsProductSummarySerializer(BaseModelSerializer):
+    label = serializers.CharField(source="test_name", read_only=True)
+    product_code = serializers.CharField(source="code", read_only=True)
 
     class Meta:
         model = Product
         fields = ["id", "label", "product_code"]
 
-    @staticmethod
-    def get_product_code(instance: Product) -> str:
-        tagged_product_code = get_product_tag_string(instance.tags, "product_code")
-        if tagged_product_code is not None:
-            return tagged_product_code
-        return get_test_kit_inventory_code(instance.name)
-
-    def to_representation(self, instance: Product) -> dict:
-        representation = super().to_representation(instance)
-        kit_type = get_product_tag_string(instance.tags, "kit_type")
-        if kit_type is not None:
-            representation["kit_type"] = kit_type
-        return representation
-
 
 class TestKitInventorySpecsProviderSerializer(BaseModelSerializer):
     label = serializers.CharField(source="name", read_only=True)
-    products = serializers.SerializerMethodField()
+    products = TestKitInventorySpecsProductSummarySerializer(many=True, read_only=True)
 
     class Meta:
         model = Provider
         fields = ["id", "label", "products"]
-
-    def get_products(self, instance: Provider) -> list[dict]:
-        product_queryset = getattr(instance, "active_products", None)
-        if product_queryset is None:
-            product_queryset = instance.products.filter(
-                is_active=True,
-                tags__type=TEST_KIT_TAG_TYPE,
-            )
-        return TestKitInventoryProductSummarySerializer(
-            product_queryset,
-            many=True,
-            context=self.context,
-        ).data
 
 
 class TestKitInventoryConsignmentProductWriteSerializer(BaseSerializer):
@@ -107,7 +77,7 @@ class TestKitInventoryConsignmentCreateSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        model = TestKitInventoryBatch
+        model = Batch
         fields = ["provider", "received_on", "products"]
 
     @staticmethod
@@ -153,7 +123,7 @@ class TestKitInventoryConsignmentCreateSerializer(BaseModelSerializer):
             provider=provider,
             is_active=True,
         )
-        product_map = {product.id: product for product in product_queryset}
+        product_map = {product.pk: product for product in product_queryset}
         if len(product_map) != len(product_identifiers):
             raise serializers.ValidationError(
                 {
@@ -178,13 +148,13 @@ class TestKitInventoryConsignmentCreateSerializer(BaseModelSerializer):
         attrs["product_map"] = product_map
         return attrs
 
-    def create(self, validated_data: dict) -> TestKitInventoryBatch:
+    def create(self, validated_data: dict) -> Batch:
         products_payload = validated_data.pop("products")
         provider = validated_data.pop("provider_instance")
         product_map = validated_data.pop("product_map")
         validated_data.pop("provider")
         batch_id = generate_test_kit_inventory_batch_id(
-            provider.id,
+            provider.pk,
             provider.name,
             validated_data["received_on"],
         )
@@ -193,21 +163,21 @@ class TestKitInventoryConsignmentCreateSerializer(BaseModelSerializer):
         validated_data["created_by"] = self.context["request"].user
 
         with transaction.atomic():
-            batch = TestKitInventoryBatch.objects.create(**validated_data)
+            batch = Batch.objects.create(**validated_data)
             batch_items = self.build_batch_items(batch, product_map, products_payload)
-            TestKitInventoryBatchItem.objects.bulk_create(batch_items)
+            Item.objects.bulk_create(batch_items)
 
         return batch
 
     def build_batch_items(
         self,
-        batch: TestKitInventoryBatch,
+        batch: Batch,
         product_map: dict,
         products_payload: list[dict],
-    ) -> list[TestKitInventoryBatchItem]:
+    ) -> list[Item]:
         created_by = self.context["request"].user
         return [
-            TestKitInventoryBatchItem(
+            Item(
                 batch=batch,
                 product=product_map[product_payload["id"]],
                 quantity=product_payload["quantity"],
@@ -220,16 +190,12 @@ class TestKitInventoryConsignmentCreateSerializer(BaseModelSerializer):
 
 
 class TestKitInventoryAllProductSerializer(BaseModelSerializer):
-    label = serializers.CharField(source="name", read_only=True)
-    product_code = serializers.SerializerMethodField()
+    label = serializers.CharField(source="test_name", read_only=True)
+    product_code = serializers.CharField(source="code", read_only=True)
 
     class Meta:
         model = Product
         fields = ["label", "product_code"]
-
-    @staticmethod
-    def get_product_code(instance: Product) -> str:
-        return get_test_kit_inventory_code(instance.name)
 
 
 class TestKitInventoryAllItemSerializer(BaseModelSerializer):
@@ -240,7 +206,7 @@ class TestKitInventoryAllItemSerializer(BaseModelSerializer):
     received_on = serializers.DateField(source="batch.received_on", read_only=True)
 
     class Meta:
-        model = TestKitInventoryBatchItem
+        model = Item
         fields = [
             "product",
             "provider_name",
@@ -250,14 +216,14 @@ class TestKitInventoryAllItemSerializer(BaseModelSerializer):
             "received_on",
         ]
 
-    def get_product(self, instance: TestKitInventoryBatchItem) -> dict:
+    def get_product(self, instance: Item) -> dict:
         return TestKitInventoryAllProductSerializer(
             instance.product,
             context=self.context,
         ).data
 
     @staticmethod
-    def get_available(instance: TestKitInventoryBatchItem) -> int:
+    def get_available(instance: Item) -> int:
         return instance.quantity
 
 
@@ -267,7 +233,7 @@ class TestKitInventoryBatchListSerializer(BaseModelSerializer):
     total_quantity = serializers.SerializerMethodField()
 
     class Meta:
-        model = TestKitInventoryBatch
+        model = Batch
         fields = [
             "batch_id",
             "provider",
@@ -276,13 +242,13 @@ class TestKitInventoryBatchListSerializer(BaseModelSerializer):
             "received_on",
         ]
 
-    def get_provider(self, instance: TestKitInventoryBatch) -> dict:
+    def get_provider(self, instance: Batch) -> dict:
         return TestKitInventoryProviderLabelSerializer(
             instance.provider,
             context=self.context,
         ).data
 
-    def get_products(self, instance: TestKitInventoryBatch) -> list[dict]:
+    def get_products(self, instance: Batch) -> list[dict]:
         product_queryset = [batch_item.product for batch_item in instance.items.all()]
         return TestKitInventoryAllProductSerializer(
             product_queryset,
@@ -291,7 +257,7 @@ class TestKitInventoryBatchListSerializer(BaseModelSerializer):
         ).data
 
     @staticmethod
-    def get_total_quantity(instance: TestKitInventoryBatch) -> int:
+    def get_total_quantity(instance: Batch) -> int:
         return sum(batch_item.quantity for batch_item in instance.items.all())
 
 
@@ -309,6 +275,8 @@ class TestKitInventoryEligibleCustomerProfileSerializer(BaseModelSerializer):
 
 
 class TestKitInventoryAssignmentProductNameSerializer(BaseModelSerializer):
+    name = serializers.CharField(source="test_name", read_only=True)
+
     class Meta:
         model = Product
         fields = ["name"]
@@ -322,7 +290,7 @@ class TestKitInventoryAssignmentHistorySerializer(BaseModelSerializer):
     handover_type = serializers.CharField(read_only=True)
 
     class Meta:
-        model = TestKitAssignment
+        model = Assignment
         fields = [
             "handover_type",
             "assigned_on",
@@ -334,7 +302,7 @@ class TestKitInventoryAssignmentHistorySerializer(BaseModelSerializer):
         ]
 
     @staticmethod
-    def get_customer(instance: TestKitAssignment) -> dict:
+    def get_customer(instance: Assignment) -> dict:
         profile = instance.assigned_to
         return {
             "name": profile.get_full_name(),
@@ -344,13 +312,13 @@ class TestKitInventoryAssignmentHistorySerializer(BaseModelSerializer):
         }
 
     @staticmethod
-    def get_clinic(instance: TestKitAssignment) -> dict | None:
+    def get_clinic(instance: Assignment) -> dict | None:
         if instance.clinic is None:
             return None
         return {"name": instance.clinic.name}
 
     @staticmethod
-    def get_created_by(instance: TestKitAssignment) -> dict | None:
+    def get_created_by(instance: Assignment) -> dict | None:
         if instance.created_by is None:
             return None
         return {"name": instance.created_by.get_full_name()}
@@ -381,7 +349,7 @@ class TestKitInventoryAssignmentCreateSerializer(BaseModelSerializer):
     is_kit_journey_visible = serializers.BooleanField(required=False, default=True)
 
     class Meta:
-        model = TestKitAssignment
+        model = Assignment
         fields = [
             "assigned_to",
             "handover_type",
@@ -407,6 +375,8 @@ class TestKitInventoryAssignmentCreateSerializer(BaseModelSerializer):
         return value
 
     def validate(self, attrs: dict) -> dict:
+        attrs["product_instances"] = self.get_products_or_error(attrs["products"])
+
         handover_type = attrs["handover_type"]
         clinic_id = attrs.get("clinic_id")
         assigned_on = attrs.get("assigned_on")
@@ -487,13 +457,13 @@ class TestKitInventoryAssignmentCreateSerializer(BaseModelSerializer):
             )
         return products
 
-    def create(self, validated_data: dict) -> TestKitAssignment:
-        product_ids = validated_data.pop("products")
+    def create(self, validated_data: dict) -> Assignment:
+        products = validated_data.pop("product_instances")
         validated_data.pop("clinic_id", None)
         assigned_to_ids = validated_data.pop("assigned_to")
+        validated_data.pop("products")
 
         customer_profiles = self.get_customer_profiles_or_error(assigned_to_ids)
-        products = self.get_products_or_error(product_ids)
 
         request = self.context["request"]
         assignment = None
@@ -501,7 +471,7 @@ class TestKitInventoryAssignmentCreateSerializer(BaseModelSerializer):
             with transaction.atomic():
                 for customer_profile in customer_profiles:
                     self.assert_customer_profile_eligible(customer_profile)
-                    assignment = TestKitAssignment.objects.create(
+                    assignment = Assignment.objects.create(
                         assigned_to=customer_profile,
                         handover_type=validated_data["handover_type"],
                         is_kit_journey_visible=validated_data.get(
@@ -522,3 +492,60 @@ class TestKitInventoryAssignmentCreateSerializer(BaseModelSerializer):
                 "Customer profile already has an active test-kit assignment."
             ) from error
         return assignment
+
+
+class ProviderCreateSerializer(BaseModelSerializer):
+    provider_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
+
+    class Meta:
+        model = Provider
+        fields = ["id", "name", "provider_id"]
+        read_only_fields = ["id"]
+
+    @staticmethod
+    def validate_provider_id(value):
+        if value is None:
+            return value
+        catalog_provider = CatalogProvider.objects.filter(pk=value, is_active=True).first()
+        if catalog_provider is None:
+            raise serializers.ValidationError("Invalid provider.")
+        if Provider.objects.filter(provider=catalog_provider).exists():
+            raise serializers.ValidationError(
+                "Provider is already linked to a test kit provider."
+            )
+        return value
+
+    def create(self, validated_data: dict) -> Provider:
+        provider_id = validated_data.pop("provider_id", None)
+        if provider_id is not None:
+            validated_data["provider"] = CatalogProvider.objects.get(pk=provider_id)
+        return Provider.objects.create(**validated_data)
+
+
+class ProductCreateSerializer(BaseModelSerializer):
+    provider_id = serializers.UUIDField(write_only=True)
+
+    class Meta:
+        model = Product
+        fields = ["id", "test_name", "code", "provider_id"]
+        read_only_fields = ["id"]
+
+    @staticmethod
+    def validate_provider_id(value):
+        provider = Provider.objects.filter(pk=value, is_active=True).first()
+        if provider is None:
+            raise serializers.ValidationError("Invalid test kit provider.")
+        return value
+
+    @staticmethod
+    def validate_code(value: str) -> str:
+        if Product.objects.filter(code=value).exists():
+            raise serializers.ValidationError(
+                "Test kit product with this code already exists."
+            )
+        return value
+
+    def create(self, validated_data: dict) -> Product:
+        provider_id = validated_data.pop("provider_id")
+        validated_data["provider"] = Provider.objects.get(pk=provider_id)
+        return Product.objects.create(**validated_data)
