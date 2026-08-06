@@ -1,5 +1,4 @@
 from django.db.models import Case, F, Value, When
-from django.utils import timezone
 
 from accounts.utils.auth import get_user_model
 from leads.models import Lead, LeadSummary
@@ -90,24 +89,6 @@ def decrement_leads_inactive() -> None:
     )
 
 
-def mark_lead_onboarding_completed_for_user(user: User) -> int:
-    if not user.phone:
-        return 0
-    return Lead.objects.filter(phone=user.phone, is_onboarding_completed=False).update(
-        is_onboarding_completed=True,
-        updated_at=timezone.now(),
-    )
-
-
-def is_lead_onboarding_completed_for_user(user: User) -> bool:
-    if not user.phone:
-        return False
-    return Lead.objects.filter(
-        phone=user.phone,
-        is_onboarding_completed=True,
-    ).exists()
-
-
 def user_has_lead_for_phone(user: User) -> bool:
     if not user.phone:
         return False
@@ -117,8 +98,13 @@ def user_has_lead_for_phone(user: User) -> bool:
 def is_lead_ready_for_onboarding_session_for_user(user: User) -> bool:
     if not user.phone:
         return False
-    return Lead.objects.filter(
-        phone=user.phone,
-        is_onboarding_sent=True,
-        is_onboarding_completed=False,
-    ).exists()
+    lead = (
+        Lead.objects.filter(phone=user.phone, is_onboarding_sent=True)
+        .select_related("customer_profile")
+        .first()
+    )
+    if lead is None:
+        return False
+    if lead.customer_profile_id is not None:
+        return not lead.customer_profile.is_onboarding_completed
+    return True

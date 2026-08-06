@@ -27,6 +27,7 @@
 | Test kit assignment (2026-07-30) | ~~`test_kit_assignment` app~~ merged into `test_kit_inventory` (2026-08-06). One active kit per `CustomerProfile`; assignee always profile id. Eligible = completed pre-consult + no active assignment. Global APIs (no `X-Center-ID`). Spec: `docs/superpowers/specs/2026-07-30-test-kit-assignment-design.md`. |
 | Product inventory QC acks (2026-08-04) | `qc_ack_packaging` / `qc_ack_all_components` write gate + persisted on `TestKitInventoryBatchItem`. |
 | Product inventory specs test_kit filter (2026-08-06) | `GET /test_kit_inventory/specs/` returns only `tags.type == "test_kit"`. Spec: `docs/superpowers/specs/2026-08-06-product-inventory-specs-test-kit-design.md`. |
+| Lead/profile onboarding flags (2026-08-06) | `Lead.is_onboarding_completed` dropped. Completion lives only on `CustomerProfile.is_onboarding_completed`. Both `Lead` + `CustomerProfile` `is_onboarding_sent` default `False`. Lead POST/PATCH writable: `is_onboarding_sent`. Center create + profile PATCH: writable `is_onboarding_sent` (not `is_onboarding_completed`). Login shell profile copies `lead.is_onboarding_sent`. Lead PATCH flipping `is_onboarding_sent` syncs linked profile. `is_invited` kept as independent flag (filter/API), no longer drives profile sent. Ready for session: lead `sent=True` and (no profile or profile not completed). |
 
 ---
 

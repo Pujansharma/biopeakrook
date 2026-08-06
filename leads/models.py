@@ -25,8 +25,7 @@ class Lead(BaseUUIDModel):
     date_of_birth = models.DateField(null=True, blank=True)
     is_client = models.BooleanField(default=False)
     is_request_sent = models.BooleanField(default=False)
-    is_onboarding_sent = models.BooleanField(default=True)
-    is_onboarding_completed = models.BooleanField(default=False)
+    is_onboarding_sent = models.BooleanField(default=False)
     converted_on = models.DateTimeField(null=True, blank=True)
     home_center = models.ForeignKey(
         Center, on_delete=models.SET_NULL, null=True, blank=True
