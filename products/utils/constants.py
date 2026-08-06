@@ -68,6 +68,10 @@ PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
         ProductCallbackFunction.ULTRASOUND_NECK_THYROID,
         ProductCallbackFunction.PSYCHOPHYSIOLOGICAL,
         ProductCallbackFunction.RESPIRATORY_FUNCTION,
+        ProductCallbackFunction.DXA_SEGMENTAL_ANALYSIS,
+        ProductCallbackFunction.DXA_BC_BMD,
+        ProductCallbackFunction.DXA_CORE_SCAN,
+        ProductCallbackFunction.VO2_MAX,
     ],
     ProviderCallbackFunction.HEALTHIANS: [
         ProductCallbackFunction.BLOOD,
