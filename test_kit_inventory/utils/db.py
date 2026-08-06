@@ -3,7 +3,7 @@ from django.db.models import Q, QuerySet
 from accounts.customers.models import CustomerProfile
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.utils.constants import PreConsultationSessionStatus
-from test_kit_assignment.utils.constants import TestKitAssignmentStatus
+from test_kit_inventory.utils.constants import TestKitAssignmentStatus
 
 
 def get_eligible_customer_profile_queryset(search: str = "") -> QuerySet[CustomerProfile]:

@@ -20,7 +20,6 @@ def get_product_tag_string(tags: object, key: str) -> str | None:
     return stripped_value
 
 
-
 def normalize_inventory_text(value: str) -> str:
     normalized_value = re.sub(r"[^a-z0-9]+", " ", value.lower())
     return " ".join(normalized_value.split())
@@ -51,23 +50,23 @@ def build_fallback_product_code(product_name: str) -> str:
     return joined_value[:3].ljust(3, "X")
 
 
-def get_product_inventory_code(product_name: str) -> str:
+def get_test_kit_inventory_code(product_name: str) -> str:
     return build_fallback_product_code(product_name)
 
 
-def get_product_inventory_sequence_name(provider_id: UUID, received_on: date) -> str:
+def get_test_kit_inventory_sequence_name(provider_id: UUID, received_on: date) -> str:
     received_on_suffix = received_on.strftime("%y%m%d")
     provider_suffix = str(provider_id).replace("-", "")[:8]
-    return f"pinv_{provider_suffix}_{received_on_suffix}"
+    return f"tkinv_{provider_suffix}_{received_on_suffix}"
 
 
-def generate_product_inventory_batch_id(
-        provider_id: UUID,
-        provider_name: str,
-        received_on: date,
+def generate_test_kit_inventory_batch_id(
+    provider_id: UUID,
+    provider_name: str,
+    received_on: date,
 ) -> str:
     provider_prefix = extract_provider_prefix(provider_name)
     date_suffix = received_on.strftime("%y%m%d")
-    sequence_name = get_product_inventory_sequence_name(provider_id, received_on)
+    sequence_name = get_test_kit_inventory_sequence_name(provider_id, received_on)
     sequence_value = get_next_sequence(sequence_name, fill_length=3)
     return f"{provider_prefix}-{date_suffix}-{sequence_value}"
