@@ -40,6 +40,7 @@ class Product(BaseUUIDModel):
     )
     test_name = models.CharField(max_length=200)
     code = models.CharField(max_length=32, unique=True, db_index=True)
+    is_assignable = models.BooleanField(default=False, db_index=True)
 
     class Meta:
         db_table = "test_kit_inventory_product"

@@ -51,7 +51,7 @@ class TestKitInventorySpecsProductSummarySerializer(BaseModelSerializer):
 
     class Meta:
         model = Product
-        fields = ["id", "label", "product_code"]
+        fields = ["id", "label", "product_code", "is_assignable"]
 
 
 class TestKitInventorySpecsProviderSerializer(BaseModelSerializer):
@@ -527,8 +527,11 @@ class ProductCreateSerializer(BaseModelSerializer):
 
     class Meta:
         model = Product
-        fields = ["id", "test_name", "code", "provider_id"]
+        fields = ["id", "test_name", "code", "provider_id", "is_assignable"]
         read_only_fields = ["id"]
+        extra_kwargs = {
+            "is_assignable": {"required": False},
+        }
 
     @staticmethod
     def validate_provider_id(value):

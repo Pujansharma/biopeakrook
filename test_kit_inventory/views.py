@@ -23,12 +23,22 @@ class TestKitInventorySpecsView(BaseListAPIView):
     pagination_class = None
 
     def get_queryset(self):
+        product_filter_kwargs = {"is_active": True}
+        provider_filter_kwargs = {"is_active": True, "products__is_active": True}
+        is_assignable_query = self.request.query_params.get("is_assignable")
+        if is_assignable_query in ["0", "1"]:
+            is_assignable = bool(int(is_assignable_query))
+            product_filter_kwargs["is_assignable"] = is_assignable
+            provider_filter_kwargs["products__is_assignable"] = is_assignable
+
         return (
-            Provider.objects.filter(is_active=True, products__is_active=True)
+            Provider.objects.filter(**provider_filter_kwargs)
             .prefetch_related(
                 Prefetch(
                     "products",
-                    queryset=Product.objects.filter(is_active=True).order_by("test_name"),
+                    queryset=Product.objects.filter(**product_filter_kwargs).order_by(
+                        "test_name"
+                    ),
                 )
             )
             .order_by("name")
