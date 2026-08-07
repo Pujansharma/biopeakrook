@@ -449,11 +449,19 @@ class TestKitInventoryAssignmentCreateSerializer(BaseModelSerializer):
                 {"products": "Duplicate products are not allowed."}
             )
         products = list(
-            Product.objects.filter(pk__in=unique_product_ids, is_active=True)
+            Product.objects.filter(
+                pk__in=unique_product_ids,
+                is_active=True,
+                is_assignable=True,
+            )
         )
         if len(products) != len(unique_product_ids):
             raise serializers.ValidationError(
-                {"products": "All products must exist and be active."}
+                {
+                    "products": (
+                        "All products must exist, be active, and be assignable."
+                    )
+                }
             )
         return products
 
@@ -518,7 +526,12 @@ class ProviderCreateSerializer(BaseModelSerializer):
     def create(self, validated_data: dict) -> Provider:
         provider_id = validated_data.pop("provider_id", None)
         if provider_id is not None:
-            validated_data["provider"] = CatalogProvider.objects.get(pk=provider_id)
+            catalog_provider = CatalogProvider.objects.filter(pk=provider_id).first()
+            if catalog_provider is None:
+                raise serializers.ValidationError(
+                    {"provider_id": "Invalid provider."}
+                )
+            validated_data["provider"] = catalog_provider
         return Provider.objects.create(**validated_data)
 
 
@@ -550,5 +563,10 @@ class ProductCreateSerializer(BaseModelSerializer):
 
     def create(self, validated_data: dict) -> Product:
         provider_id = validated_data.pop("provider_id")
-        validated_data["provider"] = Provider.objects.get(pk=provider_id)
+        provider = Provider.objects.filter(pk=provider_id, is_active=True).first()
+        if provider is None:
+            raise serializers.ValidationError(
+                {"provider_id": "Invalid test kit provider."}
+            )
+        validated_data["provider"] = provider
         return Product.objects.create(**validated_data)
