@@ -7,7 +7,6 @@ from accounts.customers.utils.constants import AddressType
 from accounts.organizations.utils.constants import FeatureTabOptions
 from accounts.users.models import AbstractUserProfile
 from accounts.utils import get_user_model
-from core.utils.fields import PhoneNumberField
 from core.utils.models import BaseModel, BaseUUIDModel
 
 User = get_user_model()
@@ -67,8 +66,6 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
 
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     external_centers_count = models.PositiveBigIntegerField(default=0, editable=False)
-    emergency_contact_name = models.CharField(blank=True, default="", max_length=100)
-    emergency_contact_phone = PhoneNumberField(blank=True, null=True)
     data = models.JSONField(default=dict, null=True, blank=True, editable=False)
 
     class Meta:
