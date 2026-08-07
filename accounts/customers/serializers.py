@@ -1052,7 +1052,7 @@ class CustomerLeadProfileSerializer(BaseModelSerializer):
             "is_client",
             "is_invited",
             "is_joined",
-            "is_onboarding_completed",
+            "is_onboarding_sent",
             "converted_on",
             "packages",
             "home_center",
