@@ -73,6 +73,7 @@ class ExternalProgramServiceSerializer(BaseModelSerializer):
 
 class CustomerTherapyProgramSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
     program_type = serializers.ChoiceField(
         source="program.program_type", choices=ProgramType, default=ProgramType.THERAPY
     )
@@ -91,6 +92,7 @@ class CustomerTherapyProgramSerializer(BaseModelSerializer):
         model = TherapyProgram
         fields = [
             "id",
+            "uid",
             "program_type",
             "expires_at",
             "services_count",
@@ -116,6 +118,7 @@ class CustomerTherapyProgramSerializer(BaseModelSerializer):
 
 class CustomerTherapyProgramDetailSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
     program_type = serializers.ChoiceField(
         source="program.program_type", choices=ProgramType, read_only=True
     )
@@ -153,6 +156,7 @@ class CustomerTherapyProgramDetailSerializer(BaseModelSerializer):
         model = TherapyProgram
         fields = [
             "id",
+            "uid",
             "program_type",
             "is_complimentary",
             "price",

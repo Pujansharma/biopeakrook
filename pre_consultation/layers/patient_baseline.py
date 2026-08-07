@@ -103,6 +103,7 @@ EMPTY_PATIENT_BASELINE_V2_PAYLOAD = {
     "dob": None,
     "gender": None,
     "email_address": "",
+    "address": EMPTY_PATIENT_BASELINE_ADDRESS,
 }
 
 
@@ -114,6 +115,7 @@ class PatientBaselineV2RequestSerializer(serializers.Serializer):
     dob = serializers.DateField()
     gender = serializers.ChoiceField(choices=PatientBaselineGender.choices)
     email_address = serializers.EmailField()
+    address = PatientBaselineAddressSerializer(required=False)
 
 
 class PatientBaselineV2ResponseSerializer(serializers.Serializer):
@@ -126,6 +128,7 @@ class PatientBaselineV2ResponseSerializer(serializers.Serializer):
         required=False,
     )
     email_address = serializers.EmailField(allow_blank=True, default="")
+    address = PatientBaselineAddressResponseSerializer()
 
 
 def get_default_customer_profile_address(
@@ -138,8 +141,23 @@ def get_default_customer_profile_address(
     )
 
 
-def customer_profile_to_payload(customer_profile: CustomerProfile) -> dict:
+def customer_profile_address_to_payload(
+    customer_profile: CustomerProfile,
+) -> dict:
     address = get_default_customer_profile_address(customer_profile)
+    if address is None:
+        return dict(EMPTY_PATIENT_BASELINE_ADDRESS)
+    return {
+        "line_1": address.line_1,
+        "line_2": address.line_2,
+        "city": address.city,
+        "state": address.state,
+        "pin_code": address.pincode,
+        "residency_type": address.address_type,
+    }
+
+
+def customer_profile_to_payload(customer_profile: CustomerProfile) -> dict:
     contact_email = customer_profile.customer.contact_email or ""
     return {
         "first_name": customer_profile.first_name or "",
@@ -149,14 +167,7 @@ def customer_profile_to_payload(customer_profile: CustomerProfile) -> dict:
         "email_address": contact_email,
         "emergency_contact_name": customer_profile.emergency_contact_name,
         "emergency_contact_phone": customer_profile.emergency_contact_phone or "",
-        "address": {
-            "line_1": address.line_1 if address else "",
-            "line_2": address.line_2 if address else "",
-            "city": address.city if address else "",
-            "state": address.state if address else "",
-            "pin_code": address.pincode if address else "",
-            "residency_type": address.address_type if address else None,
-        },
+        "address": customer_profile_address_to_payload(customer_profile),
     }
 
 
@@ -168,6 +179,7 @@ def customer_profile_to_payload_v2(customer_profile: CustomerProfile) -> dict:
         "dob": customer_profile.date_of_birth,
         "gender": profile_gender_to_baseline_gender(customer_profile.gender),
         "email_address": contact_email,
+        "address": customer_profile_address_to_payload(customer_profile),
     }
 
 
@@ -317,6 +329,10 @@ def persist_patient_baseline_v2_payload(
         customer = customer_profile.customer
         customer.contact_email = validated_data["email_address"]
         customer.save(update_fields=["contact_email", "updated_at"])
+
+        address = validated_data.get("address")
+        if address is not None:
+            persist_customer_profile_address(customer_profile, address)
 
         session.current_layer = PreConsultationLayerProgression.PATIENT_GOALS_PRIORITIES
         session.save(update_fields=["current_layer", "updated_at"])

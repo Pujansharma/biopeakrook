@@ -9,7 +9,7 @@ from accounts.associates.serializers import (
     BaseAssociateRoleSerializer,
 )
 from accounts.centers.models import Center
-from accounts.centers.serializers import MinimumCenterSerializer
+from accounts.centers.serializers import MinimumCenterSerializer, BaseCenterSerializer
 from accounts.centers.utils.db import (
     increment_customer_count,
     decrement_customer_count,
@@ -21,7 +21,7 @@ from accounts.customers.models import (
     CustomerCenterAssignment,
     CustomerProfile,
     CustomerAssociateAssignment,
-    CustomerProfileAddress,
+    CustomerProfileAddress, CustomerProfileFeature,
 )
 from accounts.customers.utils.db import (
     create_customer_user_account,
@@ -475,12 +475,20 @@ class BaseCustomerAssignedCenterSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="center.id", read_only=True)
     name = serializers.CharField(source="center.name", read_only=True)
 
-    # is_primary = serializers.BooleanField(source="customer_profile.is_primary", read_only=True)
-    # is_active = serializers.BooleanField(source="customer_profile.customer.user.is_active")
-
     class Meta:
         model = CustomerCenterAssignment
         fields = ["id", "name", "is_primary", "created_at"]
+
+
+class MinimalCustomerAssignedCenterSerializer(BaseModelSerializer):
+    # id = serializers.UUIDField(source="center.id", read_only=True)
+    # name = serializers.CharField(source="center.name", read_only=True)
+    center = BaseCenterSerializer(read_only=True)
+    created_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = CustomerCenterAssignment
+        fields = ["id", "center", "is_primary", "created_at", "created_by"]
 
 
 class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
@@ -522,6 +530,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     is_onboarding_sent = serializers.BooleanField(
         source='customer_profile.is_onboarding_sent', required=False
     )
+    home_center = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = CustomerCenterAssignment
@@ -542,6 +551,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "external_centers_count",
             "created_at",
             "updated_at",
+            "home_center",
         ]
         read_only_fields = [
             "is_main",
@@ -549,6 +559,14 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "centers_count",
             "external_centers_count",
         ]
+
+    def get_home_center(self, instance):
+        assignments = getattr(
+            instance.customer_profile, "primary_center_assignments", None
+        )
+        if not assignments:
+            return None
+        return MinimumCenterSerializer(assignments[0].center, context=self.context).data
 
     def update(self, instance: CustomerCenterAssignment, validated_data):
         profile_wrapper = validated_data.pop("customer_profile", {})
@@ -941,6 +959,15 @@ class CustomerProfileAddressSerializer(BaseModelSerializer):
         return instance
 
 
+class CustomerProfileFeatureSerializer(BaseModelSerializer):
+    class Meta:
+        model = CustomerProfileFeature
+        fields = [
+            "is_copilot_chat_enabled",
+            "is_stable",
+            "enabled_tabs",
+            "updated_at",
+        ]
 def get_main_customer_profile_for_user(user: User) -> CustomerProfile | None:
     return (
         CustomerProfile.objects.select_related("customer__user")

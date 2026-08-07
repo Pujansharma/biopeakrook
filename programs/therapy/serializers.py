@@ -32,6 +32,7 @@ from programs.utils.db import (
     update_program_services_count,
     update_program_sessions_count,
 )
+from programs.utils.helper import generate_program_unique_id
 
 
 class BaseTherapyProgramSerializer(BaseModelSerializer):
@@ -46,6 +47,11 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="program_service.id", read_only=True)
     program = BaseProgramSerializer(source="program_service.program", read_only=True)
     service = BaseServiceSerializer(source="program_service.service", read_only=True)
+    service_assignment_type = serializers.SerializerMethodField(read_only=True)
+    service_assignment_type_code = serializers.CharField(
+        source='program_service.assignment_type', read_only=True
+    )
+
     cancelled_by = BaseUserSerializer(
         source="program_service.cancelled_by", read_only=True
     )
@@ -68,8 +74,11 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
             "id",
             "program",
             "service",
+            "service_assignment_type",
+            "service_assignment_type_code",
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "redeem_code",
             "created_date",
             "created_at",
@@ -82,8 +91,15 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
         read_only_fields = [
             "sessions_count",
             "sessions_used",
+            "sessions_cancelled",
             "redeem_code",
         ]
+
+    @classmethod
+    def get_service_assignment_type(
+            cls, instance: TherapyProgramService,
+    ):
+        return instance.program_service.get_assignment_type_display()
 
     def create(self, validated_data):
         raise serializers.ValidationError("Create not allowed.")
@@ -100,6 +116,7 @@ class TherapyProgramServiceSerializer(BaseModelSerializer):
 
 class TherapyProgramDetailSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
     profile = CustomerProfileWithCenterSerializer(
         source="program.customer_profile", read_only=True
     )
@@ -146,6 +163,7 @@ class TherapyProgramDetailSerializer(BaseModelSerializer):
         model = TherapyProgram
         fields = [
             "id",
+            "uid",
             "profile",
             "program_type",
             "is_complimentary",
@@ -188,6 +206,7 @@ class TherapyProgramDetailSerializer(BaseModelSerializer):
 
 class TherapyProgramSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
     profile = CustomerProfileWithCenterSerializer(
         source="program.customer_profile", read_only=True
     )
@@ -237,6 +256,7 @@ class TherapyProgramSerializer(BaseModelSerializer):
         model = TherapyProgram
         fields = [
             "id",
+            "uid",
             "profile",
             "profile_id",
             # "center",
@@ -348,8 +368,10 @@ class TherapyProgramSerializer(BaseModelSerializer):
                 service_data.get("id"): service_data.get("sessions_count")
                 for service_data in add_services
             }
+            program_uid = generate_program_unique_id()
             program = Program.objects.create(
                 **program_data,
+                uid=program_uid,
                 customer_profile=profile,
                 center=center,
                 created_by=created_by,
@@ -482,10 +504,10 @@ class TherapyProgramRedeemSerializer(BaseModelSerializer):
             raise serializers.ValidationError("This program has expired.")
 
         if not ProgramService.objects.filter(
-            program=therapy_program.program,
-            is_active=True,
-            service__center_assignments__center_id=center_id,
-            service__center_assignments__is_active=True,
+                program=therapy_program.program,
+                is_active=True,
+                service__center_assignments__center_id=center_id,
+                service__center_assignments__is_active=True,
         ).exists():
             raise serializers.ValidationError(
                 {"center_id": "This center does not offer any service in this program."}

@@ -30,7 +30,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 FROM python:3.14-slim
 
 # Build argument for Django settings module
-ARG DJANGO_SETTINGS_MODULE=core.settings.production
+ARG DJANGO_SETTINGS_MODULE=core.settings.development
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

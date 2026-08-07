@@ -21,10 +21,10 @@ from programs.services.models import (
 def update_service_center_count(service_id: UUID) -> None:
     subquery = (
         CenterServiceAssignment.objects.filter(
-            service_id=OuterRef("pk"), is_active=True
+            service=OuterRef("pk"), is_active=True
         )
-        .values("service_id")
-        .annotate(count=Count("center_id"))
+        .values("service")
+        .annotate(count=Count("center"))
         .values("count")
     )
     Service.objects.filter(pk=service_id).update(
@@ -76,7 +76,10 @@ def redeem_program_service(
 
 
 def redeem_all_program_services(
-    program_id: UUID, center_id: UUID, redeemed_by, redeemed_date=timezone.localdate()
+    program_id: UUID,
+    center_id: UUID,
+    redeemed_by,
+    redeemed_date=timezone.localdate(),
 ) -> int:
     services = list(
         TherapyProgramService.objects.filter(
@@ -112,10 +115,12 @@ def redeem_all_program_services(
         )
 
     with transaction.atomic():
-        therapy_program_service_ids = [
+        therapy_program_service_identifiers = [
             therapy_program_service.pk for therapy_program_service in services
         ]
-        TherapyProgramService.objects.filter(pk__in=therapy_program_service_ids).update(
+        TherapyProgramService.objects.filter(
+            pk__in=therapy_program_service_identifiers
+        ).update(
             sessions_used=F("sessions_count")
         )
         TherapyProgram.objects.filter(program=program_id).update(
