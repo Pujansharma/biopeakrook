@@ -108,8 +108,6 @@ One session per user. Starts or resumes.
 | `dob` | date \| null | `YYYY-MM-DD` |
 | `gender` | string \| null | `male`, `female`, `other` |
 | `email_address` | string | |
-| `emergency_contact_name` | string | max 100 |
-| `emergency_contact_phone` | string | E.164 |
 | `address.line_1` | string | max 255 |
 | `address.line_2` | string | max 255 |
 | `address.city` | string | max 100 |

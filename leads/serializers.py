@@ -50,7 +50,7 @@ class BaseLeadSerializer(BaseModelSerializer):
             "is_client",
             "is_invited",
             "is_joined",
-            "is_onboarding_completed",
+            "is_onboarding_sent",
             "converted_on",
             "packages",
             "home_center",
@@ -65,8 +65,6 @@ class BaseLeadSerializer(BaseModelSerializer):
             "id",
             "unique_id",
             "is_joined",
-            "is_request_sent",
-            "is_onboarding_sent",
             "converted_on",
             "customer_profile",
             "created_by",
@@ -135,7 +133,7 @@ class LeadDetailSerializer(BaseLeadSerializer):
     def update(self, instance: Lead, validated_data: dict) -> Lead:
         was_active = instance.is_active
         was_joined = instance.is_joined
-        was_invited = instance.is_invited
+        was_onboarding_sent = instance.is_onboarding_sent
         was_converted = bool(instance.customer_profile or instance.converted_on)
         phone = validated_data.get('phone', instance.phone)
         exists = Lead.objects.exclude(pk=instance.pk).filter(phone=phone).exists()
@@ -170,12 +168,10 @@ class LeadDetailSerializer(BaseLeadSerializer):
             if was_joined and not lead.is_joined and not was_converted:
                 decrement_leads_assigned()
             if (
-                not was_invited
-                and lead.is_invited
-                and lead.customer_profile_id is not None
-                and not lead.customer_profile.is_onboarding_sent
+                lead.customer_profile_id is not None
+                and lead.is_onboarding_sent != was_onboarding_sent
             ):
-                lead.customer_profile.is_onboarding_sent = True
+                lead.customer_profile.is_onboarding_sent = lead.is_onboarding_sent
                 lead.customer_profile.save(
                     update_fields=["is_onboarding_sent", "updated_at"]
                 )
