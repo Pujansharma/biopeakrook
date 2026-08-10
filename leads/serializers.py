@@ -20,6 +20,7 @@ from leads.utils.db import (
     increment_leads_total,
 )
 from leads.utils.helper import (
+    USER_PHONE_EXISTS_ERROR,
     convert_lead_to_client,
     create_shell_customer_from_lead,
     sync_shell_from_lead,
@@ -91,10 +92,10 @@ class LeadListCreateSerializer(BaseLeadSerializer):
         last_name = validated_data.get("last_name")
         gender = validated_data.get("gender")
 
-        exists = Lead.objects.filter(phone=phone).exists()
+        exists = Lead.objects.filter(phone__iexact=phone).exists()
         if exists:
             raise serializers.ValidationError({
-                "phone": "Lead with this phone number already exists"
+                "phone": ["Lead with this phone number already exists."]
             })
 
         if age and not date_of_birth:
@@ -140,7 +141,7 @@ class LeadV2ListCreateSerializer(LeadListCreateSerializer):
         phone = validated_data.get("phone")
         if User.objects.filter(phone__iexact=phone).exists():
             raise serializers.ValidationError({
-                "phone": "User with this phone number already exists."
+                "phone": [USER_PHONE_EXISTS_ERROR]
             })
         return super().create(validated_data)
 
@@ -152,22 +153,27 @@ class LeadV2ListCreateSerializer(LeadListCreateSerializer):
         try:
             create_shell_customer_from_lead(lead, created_by=created_by)
         except ValueError as error:
-            raise serializers.ValidationError({"phone": str(error)}) from error
+            raise serializers.ValidationError({"phone": [str(error)]}) from error
 
 
 class LeadDetailSerializer(BaseLeadSerializer):
     home_center_id = serializers.UUIDField(required=False)
+
+    def should_sync_onboarding_sent_to_profile(self, lead: Lead) -> bool:
+        return True
 
     def update(self, instance: Lead, validated_data: dict) -> Lead:
         was_active = instance.is_active
         was_joined = instance.is_joined
         was_onboarding_sent = instance.is_onboarding_sent
         was_converted = bool(instance.customer_profile or instance.converted_on)
-        phone = validated_data.get('phone', instance.phone)
-        exists = Lead.objects.exclude(pk=instance.pk).filter(phone=phone).exists()
+        phone = validated_data.get("phone", instance.phone)
+        exists = Lead.objects.exclude(pk=instance.pk).filter(
+            phone__iexact=phone,
+        ).exists()
         if exists:
             raise serializers.ValidationError({
-                "phone": "Lead with this phone number already exists"
+                "phone": ["Lead with this phone number already exists."]
             })
 
         home_center_id = validated_data.pop("home_center_id", None)
@@ -196,7 +202,8 @@ class LeadDetailSerializer(BaseLeadSerializer):
             if was_joined and not lead.is_joined and not was_converted:
                 decrement_leads_assigned()
             if (
-                lead.customer_profile_id is not None
+                self.should_sync_onboarding_sent_to_profile(lead)
+                and lead.customer_profile_id is not None
                 and lead.is_onboarding_sent != was_onboarding_sent
             ):
                 lead.customer_profile.is_onboarding_sent = lead.is_onboarding_sent
@@ -229,6 +236,11 @@ class LeadV2DetailSerializer(LeadDetailSerializer):
             "phone",
         ]
 
+    def should_sync_onboarding_sent_to_profile(self, lead: Lead) -> bool:
+        if lead.customer_profile_id is None:
+            return True
+        return lead.customer_profile.is_converted
+
     def update(self, instance: Lead, validated_data: dict) -> Lead:
         is_converted = (
             instance.customer_profile_id is not None
@@ -242,9 +254,10 @@ class LeadV2DetailSerializer(LeadDetailSerializer):
                 )
 
         validated_data.pop("phone", None)
-        lead = super().update(instance, validated_data)
-        if not is_converted and lead.customer_profile_id is not None:
-            sync_shell_from_lead(lead)
+        with transaction.atomic():
+            lead = super().update(instance, validated_data)
+            if not is_converted and lead.customer_profile_id is not None:
+                sync_shell_from_lead(lead)
         return lead
 
 
