@@ -5,6 +5,7 @@ from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer
 from accounts.customers.serializers import BaseCustomerProfileSerializer
 from accounts.users.serializers import BaseUserSerializer
+from accounts.users.utils.constants import Gender
 from accounts.utils.auth import get_user_model
 from accounts.utils.helper import get_date_of_birth_from_age
 from core.utils.fields import PhoneNumberSerializerField
@@ -36,7 +37,8 @@ class BaseLeadSerializer(BaseModelSerializer):
     updated_by = BaseUserSerializer(read_only=True)
     home_center = BaseCenterSerializer(read_only=True)
     home_center_id = serializers.UUIDField(required=False, write_only=True)
-    age = serializers.FloatField(required=False, write_only=True)
+    age = serializers.FloatField(required=True, write_only=True)
+    gender = serializers.ChoiceField(choices=Gender.CHOICES, required=True)
 
     class Meta:
         model = Lead
