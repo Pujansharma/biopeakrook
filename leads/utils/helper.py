@@ -63,6 +63,69 @@ def _sync_lead_profile_fields(
     _fill_missing_profile_fields(customer_profile, profile_data)
 
 
+def sync_shell_from_lead(lead: Lead) -> None:
+    if lead.customer_profile_id is None:
+        return
+
+    customer_profile = lead.customer_profile
+    customer = customer_profile.customer
+    user = customer.user
+    profile_data = _lead_customer_profile_data(lead)
+
+    user_update_fields = []
+    for field_name, value in profile_data.items():
+        setattr(user, field_name, value)
+        user_update_fields.append(field_name)
+    user_update_fields.append("updated_at")
+    user.save(update_fields=user_update_fields)
+
+    profile_update_fields = []
+    for field_name, value in profile_data.items():
+        setattr(customer_profile, field_name, value)
+        profile_update_fields.append(field_name)
+    customer_profile.is_onboarding_sent = lead.is_onboarding_sent
+    profile_update_fields.extend(["is_onboarding_sent", "updated_at"])
+    customer_profile.save(update_fields=profile_update_fields)
+
+    customer.contact_email = lead.email
+    customer.save(update_fields=["contact_email", "updated_at"])
+
+
+def create_shell_customer_from_lead(
+    lead: Lead,
+    created_by: User | None = None,
+) -> User:
+    if User.objects.filter(phone__iexact=lead.phone).exists():
+        raise ValueError("User with this phone number already exists.")
+
+    user_profile_data = _lead_user_profile_data(lead)
+    customer_profile_data = _lead_customer_profile_data(lead)
+
+    user = User.objects.create_user(
+        email=None,
+        password=None,
+        phone=lead.phone,
+        **user_profile_data,
+    )
+    customer = Customer.objects.create(
+        user=user,
+        contact_email=lead.email,
+        created_by=created_by,
+    )
+    create_customer_user_account(customer)
+    customer_profile = CustomerProfile.objects.create(
+        customer=customer,
+        is_main=True,
+        is_converted=False,
+        is_onboarding_sent=lead.is_onboarding_sent,
+        created_by=created_by,
+        **customer_profile_data,
+    )
+    lead.customer_profile = customer_profile
+    lead.save(update_fields=["customer_profile", "updated_at"])
+    return user
+
+
 def provision_shell_customer_from_lead(lead: Lead) -> User:
     user_profile_data = _lead_user_profile_data(lead)
     customer_profile_data = _lead_customer_profile_data(lead)
@@ -110,10 +173,6 @@ def provision_shell_customer_from_lead(lead: Lead) -> User:
 
 
 def resolve_user_for_direct_phone_login(phone: str) -> User | None:
-    lead = Lead.objects.filter(phone__iexact=phone, is_active=True).first()
-    if lead is not None:
-        return provision_shell_customer_from_lead(lead)
-
     return User.objects.filter(phone__iexact=phone, is_active=True).first()
 
 

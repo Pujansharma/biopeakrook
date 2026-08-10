@@ -19,7 +19,11 @@ from leads.utils.db import (
     increment_leads_inactive,
     increment_leads_total,
 )
-from leads.utils.helper import convert_lead_to_client
+from leads.utils.helper import (
+    convert_lead_to_client,
+    create_shell_customer_from_lead,
+    sync_shell_from_lead,
+)
 
 User = get_user_model()
 
@@ -75,6 +79,9 @@ class BaseLeadSerializer(BaseModelSerializer):
 
 
 class LeadListCreateSerializer(BaseLeadSerializer):
+    def post_create_lead(self, lead: Lead) -> None:
+        return None
+
     def create(self, validated_data: dict) -> Lead:
         age = validated_data.pop("age", None)
         date_of_birth = validated_data.get("date_of_birth", None)
@@ -106,6 +113,7 @@ class LeadListCreateSerializer(BaseLeadSerializer):
 
         with transaction.atomic():
             lead = super().create(validated_data)
+            self.post_create_lead(lead)
             increment_leads_total()
             if not lead.is_active:
                 increment_leads_inactive()
@@ -125,6 +133,26 @@ class LeadListCreateSerializer(BaseLeadSerializer):
                 }
                 lead.save(update_fields=["data"])
         return lead
+
+
+class LeadV2ListCreateSerializer(LeadListCreateSerializer):
+    def create(self, validated_data: dict) -> Lead:
+        phone = validated_data.get("phone")
+        if User.objects.filter(phone__iexact=phone).exists():
+            raise serializers.ValidationError({
+                "phone": "User with this phone number already exists."
+            })
+        return super().create(validated_data)
+
+    def post_create_lead(self, lead: Lead) -> None:
+        request = self.context.get("request")
+        created_by = None
+        if request and request.user.is_authenticated:
+            created_by = request.user
+        try:
+            create_shell_customer_from_lead(lead, created_by=created_by)
+        except ValueError as error:
+            raise serializers.ValidationError({"phone": str(error)}) from error
 
 
 class LeadDetailSerializer(BaseLeadSerializer):
@@ -191,6 +219,32 @@ class LeadDetailSerializer(BaseLeadSerializer):
                         "metsights_profile_id": metsights_profile_id,
                     }
                     lead.save(update_fields=["data"])
+        return lead
+
+
+class LeadV2DetailSerializer(LeadDetailSerializer):
+    class Meta(LeadDetailSerializer.Meta):
+        read_only_fields = [
+            *LeadDetailSerializer.Meta.read_only_fields,
+            "phone",
+        ]
+
+    def update(self, instance: Lead, validated_data: dict) -> Lead:
+        is_converted = (
+            instance.customer_profile_id is not None
+            and instance.customer_profile.is_converted
+        )
+        if is_converted:
+            disallowed_fields = set(validated_data.keys()) - {"is_onboarding_sent"}
+            if disallowed_fields:
+                raise serializers.ValidationError(
+                    "Only is_onboarding_sent can be updated for converted leads."
+                )
+
+        validated_data.pop("phone", None)
+        lead = super().update(instance, validated_data)
+        if not is_converted and lead.customer_profile_id is not None:
+            sync_shell_from_lead(lead)
         return lead
 
 
