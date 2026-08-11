@@ -42,6 +42,8 @@ from pre_consultation.utils.schema import (
     PreConsultationSessionConflictEnvelope,
     pre_consultation_data_envelope,
 )
+from pre_consultation.generation_webhook import trigger_post_completion_generation
+
 
 SESSION_CONFLICT_ENVELOPE = PreConsultationSessionConflictEnvelope
 SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
@@ -218,7 +220,7 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
             )
 
             transaction.on_commit(
-                lambda: spawn_post_completion_generation(session.pk, session.user_id)
+                lambda: trigger_post_completion_generation(session.pk, session.user_id)
             )
 
         return pre_consultation_response(
