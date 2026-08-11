@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 from urllib.parse import quote, unquote
 
+from accounts.users.utils.constants import Gender
 from diagnostics_orders.utils.constants import PINCODE_CITY_RANGES
 
 
@@ -50,7 +51,11 @@ def profile_gender(customer_profile):
     gender_value = customer_profile.gender
     if not gender_value:
         return None
-    return customer_profile.get_gender_display().lower()
+    return Gender.MAPPING.get(gender_value, customer_profile.get_gender_display()).lower()
+
+
+def orange_catalog_id(value):
+    return str(value).strip()
 
 
 def build_orange_create_payload(address, notes, slot_datetime, customers):
@@ -60,23 +65,27 @@ def build_orange_create_payload(address, notes, slot_datetime, customers):
         tests = []
         packages = []
         for item in customer["diagnostic_tests"]:
+            catalog_id = orange_catalog_id(item["diagnostic_test_id"])
             if item["category"] == "test":
-                tests.append({"test_id": item["diagnostic_test_id"]})
+                tests.append({"test_id": catalog_id})
             else:
-                packages.append({"package_id": item["diagnostic_test_id"]})
+                packages.append({"package_id": catalog_id})
+        profile = customer["customer_profile"]
         patient_details.append(
             {
                 "partner_reference_id": str(customer["user_id"]),
                 "patient_name": customer["name"],
                 "patient_phone": customer["phone"],
-                "age": customer["age"],
-                "gender": customer["gender"],
+                "age": str(customer["age"]),
+                "gender": Gender.MAPPING.get(
+                    profile.gender, profile.get_gender_display()
+                ),
                 "tests": tests,
                 "packages": packages,
             }
         )
     return {
-        "address": url_encode_address(address),
+        "address": str(address or "").strip(),
         "primary_patient_name": primary["name"],
         "primary_patient_number": primary["phone"],
         "slot_datetime": slot_datetime,

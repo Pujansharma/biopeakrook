@@ -77,7 +77,6 @@ class DiagnosticOrder(BaseUUIDModel):
     idempotency_key = models.CharField(
         max_length=128, unique=True, null=True, blank=True
     )
-    raw_create_request = models.JSONField(default=dict, blank=True)
     raw_create_response = models.JSONField(default=dict, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancel_reason = models.CharField(max_length=255, blank=True, default="")

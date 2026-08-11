@@ -27,8 +27,7 @@ def _require_base_url():
 
 def check_serviceability(address, request_date):
     base_url = _require_base_url()
-    # url_encoded_params = urlencode({"address": address, "request_date": request_date})
-    url_encoded_params = urlencode({"latitude": 12.9408, "longitude": 77.6267, "request_date": request_date})
+    url_encoded_params = urlencode({"address": address, "request_date": request_date})
     url = f"{base_url}/v1/partner/serviceability?{url_encoded_params}"
 
     print(f"url: {url}")

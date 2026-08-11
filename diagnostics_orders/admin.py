@@ -50,7 +50,10 @@ class DiagnosticOrderAdmin(admin.ModelAdmin):
     list_filter = ("status", "city")
     search_fields = ("request_id", "address")
     inlines = [DiagnosticOrderCustomerInline]
-    readonly_fields = ("token", "raw_create_request", "raw_create_response")
+    readonly_fields = (
+        "token",
+        "raw_create_response",
+    )
 
 
 @admin.register(DiagnosticOrderLine)

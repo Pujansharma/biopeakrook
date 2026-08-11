@@ -34,7 +34,6 @@ from diagnostics_orders.utils.helpers import (
     sum_decimal,
     transform_serviceability_response,
     url_decode_address,
-    url_encode_address,
 )
 from integrations.orange_labs import sdk as orange_labs_sdk
 
@@ -305,6 +304,7 @@ class CreateOrderSerializer(BaseSerializer):
             slot_datetime=validated_data["slot_datetime"].strftime("%Y-%m-%dT%H:%M:%S"),
             customers=validated_data["resolved_customers"],
         )
+        print("orange_payload", orange_payload)
         try:
             status_code, orange_response = orange_labs_sdk.create_order(orange_payload)
         except ValueError as exc:
@@ -345,7 +345,6 @@ class CreateOrderSerializer(BaseSerializer):
             tat_in_hours=validated_data["tat_in_hours"],
             created_by=request.user if request.user.is_authenticated else None,
             idempotency_key=idempotency_key,
-            raw_create_request=orange_payload,
             raw_create_response=orange_response,
         )
 
