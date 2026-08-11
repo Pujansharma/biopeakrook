@@ -21,7 +21,7 @@ from leads.utils.db import (
 
 User = get_user_model()
 
-USER_PHONE_EXISTS_ERROR = "User with this phone number already exists."
+USER_PHONE_EXISTS_ERROR = "A customer with this phone number already exists."
 
 
 def _lead_user_profile_data(lead: Lead) -> dict:
