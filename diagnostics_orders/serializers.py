@@ -15,12 +15,14 @@ from diagnostics_orders.models import (
 )
 from diagnostics_orders.utils.constants import (
     CatalogCategory,
+    DiagnosticCity,
     DiagnosticOrderStatus,
 )
 from diagnostics_orders.utils.db import (
     bump_summary_cancelled,
     bump_summary_orders,
     bump_summary_rescheduled,
+    create_catalog_item,
     customer_profile_has_active_diagnostic_order,
     customer_profile_has_completed_pre_consultation,
     get_catalog_items_for_city,
@@ -61,6 +63,88 @@ class CatalogItemResponseSerializer(BaseSerializer):
     name = serializers.CharField()
     price = serializers.DecimalField(max_digits=10, decimal_places=2)
     fasting_required = serializers.BooleanField()
+
+
+class CatalogCityPriceInputSerializer(BaseSerializer):
+    city = serializers.ChoiceField(choices=DiagnosticCity.choices)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
+    tat_in_hours = serializers.IntegerField(
+        required=False, allow_null=True, min_value=0, default=None
+    )
+
+
+class AddTestPackageSerializer(BaseSerializer):
+    category = serializers.ChoiceField(choices=CatalogCategory.choices)
+    is_custom_package = serializers.BooleanField(required=False, default=False)
+    name = serializers.CharField(max_length=255)
+    diagnostic_test_id = serializers.CharField(max_length=64)
+    fasting_required = serializers.BooleanField(required=False, default=False)
+    city_prices = CatalogCityPriceInputSerializer(
+        many=True, required=False, default=list
+    )
+
+    def validate_diagnostic_test_id(self, value):
+        diagnostic_test_id = value.strip()
+        if not diagnostic_test_id:
+            raise serializers.ValidationError("diagnostic_test_id is required")
+        if CatalogItem.objects.filter(diagnostic_test_id=diagnostic_test_id).exists():
+            raise serializers.ValidationError(
+                "Catalog item with this diagnostic_test_id already exists"
+            )
+        return diagnostic_test_id
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("name is required")
+        return name
+
+    def validate_city_prices(self, value):
+        cities = [city_price["city"] for city_price in value]
+        if len(cities) != len(set(cities)):
+            raise serializers.ValidationError("Duplicate city in city_prices")
+        return value
+
+    def validate(self, attrs):
+        category = attrs["category"]
+        is_custom_package = attrs.get("is_custom_package", False)
+        if is_custom_package and category != CatalogCategory.PACKAGE:
+            raise serializers.ValidationError(
+                {"is_custom_package": "Custom packages must use category package"}
+            )
+        if category == CatalogCategory.TEST:
+            attrs["is_custom_package"] = False
+        return attrs
+
+    def create(self, validated_data):
+        return create_catalog_item(
+            category=validated_data["category"],
+            is_custom_package=validated_data.get("is_custom_package", False),
+            name=validated_data["name"],
+            diagnostic_test_id=validated_data["diagnostic_test_id"],
+            fasting_required=validated_data.get("fasting_required", False),
+            city_prices=validated_data.get("city_prices") or [],
+        )
+
+
+class AddTestPackageResponseSerializer(BaseSerializer):
+    id = serializers.UUIDField()
+    category = serializers.CharField()
+    is_custom_package = serializers.BooleanField()
+    name = serializers.CharField()
+    diagnostic_test_id = serializers.CharField()
+    fasting_required = serializers.BooleanField()
+    city_prices = serializers.SerializerMethodField()
+
+    def get_city_prices(self, catalog_item):
+        return [
+            {
+                "city": city_price.city,
+                "price": city_price.price,
+                "tat_in_hours": city_price.tat_in_hours,
+            }
+            for city_price in catalog_item.city_prices.all()
+        ]
 
 
 class TestPackagesQuerySerializer(BaseSerializer):

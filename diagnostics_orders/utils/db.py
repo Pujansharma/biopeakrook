@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
@@ -166,6 +167,38 @@ def get_catalog_items_for_city(city, search=""):
     if search:
         queryset = queryset.filter(name__icontains=search)
     return queryset
+
+
+def create_catalog_item(
+    *,
+    category,
+    is_custom_package,
+    name,
+    diagnostic_test_id,
+    fasting_required,
+    city_prices=None,
+):
+    with transaction.atomic():
+        catalog_item = CatalogItem.objects.create(
+            category=category,
+            is_custom_package=is_custom_package,
+            name=name,
+            diagnostic_test_id=diagnostic_test_id,
+            fasting_required=fasting_required,
+        )
+        if city_prices:
+            CatalogCityPrice.objects.bulk_create(
+                [
+                    CatalogCityPrice(
+                        catalog_item=catalog_item,
+                        city=city_price["city"],
+                        price=city_price["price"],
+                        tat_in_hours=city_price.get("tat_in_hours"),
+                    )
+                    for city_price in city_prices
+                ]
+            )
+    return catalog_item
 
 
 def get_orders_queryset(

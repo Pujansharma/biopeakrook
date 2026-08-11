@@ -21,6 +21,11 @@ urlpatterns = [
         name="test-packages",
     ),
     path(
+        "add-test-package/",
+        views.AddTestPackageView.as_view(),
+        name="add-test-package",
+    ),
+    path(
         "create-order/",
         views.CreateOrderView.as_view(),
         name="create-order",

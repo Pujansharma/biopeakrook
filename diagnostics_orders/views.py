@@ -5,6 +5,8 @@ from accounts.utils.permissions import DiagnosticsOrdersFeaturePermission, IsAdm
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView
 from diagnostics_orders.models import DiagnosticOrder
 from diagnostics_orders.serializers import (
+    AddTestPackageResponseSerializer,
+    AddTestPackageSerializer,
     CancelOrderSerializer,
     CheckTimeslotsQuerySerializer,
     CreateOrderSerializer,
@@ -75,6 +77,22 @@ class TestPackagesListView(BaseGenericAPIView):
             search=serializer.validated_data.get("search", ""),
         )
         return self.send_response("Catalog fetched.", data=data)
+
+
+class AddTestPackageView(BaseGenericAPIView):
+    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    serializer_class = AddTestPackageSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        catalog_item = serializer.save()
+        response_data = AddTestPackageResponseSerializer(catalog_item).data
+        return self.send_response(
+            "Catalog item created.",
+            data=response_data,
+            status=201,
+        )
 
 
 class CreateOrderView(BaseGenericAPIView):
