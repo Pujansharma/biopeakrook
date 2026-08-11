@@ -102,3 +102,7 @@ APP_CERT = config("APP_CERT", None)
 
 # Metsights
 METSIGHTS_API_KEY = config('STG_METSIGHTS_API_KEY', None)
+
+# Orange Labs
+ORANGE_LABS_API_BASE_URL = config("STG_ORANGE_LABS_API_BASE_URL", None)
+ORANGE_LABS_API_KEY = config("STG_ORANGE_LABS_API_KEY", None)
