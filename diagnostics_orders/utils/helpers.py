@@ -46,6 +46,13 @@ def profile_label(customer_profile):
     return f"{first_name} {last_name}".strip()
 
 
+def profile_gender(customer_profile):
+    gender_value = customer_profile.gender
+    if not gender_value:
+        return None
+    return customer_profile.get_gender_display().lower()
+
+
 def build_orange_create_payload(address, notes, slot_datetime, customers):
     primary = customers[0]
     patient_details = []
@@ -108,17 +115,7 @@ def transform_serviceability_response(response_payload, status_code):
         if not slots:
             request_date_servicible_status = False
         else:
-            time_slots = {
-                "morning_slot": _normalize_slot_list(
-                    slots.get("morning_slot") or slots.get("morning") or []
-                ),
-                "afternoon_slot": _normalize_slot_list(
-                    slots.get("afternoon_slot") or slots.get("afternoon") or []
-                ),
-                "evening_slot": _normalize_slot_list(
-                    slots.get("evening_slot") or slots.get("evening") or []
-                ),
-            }
+            time_slots = _bucket_serviceability_slots(slots)
             if not any(time_slots.values()):
                 request_date_servicible_status = False
 
@@ -126,6 +123,51 @@ def transform_serviceability_response(response_payload, status_code):
         "request_date_servicible_status": request_date_servicible_status,
         "address_servicible_status": address_servicible_status,
         "time_slots": time_slots,
+    }
+
+
+def _bucket_serviceability_slots(slots):
+    if isinstance(slots, dict) and (
+        "morning_slot" in slots
+        or "morning" in slots
+        or "afternoon_slot" in slots
+        or "afternoon" in slots
+        or "evening_slot" in slots
+        or "evening" in slots
+    ):
+        return {
+            "morning_slot": _normalize_slot_list(
+                slots.get("morning_slot") or slots.get("morning") or []
+            ),
+            "afternoon_slot": _normalize_slot_list(
+                slots.get("afternoon_slot") or slots.get("afternoon") or []
+            ),
+            "evening_slot": _normalize_slot_list(
+                slots.get("evening_slot") or slots.get("evening") or []
+            ),
+        }
+
+    morning_slot = []
+    afternoon_slot = []
+    evening_slot = []
+    slot_items = slots.values() if isinstance(slots, dict) else slots
+    for slot in slot_items:
+        if not isinstance(slot, dict):
+            continue
+        datetime_value = slot.get("datetime") or slot.get("slot_datetime")
+        if not datetime_value:
+            continue
+        entry = {"datetime": datetime_value}
+        if slot.get("is_morning_slot"):
+            morning_slot.append(entry)
+        elif slot.get("is_afternoon_slot"):
+            afternoon_slot.append(entry)
+        elif slot.get("is_evening_slot"):
+            evening_slot.append(entry)
+    return {
+        "morning_slot": morning_slot,
+        "afternoon_slot": afternoon_slot,
+        "evening_slot": evening_slot,
     }
 
 

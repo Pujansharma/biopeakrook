@@ -38,13 +38,12 @@ from integrations.orange_labs import sdk as orange_labs_sdk
 
 
 class EligibleCustomerSerializer(BaseSerializer):
-    label = serializers.CharField()
+    name = serializers.CharField()
     phone = serializers.CharField()
     user_id = serializers.UUIDField()
     age = serializers.IntegerField(allow_null=True)
     gender = serializers.CharField(allow_null=True)
     address = serializers.CharField()
-    previous_diagnostic_orders_count = serializers.IntegerField()
 
 
 class CheckTimeslotsQuerySerializer(BaseSerializer):

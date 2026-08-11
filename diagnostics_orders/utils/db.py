@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import Count, F, Prefetch, Q
+from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
 from accounts.customers.models import CustomerProfile
@@ -16,7 +16,7 @@ from diagnostics_orders.utils.constants import (
     CollectionDateFilter,
     TERMINAL_ORDER_STATUSES,
 )
-from diagnostics_orders.utils.helpers import calculate_age, profile_label
+from diagnostics_orders.utils.helpers import calculate_age, profile_gender, profile_label
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.utils.constants import PreConsultationSessionStatus
 
@@ -86,16 +86,6 @@ def get_eligible_customer_profile_queryset(search="", center_id=None):
             center_assignments__is_active=True,
         )
         .exclude(id__in=active_order_profile_ids)
-        .annotate(
-            previous_diagnostic_orders_count=Count(
-                "diagnostic_order_customers__order",
-                filter=Q(
-                    diagnostic_order_customers__order__is_active=True,
-                    diagnostic_order_customers__order__status__in=TERMINAL_ORDER_STATUSES,
-                ),
-                distinct=True,
-            )
-        )
         .select_related("customer__user")
         .prefetch_related("addresses")
         .order_by("-created_at")
@@ -147,15 +137,12 @@ def get_default_address_text(customer_profile):
 def serialize_eligible_customer(customer_profile):
     user = customer_profile.customer.user
     return {
-        "label": profile_label(customer_profile),
+        "name": profile_label(customer_profile),
         "phone": str(user.phone) if user.phone else "",
         "user_id": user.id,
         "age": calculate_age(customer_profile.date_of_birth),
-        "gender": customer_profile.gender,
+        "gender": profile_gender(customer_profile),
         "address": get_default_address_text(customer_profile),
-        "previous_diagnostic_orders_count": getattr(
-            customer_profile, "previous_diagnostic_orders_count", 0
-        ),
     }
 
 
