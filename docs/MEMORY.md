@@ -11,6 +11,7 @@
 - Prefer explicit `BaseModelSerializer` contract with `Meta.model` + declared fields over overriding `to_representation()` to delegate to another serializer.
 - Keep related-object response fields nested; don't duplicate their attributes as flattened top-level fields.
 - Don't repeat explicitly declared `read_only=True` serializer fields in `Meta.read_only_fields`.
+- When user says "update postman collection", always sync changes to Postman cloud (`Biopeak-Nexus` collection uid `56091494-351b66f2-736b-4338-b684-ee520aa19e94`) via `POSTMAN_API_KEY`, not just the local `docs/postman/` JSON files.
 
 ---
 
@@ -36,6 +37,7 @@
 | Test kit assignment (2026-07-30) | ~~`test_kit_assignment` app~~ merged into `test_kit_inventory` (2026-08-06). One active kit per `CustomerProfile`; assignee always profile id. Eligible = completed pre-consult + no active assignment. Global APIs (no `X-Center-ID`). Spec: `docs/superpowers/specs/2026-07-30-test-kit-assignment-design.md`. |
 | Product inventory QC acks (2026-08-04) | `qc_ack_packaging` / `qc_ack_all_components` write gate + persisted on `test_kit_inventory.Item`. |
 | Lead/profile onboarding flags (2026-08-06) | `Lead.is_onboarding_completed` dropped. Completion only on `CustomerProfile.is_onboarding_completed`. Both `Lead` + `CustomerProfile` `is_onboarding_sent` default `False`. Lead POST/PATCH writable: `is_onboarding_sent`. Center create + profile PATCH: writable `is_onboarding_sent`; `is_onboarding_completed` read-only on center home/detail responses. Login shell profile copies `lead.is_onboarding_sent`. Lead PATCH flipping `is_onboarding_sent` syncs linked profile. `is_invited` independent (filter/API), no longer drives profile sent. Ready for session: lead `sent=True` and (no profile or profile not completed). |
+| Leads API v2 (2026-08-10) | Admin writes on `/leads/v2/` (POST create + shell, PATCH update + shell sync). v1 GET list/detail, POST, PATCH return 400. v1 DELETE still on `/leads/{id}/`. Postman repo: `docs/postman/collections/leads.postman_collection.json`. Postman cloud folder `leads` in `Biopeak-Nexus` collection. Bypass login (`/auth/login-phone-direct/`) = User lookup only, no shell provision. No backfill for legacy leads — v2 shell provisioning applies to new creates only. |
 | Emergency contact dropped (2026-08-07) | `CustomerProfile.emergency_contact_name` / `emergency_contact_phone` removed. Pre-consultation patient baseline layer no longer reads/writes those fields. |
 
 ---
