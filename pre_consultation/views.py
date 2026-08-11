@@ -10,7 +10,6 @@ from rest_framework.permissions import IsAuthenticated
 from accounts.customers.utils.db import mark_customer_profile_onboarding_completed_for_user
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
-from pre_consultation.completion_worker import spawn_post_completion_generation
 from pre_consultation.models import (
     PreConsultationSession,
     PreConsultationSessionArtifacts,
