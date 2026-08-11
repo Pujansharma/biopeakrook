@@ -249,10 +249,11 @@ class LeadV2DetailSerializer(LeadDetailSerializer):
             and instance.customer_profile.is_converted
         )
         if is_converted:
-            disallowed_fields = set(validated_data.keys()) - {"is_onboarding_sent"}
+            allowed_fields = {"is_onboarding_sent", "updated_by"}
+            disallowed_fields = set(validated_data.keys()) - allowed_fields
             if disallowed_fields:
                 raise serializers.ValidationError(
-                    "Only is_onboarding_sent can be updated for converted leads."
+                    "Only is_onboarding_sent is allowed to be updated after a lead is converted."
                 )
 
         validated_data.pop("phone", None)
