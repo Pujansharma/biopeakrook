@@ -95,7 +95,7 @@ def provision_shell_customer_from_lead(lead: Lead) -> User:
                 customer=customer,
                 is_main=True,
                 is_converted=False,
-                is_onboarding_sent=lead.is_invited,
+                is_onboarding_sent=lead.is_onboarding_sent,
                 created_by=None,
                 **customer_profile_data,
             )

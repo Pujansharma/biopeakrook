@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "programs.composites",
     "programs.vouchers",
     "products",
+    "test_kit_inventory",
     "inventory",
     "webhooks",
     "webhooks.bugspeaks",

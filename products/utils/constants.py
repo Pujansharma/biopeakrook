@@ -11,6 +11,8 @@ class ProviderCallbackFunction(models.TextChoices):
     BUGSPEAKS = "bugspeaks", "BugSpeaks"
     FIVE_C_NETWORK = "5c_network", "5C Network"
     STRAND_LIFE_SCIENCES = "strand_life_sciences", "Strand Life Sciences"
+    NEUBERG_ANAND = "neuberg_anand", "Neuberg Anand"
+    META_OMICS_LABS = "meta_omics_labs", "Meta Omics Labs"
 
 
 class ProductCallbackFunction(models.TextChoices):
@@ -20,6 +22,7 @@ class ProductCallbackFunction(models.TextChoices):
     GUT_MICROBIOME = "gut_microbiome", "Gut Microbiome"
     GENOMICS_NUTRI_DNA = "genomics_nutri_dna", "Genomics NutriDNA"
     GENOMICS_HEALTH_INSIGHTS = "genomics_health_insights", "Genomics Health Insights"
+    METSIGHTS_PP = "metsights_precision_mhap", "MetSights Precision Plus – Analysis & Protocol"
 
 
 PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
@@ -30,7 +33,9 @@ PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
     ProviderCallbackFunction.HEALTHIANS: [
         ProductCallbackFunction.BLOOD,
     ],
-    ProviderCallbackFunction.METSIGHTS: [],
+    ProviderCallbackFunction.METSIGHTS: [
+        ProductCallbackFunction.METSIGHTS_PP,
+    ],
     ProviderCallbackFunction.ORANGE_LABS: [ProductCallbackFunction.BLOOD],
     ProviderCallbackFunction.BUGSPEAKS: [
         ProductCallbackFunction.GUT_MICROBIOME,

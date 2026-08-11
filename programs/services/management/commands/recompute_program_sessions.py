@@ -13,7 +13,7 @@ from programs.models import (
 class Command(BaseCommand):
     help = "Recompute therapy session totals and program service cancellations."
 
-    def handle(self, *args, **options):
+    def handle(self, *args: object, **options: object) -> None:
         cancelled_services = TherapyProgramService.objects.filter(
             program_service__is_active=False
         ).update(sessions_cancelled=F("sessions_count") - F("sessions_used"))

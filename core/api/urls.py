@@ -44,6 +44,7 @@ urlpatterns = [
     path("profiles/", include("accounts.customers.urls")),
     # Admin level actions
     path("products/", include("products.urls")),
+    path("test_kit_inventory/", include("test_kit_inventory.urls")),
     path("programs/", include("programs.urls")),
     path("services/", include("programs.services.urls")),
     path("leads/", include("leads.urls")),

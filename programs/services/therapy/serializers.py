@@ -2,7 +2,6 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from accounts.centers.models import Center
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer
 from programs.models import TherapyProgramService, Program
@@ -169,21 +168,20 @@ class TherapyServiceRedeemSerializer(BaseModelSerializer):
                 "The program has expired, cannot redeem any services."
             )
 
-        center = Center.objects.filter(pk=center_id).first()
-        if not center:
-            raise serializers.ValidationError({"center_id": "Invalid center ID."})
-
         service_is_available = CenterServiceAssignment.objects.filter(
-            service=program_service.service, center_id=center_id, is_active=True
+            service=program_service.service,
+            center_id=center_id,
+            is_active=True,
         ).exists()
+
         if not service_is_available:
             raise serializers.ValidationError(
                 "This service is not available at the given center."
             )
 
         remaining = (
-            therapy_program_service.sessions_count
-            - therapy_program_service.sessions_used
+                therapy_program_service.sessions_count
+                - therapy_program_service.sessions_used
         )
         if remaining <= 0:
             raise serializers.ValidationError("No sessions remaining for this service.")
@@ -226,8 +224,8 @@ class TherapyProgramServiceCancelSerializer(BaseModelSerializer):
             raise serializers.ValidationError("Program service is already cancelled.")
 
         if (
-            therapy_program_service.sessions_used
-            >= therapy_program_service.sessions_count
+                therapy_program_service.sessions_used
+                >= therapy_program_service.sessions_count
         ):
             raise serializers.ValidationError(
                 "Service cannot be cancelled since it is already used"

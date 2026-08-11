@@ -1,5 +1,6 @@
 from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
 from django.db.models.functions import Coalesce, Concat
+from django.db.models.query import Prefetch
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -14,7 +15,7 @@ from accounts.customers.models import (
     CustomerAssociateAssignment,
     CustomerCenterAssignment,
     CustomerProfile,
-    CustomerProfileAddress,
+    CustomerProfileAddress, CustomerProfileFeature,
 )
 from accounts.customers.serializers import (
     CustomerAccountSerializer,
@@ -23,6 +24,7 @@ from accounts.customers.serializers import (
     CustomerProfileSerializer,
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
+    CustomerProfileAddressSerializer, CustomerProfileFeatureSerializer, MinimalCustomerAssignedCenterSerializer,
     BaseCustomerAssignedCenterSerializer,
     CustomerProfileAddressSerializer,
     CustomerLeadProfileSerializer,
@@ -36,33 +38,35 @@ from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerUser
 from core.utils.exceptions import get_object_or_404
+from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
     BaseListAPIView,
     BaseRetrieveAPIView,
     BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
     BaseCreateAPIView,
-    BaseListCreateAPIView,
+    BaseListCreateAPIView, BaseGenericAPIView,
 )
 from leads.models import Lead
 
 
-def get_customer_for_request(request):
-    qs = Customer.objects.select_related("user")
-    return get_object_or_404(
-        qs, detail="Invalid Customer profile", pk=request.user.pk
-    )
+class CustomerProfileMeta(BaseGenericAPIView):
+
+    def get_customer_for_user(self):
+        qs = Customer.objects.select_related("user")
+        return get_object_or_404(
+            qs, detail="Invalid Customer profile", pk=self.request.user.pk
+        )
 
 
-class CustomerAccountProfileView(BaseRetrieveUpdateAPIView):
+class CustomerAccountProfileView(BaseRetrieveUpdateAPIView, CustomerProfileMeta):
     """Views for customers to update their profiles"""
 
     permission_classes = [IsCustomerUser]
     serializer_class = CustomerAccountSerializer
 
     def get_object(self):
-        return get_customer_for_request(self.request)
-
+        return self.get_customer_for_user()
 
 class CustomerLeadProfileView(BaseRetrieveAPIView):
     permission_classes = [IsAuthenticated]
@@ -97,9 +101,6 @@ class CustomerProfilesListView(BaseListAPIView):
     permission_classes = [IsCustomerUser]
     serializer_class = CustomerProfileSerializer
 
-    def get_customer(self):
-        return get_customer_for_request(self.request)
-
     def get_queryset(self):
         filter_kwargs = {}
         is_active_query = self.request.query_params.get("is_active", None)
@@ -108,7 +109,7 @@ class CustomerProfilesListView(BaseListAPIView):
             filter_kwargs["is_active"] = bool(int(is_active_query))
 
         return CustomerProfile.objects.select_related("customer__user").filter(
-            customer=self.get_customer(), **filter_kwargs
+            customer=self.get_customer_for_user(), **filter_kwargs
         )
 
 
@@ -127,6 +128,14 @@ class CustomerProfileDetailView(BaseRetrieveUpdateDestroyAPIView):
 
         return CustomerCenterAssignment.objects.select_related(
             "customer_profile__customer__user",
+        ).prefetch_related(
+            Prefetch(
+                "customer_profile__center_assignments",
+                queryset=CustomerCenterAssignment.objects.filter(
+                    is_primary=True
+                ).select_related("center"),
+                to_attr="primary_center_assignments",
+            ),
         ).filter(**filter_kwargs)
 
     def get_object(self):
@@ -328,7 +337,7 @@ class CustomerCenterLinkView(BaseCreateAPIView):
 
 
 class CustomerCenterListView(BaseListAPIView):
-    serializer_class = BaseCustomerAssignedCenterSerializer
+    serializer_class = MinimalCustomerAssignedCenterSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
@@ -345,6 +354,7 @@ class CustomerCenterListView(BaseListAPIView):
             CustomerCenterAssignment.objects.select_related("center")
             .prefetch_related()
             .filter(search, customer_profile_id=self.kwargs["pk"])
+            .order_by('-is_primary', '-created_at')
         )
         return qs
 
@@ -377,3 +387,27 @@ class CustomerProfileAddressView(BaseListCreateAPIView):
         serializer.save(
             customer_profile=self.get_customer_profile(),
         )
+
+
+class CustomerProfileFeatureView(BaseRetrieveUpdateAPIView):
+    serializer_class = CustomerProfileFeatureSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser | (IsCustomerUser & ReadOnly)]
+
+    def get_customer_profile(self):
+        filter_kwargs = {}
+        user = self.request.user
+        account_type = get_user_account_type(user)
+        if account_type == UserType.CUSTOMER:
+            customer = getattr(user, 'customer')
+            filter_kwargs['customer'] = customer
+
+        qs = CustomerProfile.objects.filter(
+            **filter_kwargs
+        )
+        return get_object_or_404(qs, "Customer profile not found", pk=self.kwargs['pk'])
+
+    def get_object(self):
+        instance, _ = CustomerProfileFeature.objects.get_or_create(
+            customer_profile=self.get_customer_profile()
+        )
+        return instance

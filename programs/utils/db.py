@@ -1,11 +1,13 @@
+from datetime import date
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import F, Value, Subquery, OuterRef, Sum, Count
+from django.db.models import Count, F, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from accounts.centers.models import Center
+from accounts.utils import get_user_model
 from programs.models import (
     Program,
     ProgramService,
@@ -13,11 +15,15 @@ from programs.models import (
     TherapyProgram,
     TherapyProgramService,
 )
-from programs.utils.constants import RedemptionType
+from programs.utils.constants import ProgramType, RedemptionType
+
+User = get_user_model()
 
 
-def increment_program_service_sessions_used(program_service_id) -> None:
-    TherapyProgramService.objects.filter(program_service__pk=program_service_id).update(
+def increment_program_service_sessions_used(program_service_id: UUID) -> None:
+    TherapyProgramService.objects.filter(
+        program_service__pk=program_service_id
+    ).update(
         sessions_used=F("sessions_used") + 1
     )
     TherapyProgram.objects.filter(
@@ -63,18 +69,18 @@ def update_program_sessions_count(program_id: UUID) -> None:
     )
 
 
-def increment_service_cancelled_count(program_id, count: int = 1) -> None:
+def increment_service_cancelled_count(program_id: UUID, count: int = 1) -> None:
     Program.objects.filter(pk=program_id).update(
         services_cancelled=F("services_cancelled") + count
     )
 
 
 def cancel_all_program_services(
-    program_id,
-    center_id,
-    cancelled_by=None,
-    cancellation_reason=None,
-    cancelled_date=timezone.localdate(),
+        program_id: UUID,
+        center_id: UUID,
+        cancelled_by: User | None = None,
+        cancellation_reason: str | None = None,
+        cancelled_date: date = timezone.localdate(),
 ) -> None:
     active_services = list(
         TherapyProgramService.objects.filter(
@@ -86,13 +92,16 @@ def cancel_all_program_services(
 
     now = timezone.now()
     center = Center.objects.filter(pk=center_id).first()
+    if not center:
+        return None
+
     program_service_ids = []
     histories = []
 
     for therapy_program_service in active_services:
         remaining = (
-            therapy_program_service.sessions_count
-            - therapy_program_service.sessions_used
+                therapy_program_service.sessions_count
+                - therapy_program_service.sessions_used
         )
         program_service_ids.append(therapy_program_service.program_service.pk)
         if remaining > 0:
@@ -147,12 +156,12 @@ def cancel_all_program_services(
 
 
 def cancel_program_service(
-    program_service_id,
-    program_id,
-    center_id,
-    cancelled_by=None,
-    cancellation_reason=None,
-    cancelled_date=timezone.localdate(),
+        program_service_id: UUID,
+        program_id: UUID,
+        center_id: UUID,
+        cancelled_by: User | None = None,
+        cancellation_reason: str | None = None,
+        cancelled_date: date = timezone.localdate(),
 ) -> None:
     has_other_services = (
         ProgramService.objects.filter(program=program_id)
@@ -166,14 +175,22 @@ def cancel_program_service(
         return None
 
     therapy_program_service = (
-        TherapyProgramService.objects.filter(program_service__pk=program_service_id)
+        TherapyProgramService.objects.filter(
+            program_service__pk=program_service_id
+        )
         .select_related("program_service")
         .first()
     )
+    program = Program.objects.filter(pk=program_id).first()
+    if not program:
+        return None
     remaining = (
-        therapy_program_service.sessions_count - therapy_program_service.sessions_used
+            therapy_program_service.sessions_count
+            - therapy_program_service.sessions_used
     )
     center = Center.objects.filter(pk=center_id).first()
+    if not center:
+        return None
 
     sessions_cancelled_subquery = (
         TherapyProgramService.objects.filter(
@@ -194,20 +211,23 @@ def cancel_program_service(
         )
         TherapyProgramService.objects.filter(
             program_service__pk=program_service_id
-        ).update(sessions_cancelled=F("sessions_count") - F("sessions_used"))
+        ).update(
+            sessions_cancelled=F("sessions_count") - F("sessions_used")
+        )
         TherapyProgram.objects.filter(program=program_id).update(
             sessions_cancelled=Coalesce(
                 Subquery(sessions_cancelled_subquery), Value(0)
             ),
         )
         increment_service_cancelled_count(program_id)
-        RedemptionHistory.objects.create(
-            therapy_program_service=therapy_program_service,
-            redeem_center=center,
-            redeemed_at=timezone.now(),
-            quantity=remaining,
-            redeemed_by=cancelled_by,
-            redemption_type=RedemptionType.CANCEL,
-            redeemed_date=cancelled_date,
-        )
+        if program.program_type == ProgramType.THERAPY:
+            RedemptionHistory.objects.create(
+                therapy_program_service=therapy_program_service,
+                redeem_center=center,
+                redeemed_at=timezone.now(),
+                quantity=remaining,
+                redeemed_by=cancelled_by,
+                redemption_type=RedemptionType.CANCEL,
+                redeemed_date=cancelled_date,
+            )
     return None

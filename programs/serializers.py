@@ -9,6 +9,7 @@ from programs.services.serializers import BaseServiceSerializer
 
 
 class BaseProgramSerializer(BaseModelSerializer):
+    uid = serializers.CharField(read_only=True)
     profile = BaseCustomerProfileSerializer(source="customer_profile", read_only=True)
     sessions_count = serializers.IntegerField(
         source="therapy_program.sessions_count", read_only=True
@@ -21,6 +22,7 @@ class BaseProgramSerializer(BaseModelSerializer):
         model = Program
         fields = [
             "id",
+            "uid",
             "profile",
             "program_type",
             "notes",
@@ -41,9 +43,11 @@ class BaseProgramSerializer(BaseModelSerializer):
 
 
 class ProgramSerializer(BaseModelSerializer):
+    uid = serializers.CharField(read_only=True)
+
     class Meta:
         model = Program
-        fields = ["id"]
+        fields = ["id", "uid"]
 
 
 class BaseProgramServiceSerializer(BaseModelSerializer):

@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from accounts.customers.utils.db import mark_customer_profile_onboarding_completed_for_user
 from core.utils.view_types import GetMethodMixin, PostMethodMixin
 from core.utils.views import BaseGenericAPIView
-from leads.utils.db import mark_lead_onboarding_completed_for_user
+from pre_consultation.completion_worker import spawn_post_completion_generation
 from pre_consultation.models import (
     PreConsultationSession,
     PreConsultationSessionArtifacts,
@@ -43,6 +43,7 @@ from pre_consultation.utils.schema import (
     pre_consultation_data_envelope,
 )
 from pre_consultation.generation_webhook import trigger_post_completion_generation
+
 
 SESSION_CONFLICT_ENVELOPE = PreConsultationSessionConflictEnvelope
 SESSION_DATA_ENVELOPE = pre_consultation_data_envelope(
@@ -212,7 +213,6 @@ class PreConsultationSessionCompleteView(BaseGenericAPIView, PostMethodMixin):
                 request.user,
                 getattr(request, "customer_profile_id", None),
             )
-            mark_lead_onboarding_completed_for_user(request.user)
 
             PreConsultationSessionArtifacts.objects.update_or_create(
                 session=session,
