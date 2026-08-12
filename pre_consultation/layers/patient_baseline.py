@@ -6,7 +6,6 @@ from rest_framework import serializers
 from accounts.customers.models import CustomerProfile, CustomerProfileAddress
 from accounts.customers.utils.constants import AddressType
 from accounts.users.models import User
-from core.utils.fields import PhoneNumberSerializerField
 from pre_consultation.gender_mapping import (
     baseline_gender_to_profile_gender,
     profile_gender_to_baseline_gender,
@@ -35,8 +34,6 @@ EMPTY_PATIENT_BASELINE_PAYLOAD = {
     "dob": None,
     "gender": None,
     "email_address": "",
-    "emergency_contact_name": "",
-    "emergency_contact_phone": "",
     "address": EMPTY_PATIENT_BASELINE_ADDRESS,
 }
 
@@ -75,8 +72,6 @@ class PatientBaselineRequestSerializer(serializers.Serializer):
     dob = serializers.DateField()
     gender = serializers.ChoiceField(choices=PatientBaselineGender.choices)
     email_address = serializers.EmailField()
-    emergency_contact_name = serializers.CharField(max_length=100)
-    emergency_contact_phone = PhoneNumberSerializerField()
     address = PatientBaselineAddressSerializer()
 
 
@@ -90,10 +85,6 @@ class PatientBaselineResponseSerializer(serializers.Serializer):
         required=False,
     )
     email_address = serializers.EmailField(allow_blank=True, default="")
-    emergency_contact_name = serializers.CharField(
-        max_length=100, allow_blank=True, default=""
-    )
-    emergency_contact_phone = serializers.CharField(allow_blank=True, default="")
     address = PatientBaselineAddressResponseSerializer()
 
 
@@ -165,8 +156,6 @@ def customer_profile_to_payload(customer_profile: CustomerProfile) -> dict:
         "dob": customer_profile.date_of_birth,
         "gender": profile_gender_to_baseline_gender(customer_profile.gender),
         "email_address": contact_email,
-        "emergency_contact_name": customer_profile.emergency_contact_name,
-        "emergency_contact_phone": customer_profile.emergency_contact_phone or "",
         "address": customer_profile_address_to_payload(customer_profile),
     }
 
@@ -262,20 +251,12 @@ def persist_patient_baseline_payload(
         customer_profile.last_name = validated_data["last_name"]
         customer_profile.date_of_birth = validated_data["dob"]
         customer_profile.gender = profile_gender
-        customer_profile.emergency_contact_name = validated_data[
-            "emergency_contact_name"
-        ]
-        customer_profile.emergency_contact_phone = validated_data[
-            "emergency_contact_phone"
-        ]
         customer_profile.save(
             update_fields=[
                 "first_name",
                 "last_name",
                 "date_of_birth",
                 "gender",
-                "emergency_contact_name",
-                "emergency_contact_phone",
                 "updated_at",
             ]
         )

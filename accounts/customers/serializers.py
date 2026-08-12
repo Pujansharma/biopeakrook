@@ -363,8 +363,11 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
     external_centers_count = serializers.IntegerField(
         source="customer_profile.external_centers_count", read_only=True, default=0
     )
+    is_onboarding_sent = serializers.BooleanField(
+        source='customer_profile.is_onboarding_sent', required=False
+    )
     is_onboarding_completed = serializers.BooleanField(
-        source='customer_profile.is_onboarding_completed', required=False
+        source='customer_profile.is_onboarding_completed', read_only=True
     )
 
     class Meta:
@@ -381,6 +384,7 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
+            "is_onboarding_sent",
             "is_onboarding_completed",
             "centers_count",
             "external_centers_count",
@@ -416,6 +420,11 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             "date_of_birth": profile_wrapper.get("date_of_birth"),
             "image": profile_wrapper.get("image"),
         }
+        customer_profile_extra = {}
+        if "is_onboarding_sent" in profile_wrapper:
+            customer_profile_extra["is_onboarding_sent"] = profile_wrapper[
+                "is_onboarding_sent"
+            ]
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -423,7 +432,10 @@ class CenterCustomerProfileHomeCenterSerializer(BaseModelSerializer):
             )
             customer = Customer.objects.create(user=user, contact_email=contact_email)
             profile = CustomerProfile.objects.create(
-                customer=customer, is_main=True, **profile_data
+                customer=customer,
+                is_main=True,
+                **profile_data,
+                **customer_profile_extra,
             )
             create_customer_user_account(customer)
 
@@ -519,8 +531,11 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
     external_centers_count = serializers.IntegerField(
         source="customer_profile.external_centers_count", read_only=True, default=0
     )
+    is_onboarding_sent = serializers.BooleanField(
+        source='customer_profile.is_onboarding_sent', required=False
+    )
     is_onboarding_completed = serializers.BooleanField(
-        source='customer_profile.is_onboarding_completed', required=False
+        source='customer_profile.is_onboarding_completed', read_only=True
     )
     home_center = serializers.SerializerMethodField(read_only=True)
 
@@ -538,6 +553,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
             "is_main",
             "is_primary",
             "is_active",
+            "is_onboarding_sent",
             "is_onboarding_completed",
             "centers_count",
             "external_centers_count",
@@ -1079,7 +1095,7 @@ class CustomerLeadProfileSerializer(BaseModelSerializer):
             "is_client",
             "is_invited",
             "is_joined",
-            "is_onboarding_completed",
+            "is_onboarding_sent",
             "converted_on",
             "packages",
             "home_center",
