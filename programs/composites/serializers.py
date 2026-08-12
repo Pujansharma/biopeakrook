@@ -564,6 +564,12 @@ class CompositeProgramServiceSerializer(BaseModelSerializer):
             "sessions_cancelled",
             "redeem_code",
             "can_redeem",
+
+            "results_count",
+            "documents_count",
+            "reports_count",
+            "raw_data_count",
+
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
@@ -581,7 +587,8 @@ class CompositeProgramServiceSerializer(BaseModelSerializer):
             cls,
             instance: ProgramService,
     ):
-        return instance.get_assignment_type_display()
+        _display = getattr(instance, 'get_assignment_type_display', lambda: None | str)
+        return _display()
 
     def get_redeem_code(self, instance: ProgramService):
         therapy_program_service = getattr(instance, "therapy_service", None)
@@ -971,25 +978,16 @@ class CompositeProgramDetailSerializer(CompositeProgramSerializer):
             instance: CompositeProgram,
             validated_data: dict,
     ) -> CompositeProgram:
-        immutable_fields = {
-            "name",
-            "assessment_type",
-            "assessment_type_code",
-            "profile_id",
-            "composite_template_id",
-            "redeemable_centers",
-            "is_complimentary",
-            "price",
-            "created_date",
-        }
-        submitted_immutable_fields = immutable_fields.intersection(
-            self.initial_data
-        )
-        if submitted_immutable_fields:
-            invalid_fields = ", ".join(sorted(submitted_immutable_fields))
-            raise serializers.ValidationError(
-                {"detail": f"These fields cannot be updated: {invalid_fields}."}
-            )
+        validated_data.pop("name", None)
+        validated_data.pop("assessment_type", None)
+        validated_data.pop("assessment_type_code", None)
+        validated_data.pop("profile_id", None)
+        validated_data.pop("composite_template_id", None)
+        validated_data.pop("redeemable_centers", None)
+        validated_data.pop("is_complimentary", None)
+        validated_data.pop("price", None)
+        validated_data.pop("created_date", None)
+
         program_data = validated_data.pop("program", {})
         expires_at = program_data.get("expires_at")
         if expires_at and expires_at < timezone.localdate():
