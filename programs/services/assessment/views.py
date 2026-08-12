@@ -1,4 +1,4 @@
-from django.db.models import Q, ProtectedError, RestrictedError
+from django.db.models import ProtectedError, Q, RestrictedError
 
 from accounts.centers.models import Center
 from accounts.centers.serializers import BaseCenterSerializer
@@ -6,13 +6,15 @@ from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
+    BaseListAPIView,
     BaseListCreateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
-    BaseListAPIView,
 )
+from products.models import Product
 from programs.services.assessment.serializers import (
-    AssessmentServiceSerializer,
     AssessmentServiceDetailSerializer,
+    AssessmentServiceProductSerializer,
+    AssessmentServiceSerializer,
 )
 from programs.services.models import Service
 from programs.services.utils.constants import ServiceCategory
@@ -103,3 +105,24 @@ class AssessmentServiceCentersView(BaseListAPIView):
             search, service_assignments__service=service, **filter_kwargs
         ).prefetch_related("created_by")
         return qs
+
+
+class AssessmentServiceProductsView(BaseListAPIView):
+    serializer_class = AssessmentServiceProductSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_assessment_service(self):
+        assessment_services = Service.objects.filter(
+            service_category=ServiceCategory.ASSESSMENT
+        )
+        return get_object_or_404(
+            assessment_services,
+            "Assessment service not found",
+            pk=self.kwargs.get("pk"),
+        )
+
+    def get_queryset(self):
+        assessment_service = self.get_assessment_service()
+        return Product.objects.filter(
+            service_assignments__service=assessment_service
+        ).select_related("provider")
