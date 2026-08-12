@@ -15,6 +15,7 @@ from programs.models import (
     TherapyProgram,
     TherapyProgramService,
 )
+from programs.services.utils.constants import ServiceCategory
 from programs.utils.constants import ProgramType, RedemptionType
 
 User = get_user_model()
@@ -158,73 +159,105 @@ def cancel_all_program_services(
 def cancel_program_service(
         program_service_id: UUID,
         program_id: UUID,
-        center_id: UUID,
+        center_id: UUID | None = None,
         cancelled_by: User | None = None,
         cancellation_reason: str | None = None,
         cancelled_date: date = timezone.localdate(),
 ) -> None:
+    program_service = (
+        ProgramService.objects.filter(
+            pk=program_service_id,
+            program__pk=program_id,
+        )
+        .select_related(
+            "program",
+            "service",
+        )
+        .first()
+    )
+    if not program_service:
+        return None
+
     has_other_services = (
         ProgramService.objects.filter(program=program_id)
         .exclude(pk=program_service_id)
         .exists()
     )
-    if not has_other_services:
+    is_therapy_service = (
+        program_service.service.service_category == ServiceCategory.THERAPY
+    )
+    if is_therapy_service and not center_id:
+        return None
+    if is_therapy_service and not has_other_services:
         cancel_all_program_services(
             program_id, center_id, cancelled_by, cancellation_reason, cancelled_date
         )
         return None
 
-    therapy_program_service = (
-        TherapyProgramService.objects.filter(
-            program_service__pk=program_service_id
+    therapy_program_service = None
+    center = None
+    remaining = 0
+    if is_therapy_service:
+        therapy_program_service = (
+            TherapyProgramService.objects.filter(
+                program_service__pk=program_service_id
+            )
+            .select_related("program_service")
+            .first()
         )
-        .select_related("program_service")
-        .first()
-    )
-    program = Program.objects.filter(pk=program_id).first()
-    if not program:
-        return None
-    remaining = (
-            therapy_program_service.sessions_count
-            - therapy_program_service.sessions_used
-    )
-    center = Center.objects.filter(pk=center_id).first()
-    if not center:
-        return None
+        center = Center.objects.filter(pk=center_id).first()
+        if not therapy_program_service or not center:
+            return None
+        remaining = (
+                therapy_program_service.sessions_count
+                - therapy_program_service.sessions_used
+        )
 
-    sessions_cancelled_subquery = (
-        TherapyProgramService.objects.filter(
-            program_service__program=OuterRef("program")
-        )
-        .values("program_service__program")
-        .annotate(total=Sum("sessions_cancelled"))
-        .values("total")
-    )
+    now = timezone.now()
 
     with transaction.atomic():
         ProgramService.objects.filter(pk=program_service_id).update(
             is_active=False,
             cancelled_by=cancelled_by,
-            cancelled_at=timezone.now(),
+            cancelled_at=now,
             cancellation_reason=cancellation_reason,
             cancelled_date=cancelled_date,
         )
-        TherapyProgramService.objects.filter(
-            program_service__pk=program_service_id
-        ).update(
-            sessions_cancelled=F("sessions_count") - F("sessions_used")
-        )
-        TherapyProgram.objects.filter(program=program_id).update(
-            sessions_cancelled=Coalesce(
-                Subquery(sessions_cancelled_subquery), Value(0)
-            ),
-        )
         increment_service_cancelled_count(program_id)
-        if program.program_type == ProgramType.THERAPY:
+        if not has_other_services:
+            Program.objects.filter(pk=program_id).update(
+                cancelled_by=cancelled_by,
+                cancellation_reason=cancellation_reason,
+                cancelled_at=now,
+                cancelled_date=cancelled_date,
+            )
+        if is_therapy_service:
+            sessions_cancelled_subquery = (
+                TherapyProgramService.objects.filter(
+                    program_service__program=OuterRef("program")
+                )
+                .values("program_service__program")
+                .annotate(total=Sum("sessions_cancelled"))
+                .values("total")
+            )
+            TherapyProgramService.objects.filter(
+                program_service__pk=program_service_id
+            ).update(
+                sessions_cancelled=F("sessions_count") - F("sessions_used")
+            )
+            TherapyProgram.objects.filter(program=program_id).update(
+                sessions_cancelled=Coalesce(
+                    Subquery(sessions_cancelled_subquery), Value(0)
+                ),
+            )
+        if (
+            is_therapy_service
+            and program_service.program.program_type == ProgramType.THERAPY
+        ):
             RedemptionHistory.objects.create(
                 therapy_program_service=therapy_program_service,
                 redeem_center=center,
-                redeemed_at=timezone.now(),
+                redeemed_at=now,
                 quantity=remaining,
                 redeemed_by=cancelled_by,
                 redemption_type=RedemptionType.CANCEL,
