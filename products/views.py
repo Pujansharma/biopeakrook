@@ -1,13 +1,16 @@
 from django.db.models import ProtectedError, RestrictedError, Q
 
-from accounts.utils.permissions import IsAdminUser
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
+    BaseGenericAPIView,
     BaseListCreateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
 )
 from products.models import Product
 from products.serializers import ProductSerializer
 from products.utils.db import update_provider_products_count
+from products.utils.documents import get_allowed_document_types
 
 
 class ProductsView(BaseListCreateAPIView):
@@ -32,7 +35,7 @@ class ProductsView(BaseListCreateAPIView):
         )
         return qs
 
-    def perform_create(self, serializer: ProductSerializer):
+    def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
 
@@ -51,3 +54,20 @@ class ProductDetailView(BaseRetrieveUpdateDestroyAPIView):
         except ProtectedError, RestrictedError:
             self.raise_bad_request("This product cannot be deleted")
         update_provider_products_count(provider.pk)
+
+
+class ProductAllowedDocumentsView(BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        qs = Product.objects.select_related("provider")
+        product = get_object_or_404(
+            qs,
+            "Product not found.",
+            pk=self.kwargs.get("pk"),
+        )
+        data = get_allowed_document_types(
+            product.provider.callback,
+            product.callback,
+        )
+        return self.send_response("Allowed document types retrieved.", data)
