@@ -7,7 +7,10 @@ urlpatterns = [
         "assessment-services/<uuid:pk>/",
         views.AssessmentProgramServiceDetailView.as_view(),
     ),
-
+    path(
+        "assessment-services/<uuid:pk>/cancel/",
+        views.AssessmentProgramServiceCancelView.as_view(),
+    ),
     path(
         "assessment-services/<uuid:pk>/providers/",
         views.AssessmentProgramServiceProviders.as_view(),
@@ -29,6 +32,14 @@ urlpatterns = [
     path(
         "therapy-services/<uuid:pk>/",
         views.TherapyProgramServiceDetailView.as_view(),
+    ),
+    path(
+        "therapy-services/<uuid:pk>/cancel/",
+        views.TherapyProgramServiceCancelView.as_view(),
+    ),
+    path(
+        "consultation-services/<uuid:pk>/cancel/",
+        views.ConsultationProgramServiceCancelView.as_view(),
     ),
     path(
         "results/<uuid:pk>/",

@@ -2,10 +2,12 @@ from rest_framework.mixins import UpdateModelMixin
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
+from accounts.centers.models import Center
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.helper import response_format
 from core.utils.views.main import (
+    BaseCreateAPIView,
     BaseDestroyAPIView,
     BaseGenericAPIView,
     BaseListAPIView,
@@ -20,6 +22,7 @@ from programs.program_services.serializers import (
     AssessmentProgramServiceSerializer,
     AssessmentServiceDocumentSerializer,
     AssessmentServiceResultSerializer,
+    ProgramServiceCancelSerializer,
     TherapyProgramServiceSerializer,
 )
 from programs.program_services.utils.db import (
@@ -28,6 +31,28 @@ from programs.program_services.utils.db import (
 )
 from programs.services.models import ServiceDocument, ServiceResult
 from programs.services.utils.constants import ServiceCategory
+
+
+class ProgramServiceCancelViewMeta(BaseGenericAPIView):
+    service_category = None
+    program_service_filter_kwargs = {}
+
+    def get_program_service_queryset(self):
+        program_services = ProgramService.objects.filter(
+            service__service_category=self.service_category,
+            **self.program_service_filter_kwargs,
+        ).select_related(
+            "program",
+            "service",
+        )
+        return program_services
+
+    def get_program_service(self):
+        return get_object_or_404(
+            self.get_program_service_queryset(),
+            "Program service not found.",
+            pk=self.kwargs["pk"],
+        )
 
 
 class AssessmentProgramServiceViewMeta(BaseGenericAPIView):
@@ -161,6 +186,52 @@ class TherapyProgramServiceDetailView(BaseRetrieveAPIView):
             )
         )
         return program_services
+
+
+class BaseProgramServiceCancelView(
+    BaseCreateAPIView,
+    ProgramServiceCancelViewMeta,
+):
+    serializer_class = ProgramServiceCancelSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def perform_create(self, serializer):
+        serializer.save(
+            program_service=self.get_program_service(),
+            cancelled_by=self.request.user,
+        )
+
+
+class AssessmentProgramServiceCancelView(BaseProgramServiceCancelView):
+    service_category = ServiceCategory.ASSESSMENT
+
+
+class TherapyProgramServiceCancelView(BaseProgramServiceCancelView):
+    service_category = ServiceCategory.THERAPY
+    program_service_filter_kwargs = {"therapy_service__isnull": False}
+
+    def get_center(self):
+        center_identifier = getattr(self.request, "center_id", None)
+        if not center_identifier:
+            self.raise_bad_request("X-Center-ID header is required.")
+        centers = Center.objects.filter()
+        return get_object_or_404(
+            centers,
+            "Center not found with this ID.",
+            pk=center_identifier,
+        )
+
+    def perform_create(self, serializer):
+        center = self.get_center()
+        serializer.save(
+            program_service=self.get_program_service(),
+            cancelled_by=self.request.user,
+            center=center,
+        )
+
+
+class ConsultationProgramServiceCancelView(BaseProgramServiceCancelView):
+    service_category = ServiceCategory.CONSULTATION
 
 
 class AssessmentProgramServiceResultsView(
