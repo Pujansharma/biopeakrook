@@ -59,10 +59,6 @@ class ServiceDocumentType(models.TextChoices):
     GENETICS_INHERITED_CANCER = "genetics_inherited_cancer", "Inherited Cancer Genetics"
     GENETICS_NUTRI_DNA_PDF = "genetics_nutri_dna_pdf", "NutriDNA PDF"
     GENETICS_NUTRI_DNA_VCF = "genetics_nutri_dna_vcf", "NutriDNA VCF"
-    GENETICS_HEALTH_INSIGHTS = (
-        "genetics_health_insights",
-        "Genetics Health Insights",
-    )
 
     BUGSPEAKS_REPORT = "bugspeaks_report", "Bugspeaks Report"
 
