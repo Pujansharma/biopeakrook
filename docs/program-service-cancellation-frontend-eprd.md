@@ -1,42 +1,49 @@
-# Program Service Cancellation — Frontend ePRD
+# Program and Program Service Cancellation — Frontend ePRD
 
 ## 1. Purpose
 
 Implement cancellation for assigned assessment, therapy, and consultation
-services. This document covers only the cancellation endpoints and their
-request and response payloads.
+services, and for a complete composite program. This document covers only the
+cancellation endpoints and their request and response payloads.
 
 ## 2. Endpoints
 
-| Service category | Method | Endpoint |
+| Resource | Method | Endpoint |
 |---|---|---|
-| Assessment | `POST` | `/programs/program-services/assessment-services/:program_service_id/cancel/` |
-| Therapy | `POST` | `/programs/program-services/therapy-services/:program_service_id/cancel/` |
-| Consultation | `POST` | `/programs/program-services/consultation-services/:program_service_id/cancel/` |
+| Assessment ProgramService | `POST` | `/programs/program-services/assessment-services/:program_service_id/cancel/` |
+| Therapy ProgramService | `POST` | `/programs/program-services/therapy-services/:program_service_id/cancel/` |
+| Consultation ProgramService | `POST` | `/programs/program-services/consultation-services/:program_service_id/cancel/` |
+| Composite program | `POST` | `/programs/composites/programs/:program_id/cancel/` |
 
 `program_service_id` is the UUID of the assigned `ProgramService`, not the UUID
 of the catalogue service.
 
-All requests require a valid JWT and are available to administrators and
-associates.
+`program_id` on the composite route is the UUID of `CompositeProgram`, which is
+also the primary key of its related `Program`.
+
+All requests require a valid JWT. ProgramService cancellation is available to
+administrators and associates. Composite-program cancellation is available to
+administrators and associates granted the packages permission.
 
 ```http
 Authorization: Bearer <access_token>
 Content-Type: application/json
 ```
 
-Therapy cancellation additionally requires an existing center UUID:
+Therapy ProgramService and composite-program cancellation require an existing
+center UUID:
 
 ```http
 X-Center-ID: <center_uuid>
 ```
 
-Do not send or require `X-Center-ID` for assessment or consultation
-cancellation.
+For composite cancellation, the program must be owned by or redeemable at the
+selected center. Do not send or require `X-Center-ID` for assessment or
+consultation ProgramService cancellation.
 
 ## 3. Request Payload
 
-All three endpoints use the same payload:
+All four endpoints use the same payload:
 
 ```json
 {
@@ -65,6 +72,8 @@ interface ProgramServiceCancelPayload {
   cancellation_reason?: string | null;
   cancelled_date?: string;
 }
+
+type CompositeProgramCancelPayload = ProgramServiceCancelPayload;
 ```
 
 ## 4. Success Response
@@ -111,10 +120,27 @@ interface ProgramServiceCancelResponse {
   detail: "Create success.";
   data: ProgramServiceCancellation;
 }
+
+interface CompositeProgramCancellation {
+  cancellation_reason: string | null;
+  cancelled_by: BaseUser;
+  cancelled_at: string | null;
+  cancelled_date: string;
+}
+
+interface CompositeProgramCancelResponse {
+  detail: "Create success.";
+  data: CompositeProgramCancellation;
+}
 ```
 
 After success, treat the assigned service as inactive. Cancellation does not
 deactivate or alter existing assessment result or document records.
+
+After composite-program cancellation, treat the composite program, its parent
+program, and its active therapy ProgramServices as inactive. The composite
+response can return `cancelled_at: null` when there were no active therapy
+ProgramServices to cancel.
 
 ## 5. Error Responses
 
@@ -130,12 +156,14 @@ Errors use the standard response envelope and do not include `data`:
 |---|---|
 | `400` | The service is already cancelled |
 | `400` | A therapy service has already been fully used |
-| `400` | Therapy cancellation omits `X-Center-ID` |
+| `400` | Therapy ProgramService or composite-program cancellation omits `X-Center-ID` |
+| `400` | The composite program is already cancelled |
 | `400` | A request field fails validation |
 | `401` | Authentication is missing or invalid |
-| `403` | The authenticated user is not an administrator or associate |
+| `403` | The authenticated user lacks access to the requested cancellation |
 | `404` | The ProgramService does not exist or belongs to another category |
-| `404` | The therapy `X-Center-ID` does not identify an existing center |
+| `404` | The required `X-Center-ID` does not identify an existing center |
+| `404` | The composite program does not exist or is unavailable at the selected center |
 
 Do not retry an already-cancelled request. Refetch the owning screen's data so
 the UI reflects the server state.
@@ -145,10 +173,11 @@ the UI reflects the server state.
 - Show cancellation only for an active assigned service.
 - Require explicit confirmation before submitting.
 - Allow the reason to be blank and the date to be omitted.
-- Include the selected center header only for therapy cancellation.
+- Include the selected center header for therapy ProgramService and composite-
+  program cancellation only.
 - Disable repeated submission while the request is pending.
 - After success, close the cancellation flow and refetch the owning screen's
-  service data.
+  program or service data.
 - If the service is already cancelled, refetch instead of presenting another
   cancellation attempt.
 
@@ -158,6 +187,9 @@ the UI reflects the server state.
   ProgramService UUID.
 - Assessment and consultation cancellation succeed without `X-Center-ID`.
 - Therapy cancellation sends a valid `X-Center-ID`.
+- Composite-program cancellation calls
+  `/programs/composites/programs/:program_id/cancel/` with its
+  `CompositeProgram` UUID and a valid `X-Center-ID`.
 - An empty payload is accepted and uses the backend cancellation date default.
 - A supplied reason and date are returned in the cancellation audit response.
 - Unknown IDs and category mismatches produce the same not-found UI state.
