@@ -24,8 +24,7 @@ from accounts.customers.serializers import (
     CustomerProfileSerializer,
     CenterCustomerProfileDetailSerializer,
     CustomerAssociateSerializer,
-    CustomerProfileAddressSerializer, CustomerProfileFeatureSerializer, MinimalCustomerAssignedCenterSerializer,
-    BaseCustomerAssignedCenterSerializer,
+    CustomerProfileFeatureSerializer, MinimalCustomerAssignedCenterSerializer,
     CustomerProfileAddressSerializer,
     CustomerLeadProfileSerializer,
     build_customer_lead_profile_fallback,
@@ -67,6 +66,7 @@ class CustomerAccountProfileView(BaseRetrieveUpdateAPIView, CustomerProfileMeta)
 
     def get_object(self):
         return self.get_customer_for_user()
+
 
 class CustomerLeadProfileView(BaseRetrieveAPIView):
     permission_classes = [IsAuthenticated]
@@ -245,6 +245,10 @@ class CustomerAssociateListView(BaseListAPIView):
         search = Q()
         user = self.request.user
         center_ids = self.request.query_params.getlist("center_id", [])
+        header_center_id = getattr(self.request, 'center_id', None) or ""
+
+        if header_center_id:
+            center_ids.append(header_center_id)
 
         search_param = self.request.query_params.get("search", "").strip()
         if search_param:
@@ -257,7 +261,8 @@ class CustomerAssociateListView(BaseListAPIView):
             filter_kwargs["center__associate_assignments__associate"] = associate
 
         if center_ids:
-            filter_kwargs["center__in"] = center_ids
+            _ids = list(filter(None, center_ids))
+            filter_kwargs["center__in"] = _ids
 
         qs = (
             CustomerAssociateAssignment.objects.annotate(
@@ -282,6 +287,7 @@ class CustomerAssociateListView(BaseListAPIView):
             )
             .prefetch_related("center", "created_by")
             .order_by("-created_at")
+            .distinct()
         )
 
         return qs
