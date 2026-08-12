@@ -367,6 +367,9 @@ class CompositeProgramServicesListView(
         filter_kwargs = {
             "program__composite_program__pk": self.kwargs["pk"],
         }
+        service_category = self.request.query_params.get('category')
+        if service_category:
+            filter_kwargs['service__service_category'] = service_category
         center_identifier = getattr(self.request, 'center_id', None)
         if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
             filter_kwargs["program__in"] = self.get_associate_program_queryset(
@@ -421,8 +424,4 @@ class CompositeAddOnView(BaseCreateAPIView, CompositeProgramViewMeta):
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def perform_create(self, serializer):
-        composite_program = serializer.save(created_by=self.request.user)
-        center_identifier = getattr(self.request, "center_id", None)
-        serializer.instance = self.get_composite_program_queryset(
-            center_identifier
-        ).filter(pk=composite_program.pk).first()
+        serializer.save(created_by=self.request.user)
