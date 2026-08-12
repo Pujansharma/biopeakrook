@@ -1228,8 +1228,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
             composite_program_identifier: UUID,
     ):
         return (
-            CompositeProgram.objects.select_for_update()
-            .select_related("program")
+            CompositeProgram.objects.select_related("program")
             .filter(pk=composite_program_identifier)
             .first()
         )

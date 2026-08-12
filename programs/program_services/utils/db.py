@@ -156,12 +156,6 @@ def delete_service_document(service_document: ServiceDocument):
     file_name = service_document.file.name
 
     with transaction.atomic():
-        ProgramService.objects.select_for_update().filter(
-            pk=program_service_identifier
-        ).first()
-        ServiceResult.objects.select_for_update().filter(
-            pk=result_identifier
-        ).first()
         service_document.delete()
         update_result_documents_count(result_identifier)
         update_program_service_document_counts(program_service_identifier)
@@ -175,9 +169,6 @@ def delete_service_result(service_result: ServiceResult):
     program_service_identifier = service_result.program_service.pk
 
     with transaction.atomic():
-        ProgramService.objects.select_for_update().filter(
-            pk=program_service_identifier
-        ).first()
         document_files = [
             (service_document.file.storage, service_document.file.name)
             for service_document in ServiceDocument.objects.filter(

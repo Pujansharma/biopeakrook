@@ -189,27 +189,26 @@ class AssessmentServiceResultSerializer(BaseModelSerializer):
         product_identifier = validated_data.pop("product_id")
 
         with transaction.atomic():
-            locked_program_service = (
-                ProgramService.objects.select_for_update()
-                .select_related("service")
+            current_program_service = (
+                ProgramService.objects.select_related("service")
                 .filter(pk=program_service.pk)
                 .first()
             )
-            if not locked_program_service or not locked_program_service.is_active:
+            if not current_program_service or not current_program_service.is_active:
                 raise serializers.ValidationError(
                     "An inactive program service cannot receive results."
                 )
             product = self.get_assigned_product(
-                locked_program_service,
+                current_program_service,
                 product_identifier,
             )
             self._validate_document_type(product, validated_data["document_type"])
             self.set_product_metadata(validated_data, product)
-            validated_data["program_service"] = locked_program_service
+            validated_data["program_service"] = current_program_service
             validated_data["created_by"] = created_by
             validated_data["result_mode"] = ServiceResultMode.UPLOAD
             service_result = super().create(validated_data)
-            update_program_service_results_count(locked_program_service.pk)
+            update_program_service_results_count(current_program_service.pk)
         return service_result
 
     def update(self, instance: ServiceResult, validated_data: dict):
@@ -219,8 +218,7 @@ class AssessmentServiceResultSerializer(BaseModelSerializer):
 
         with transaction.atomic():
             service_result = (
-                ServiceResult.objects.select_for_update()
-                .select_related(
+                ServiceResult.objects.select_related(
                     "program_service__service",
                     "product",
                     "product__provider",
@@ -301,31 +299,29 @@ class AssessmentServiceDocumentSerializer(BaseModelSerializer):
 
         with transaction.atomic():
             program_service = (
-                ProgramService.objects.select_for_update()
-                .filter(pk=program_service_identifier)
+                ProgramService.objects.filter(pk=program_service_identifier)
                 .first()
             )
-            locked_service_result = (
-                ServiceResult.objects.select_for_update()
-                .filter(pk=service_result.pk)
+            current_service_result = (
+                ServiceResult.objects.filter(pk=service_result.pk)
                 .first()
             )
             if not program_service or not program_service.is_active:
                 raise serializers.ValidationError(
                     "An inactive program service cannot receive documents."
                 )
-            if not locked_service_result or not locked_service_result.is_active:
+            if not current_service_result or not current_service_result.is_active:
                 raise serializers.ValidationError(
                     "An inactive result cannot receive documents."
                 )
-            validated_data["result"] = locked_service_result
+            validated_data["result"] = current_service_result
             validated_data["filename"] = Path(uploaded_file.name).name
             validated_data["content_type"] = (
                     uploaded_file.content_type or "application/octet-stream"
             )
             validated_data["file_hash"] = generate_uploaded_file_hash(uploaded_file)
             service_document = super().create(validated_data)
-            update_result_documents_count(locked_service_result.pk)
+            update_result_documents_count(current_service_result.pk)
             update_program_service_document_counts(program_service.pk)
         return service_document
 
