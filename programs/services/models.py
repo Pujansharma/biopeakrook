@@ -2,7 +2,12 @@ from django.db import models
 
 from core.utils.models import BaseUUIDModel
 from products.models import Product
-from programs.services.utils.constants import ServiceCategory
+from programs.services.utils.constants import (
+    ServiceCategory,
+    ServiceDocumentCategory,
+    ServiceDocumentType,
+    ServiceResultMode,
+)
 
 
 class Service(BaseUUIDModel):
@@ -65,6 +70,70 @@ class ServiceProductAssignment(BaseUUIDModel):
                 fields=["service", "product"], name="unique_service_product"
             )
         ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ServiceResult(BaseUUIDModel):
+    program_service = models.ForeignKey(
+        "programs.ProgramService",
+        on_delete=models.PROTECT,
+        related_name="results",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="service_results",
+        null=True,
+        blank=True,
+    )
+    provider_name = models.CharField(
+        max_length=200, null=True, blank=True, editable=False
+    )
+    product_name = models.CharField(
+        max_length=100, null=True, blank=True, editable=False
+    )
+
+    result_mode = models.CharField(
+        choices=ServiceResultMode, default=ServiceResultMode.UPLOAD, editable=False
+    )
+
+    document_type = models.CharField(
+        choices=ServiceDocumentType, default=ServiceDocumentType.OTHER
+    )
+    documents_count = models.PositiveBigIntegerField(default=0, editable=False)
+    sample_collection_date = models.DateField(null=True, blank=True)
+    report_generation_date = models.DateField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_service_results",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class ServiceDocument(BaseUUIDModel):
+    result = models.ForeignKey(
+        ServiceResult, on_delete=models.CASCADE, related_name="documents"
+    )
+
+    file = models.FileField(upload_to="services/documents/")
+    filename = models.CharField(max_length=255, editable=False)
+    content_type = models.CharField(max_length=127, editable=False)
+    file_hash = models.TextField(editable=False)
+
+    document_category = models.CharField(choices=ServiceDocumentCategory)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"

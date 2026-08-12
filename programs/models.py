@@ -85,6 +85,10 @@ class ProgramService(BaseUUIDModel):
 
     created_date = models.DateField(default=timezone.localdate)
     cancelled_date = models.DateField(null=True, blank=True)
+    results_count = models.PositiveBigIntegerField(default=0, editable=False)
+    documents_count = models.PositiveBigIntegerField(default=0, editable=False)
+    reports_count = models.PositiveBigIntegerField(default=0, editable=False)
+    raw_data_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
