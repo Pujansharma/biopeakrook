@@ -5,7 +5,6 @@ from django.db import models
 
 class ProviderCallbackFunction(models.TextChoices):
     BIOPEAK = "biopeak", "Biopeak"
-    METSIGHTS = "metsights", "MetSights"
     METFLUX = "metflux", "MetFlux"
     HEALTHIANS = "healthians", "Healthians"
     ORANGE_LABS = "orange_labs", "Orange Labs"
@@ -76,7 +75,7 @@ PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
     ProviderCallbackFunction.HEALTHIANS: [
         ProductCallbackFunction.BLOOD,
     ],
-    ProviderCallbackFunction.METSIGHTS: [
+    ProviderCallbackFunction.METFLUX: [
         ProductCallbackFunction.METSIGHTS_PP,
     ],
     ProviderCallbackFunction.ORANGE_LABS: [
