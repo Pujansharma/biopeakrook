@@ -1,9 +1,9 @@
-# Assessment and Therapy Program Service Detail — Frontend ePRD
+# Program Service Detail and Cancellation — Frontend ePRD
 
 ## 1. Purpose
 
-Build the frontend detail experience for one assigned assessment or therapy
-service within a program.
+Build the frontend detail and cancellation experience for assigned services
+within a program.
 
 This ePRD covers these backend routes:
 
@@ -11,6 +11,9 @@ This ePRD covers these backend routes:
 |---|---|---|
 | `GET` | Retrieve an assigned assessment service | `/programs/program-services/assessment-services/:program_service_id/` |
 | `GET` | Retrieve an assigned therapy service | `/programs/program-services/therapy-services/:program_service_id/` |
+| `POST` | Cancel an assigned assessment service | `/programs/program-services/assessment-services/:program_service_id/cancel/` |
+| `POST` | Cancel an assigned therapy service | `/programs/program-services/therapy-services/:program_service_id/cancel/` |
+| `POST` | Cancel an assigned consultation service | `/programs/program-services/consultation-services/:program_service_id/cancel/` |
 | `GET` | List supported assessment providers | `/programs/program-services/assessment-services/:program_service_id/providers/` |
 | `GET` | List supported assessment products | `/programs/program-services/assessment-services/:program_service_id/products/` |
 | `GET`, `POST` | List or create assessment results | `/programs/program-services/assessment-services/:program_service_id/results/` |
@@ -37,12 +40,15 @@ Authorization: Bearer <access_token>
 Access is allowed for administrators and associates. Customers cannot use
 these endpoints.
 
-`X-Center-ID` is not required. The endpoints do not apply center-assignment or
-feature-level RBAC filtering.
+`X-Center-ID` is required only for therapy cancellation. The selected center
+must exist. Assessment and consultation cancellation do not require the
+header. The endpoints do not apply center-assignment or feature-level RBAC
+filtering.
 
-The assessment and therapy ProgramService detail routes are read-only. Result
-and document mutations are available only through their dedicated routes.
-No route in this document accepts `PUT`.
+The assessment and therapy ProgramService detail routes remain read-only.
+Cancellation uses only the dedicated `POST` routes. Result and document
+mutations remain available only through their dedicated routes. No route in
+this document accepts `PUT`.
 
 The complete assessment selection, result creation, and file-upload flow is
 specified in `assessment-program-service-result-upload-frontend-eprd.md`.
@@ -260,8 +266,49 @@ display.
 - `created_at`, `updated_at`, `cancelled_at`, and `last_login` are ISO-8601
   datetimes.
 
-The detail endpoints do not perform cancellation or redemption. Existing
-workflow-specific APIs remain authoritative for those actions.
+The detail endpoints do not perform cancellation or redemption.
+
+### 6.4 Cancellation
+
+All three cancellation endpoints accept the same optional request fields:
+
+```json
+{
+  "cancellation_reason": "Cancelled at the customer's request.",
+  "cancelled_date": "2026-08-12"
+}
+```
+
+`cancellation_reason` accepts a string, blank string, or `null`.
+`cancelled_date` defaults to the backend's current local date when omitted and
+does not accept `null`.
+
+A successful request returns `201 Created`:
+
+```json
+{
+  "detail": "Create success.",
+  "data": {
+    "cancellation_reason": "Cancelled at the customer's request.",
+    "cancelled_by": {
+      "id": "<user_uuid>",
+      "email": "<email|null>",
+      "first_name": "<string>",
+      "last_name": "<string>",
+      "image": "<url|null>",
+      "last_login": "<ISO-8601_datetime|null>"
+    },
+    "cancelled_at": "<ISO-8601_datetime>",
+    "cancelled_date": "2026-08-12"
+  }
+}
+```
+
+Cancellation sets only the assigned `ProgramService.is_active` flag to
+`false`. Existing assessment results and documents keep their current rows,
+files, metadata, counters, and active flags. Existing inactive-service gates
+prevent new results and documents, while current edit and delete behavior is
+unchanged.
 
 ## 7. Recommended Frontend Contracts
 
@@ -326,6 +373,23 @@ interface DetailResponse<T> {
   data: T;
 }
 
+interface ProgramServiceCancelPayload {
+  cancellation_reason?: string | null;
+  cancelled_date?: string;
+}
+
+interface ProgramServiceCancellation {
+  cancellation_reason: string | null;
+  cancelled_by: BaseUser;
+  cancelled_at: string;
+  cancelled_date: string;
+}
+
+interface CancelResponse {
+  detail: "Create success.";
+  data: ProgramServiceCancellation;
+}
+
 interface APIErrorResponse {
   detail: string | Record<string, string | string[]>;
 }
@@ -363,16 +427,16 @@ ProgramService exists under another category.
 | `401` | JWT is absent, expired, or invalid | Start the authentication recovery flow |
 | `403` | Authenticated account is neither an administrator nor an associate | Show access denied |
 | `404` | ProgramService is absent or belongs to another category | Show program service not found |
-| `405` | A non-GET method was used | Treat as a frontend integration error |
+| `405` | An unsupported method was used | Treat as a frontend integration error |
 | `500` | Unexpected server error | Show the standard retryable error state |
 
 ## 9. State and Cache Rules
 
 - Include both category and ProgramService UUID in the detail query key.
 - Do not use the nested catalogue Service UUID as the ProgramService cache key.
-- The endpoints are read-only, so no optimistic updates are required.
-- Invalidate or refetch the relevant detail query after a successful
-  cancellation or therapy redemption performed through another API.
+- Do not optimistically mutate cancellation audit fields.
+- Invalidate or refetch the relevant detail query after successful
+  cancellation or therapy redemption.
 - Do not calculate cancellation state solely from nullable cancellation
   fields; use `is_active` as the primary lifecycle flag.
 - Do not derive remaining therapy sessions when `sessions_count` is `0`, since
@@ -394,7 +458,12 @@ ProgramService exists under another category.
 - Therapy additionally renders session counters and the redemption code.
 - Unlimited therapy sessions are handled when `sessions_count` is `0`.
 - Missing therapy-extension values render as unavailable rather than zero.
-- The UI does not require or send `X-Center-ID` for these requests.
+- The UI does not require or send `X-Center-ID` for detail requests.
+- Therapy cancellation sends a selected `X-Center-ID`; assessment and
+  consultation cancellation do not.
+- Successful cancellation refetches the relevant detail and renders the
+  returned audit fields.
+- Existing assessment results and documents remain visible after cancellation.
 - Customers do not receive access to these detail experiences.
 - No edit, delete, cancel, or redeem operation is sent to either detail URL.
 - Cache keys distinguish assessment and therapy resources even when UUID input
