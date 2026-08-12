@@ -38,8 +38,8 @@ from accounts.utils.db import get_user_account_type
 from accounts.verifications.models import PhoneVerification
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from leads.models import Lead
 from integrations.metsights.helper import get_or_create_metsights_profile
+from leads.models import Lead
 
 PROFILE_FIELDS = ["first_name", "last_name", "gender", "date_of_birth", "image"]
 
@@ -645,9 +645,54 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
         not_valid = set(associate_ids) - set(qs)
         return not_valid
 
+    @classmethod
+    def _perform_add_action(
+            cls,
+            customer_profile_id,
+            associate_ids,
+            center_id,
+            created_by,
+
+    ):
+        if not associate_ids:
+            return None
+
+        _assignments = [
+            CustomerAssociateAssignment(
+                customer_profile_id=customer_profile_id,
+                associate_id=i['id'],
+                center_id=center_id,
+                created_by=created_by,
+            )
+            for i in associate_ids
+        ]
+        CustomerAssociateAssignment.objects.bulk_create(
+            _assignments,
+            update_conflicts=True,
+            unique_fields=["customer_profile", "associate", "center"],
+            update_fields=["created_by"],
+        )
+
+        return None
+
+    @classmethod
+    def _perform_remove_action(
+            cls,
+            associate_ids,
+            customer_profile_id,
+            center_id,
+    ):
+        if not associate_ids:
+            return None
+        CustomerAssociateAssignment.objects.filter(
+            customer_profile_id=customer_profile_id,
+            center_id=center_id,
+            associate_id__in=[i['id'] for i in associate_ids],
+        ).delete()
+        return None
+
     def create(self, validated_data):
-        add_associate_ids = []
-        remove_associate_ids = []
+
         center_id = validated_data.pop("center_id", None)
         customer_profile_id = validated_data.pop("customer_profile_id", None)
         created_by = validated_data.pop("created_by", None)
@@ -668,48 +713,36 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
             )
 
         if add_ids:
-            add_associate_ids = [i["id"] for i in add_ids]
-
-        if remove_ids:
-            remove_associate_ids = [i["id"] for i in remove_ids]
-
-        if add_associate_ids:
-            invalid_ids = self.get_invalid_associates(center_id, add_associate_ids)
+            _add_ids = [i["id"] for i in add_ids]
+            invalid_ids = self.get_invalid_associates(center_id, _add_ids)
             if invalid_ids:
-                raise serializers.ValidationError(
-                    {
-                        "add": f"Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}"
-                    }
-                )
-            _assignments = [
-                CustomerAssociateAssignment(
-                    customer_profile_id=customer_profile_id,
-                    associate_id=i,
-                    center_id=center_id,
-                    created_by=created_by,
-                )
-                for i in add_associate_ids
-            ]
-            CustomerAssociateAssignment.objects.bulk_create(
-                _assignments,
-                update_conflicts=True,
-                unique_fields=["customer_profile", "associate", "center"],
-                update_fields=["created_by"],
+                raise serializers.ValidationError({
+                    "add": (
+                        f"Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}"
+                    )
+                })
+
+            self._perform_add_action(
+                customer_profile_id=customer_profile_id,
+                associate_ids=add_ids,
+                center_id=center_id,
+                created_by=created_by
             )
 
-        if remove_associate_ids:
-            invalid_ids = self.get_invalid_associates(center_id, remove_associate_ids)
+        if remove_ids:
+            _remove_associate_ids = [i["id"] for i in remove_ids]
+            invalid_ids = self.get_invalid_associates(center_id, _remove_associate_ids)
             if invalid_ids:
-                raise serializers.ValidationError(
-                    {
-                        "remove": f"Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}"
-                    }
-                )
-            CustomerAssociateAssignment.objects.filter(
+                raise serializers.ValidationError({
+                    "remove": (
+                        f"Invalid IDs provided for associates: {[str(uid) for uid in invalid_ids]}"
+                    )
+                })
+            self._perform_remove_action(
+                associate_ids=remove_ids,
                 customer_profile_id=customer_profile_id,
                 center_id=center_id,
-                associate_id__in=remove_associate_ids,
-            ).delete()
+            )
 
         return 1
 
@@ -960,6 +993,8 @@ class CustomerProfileFeatureSerializer(BaseModelSerializer):
             "enabled_tabs",
             "updated_at",
         ]
+
+
 def get_main_customer_profile_for_user(user: User) -> CustomerProfile | None:
     return (
         CustomerProfile.objects.select_related("customer__user")
@@ -978,7 +1013,7 @@ def get_main_customer_profile_for_user(user: User) -> CustomerProfile | None:
 
 
 def build_customer_lead_profile_fallback(
-    customer_profile: CustomerProfile, *, context: dict | None = None
+        customer_profile: CustomerProfile, *, context: dict | None = None
 ) -> dict:
     context = context or {}
     customer = customer_profile.customer
