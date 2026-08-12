@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.users.serializers import BaseUserSerializer
@@ -8,7 +9,7 @@ from core.utils.serializers import BaseModelSerializer
 from products.models import Product
 from products.serializers import BaseProductSerializer
 from products.utils.documents import get_allowed_document_type_choices
-from programs.models import ProgramService
+from programs.models import ProgramService, TherapyProgramService
 from programs.program_services.utils.db import (
     update_program_service_document_counts,
     update_program_service_results_count,
@@ -18,9 +19,11 @@ from programs.program_services.utils.helper import generate_uploaded_file_hash
 from programs.services.models import ServiceDocument, ServiceResult
 from programs.services.serializers import BaseServiceSerializer
 from programs.services.utils.constants import (
+    ServiceCategory,
     ServiceDocumentType,
     ServiceResultMode,
 )
+from programs.utils.db import cancel_program_service
 
 
 class BaseServiceResultSerializer(BaseModelSerializer):
@@ -325,6 +328,69 @@ class AssessmentServiceDocumentSerializer(BaseModelSerializer):
             update_result_documents_count(locked_service_result.pk)
             update_program_service_document_counts(program_service.pk)
         return service_document
+
+
+class ProgramServiceCancelSerializer(BaseModelSerializer):
+    cancellation_reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+    cancelled_by = BaseUserSerializer(read_only=True)
+    cancelled_at = serializers.DateTimeField(read_only=True)
+    cancelled_date = serializers.DateField(
+        required=False,
+        default=timezone.localdate,
+    )
+
+    class Meta:
+        model = ProgramService
+        fields = [
+            "cancellation_reason",
+            "cancelled_by",
+            "cancelled_at",
+            "cancelled_date",
+        ]
+
+    def create(self, validated_data: dict):
+        program_service = validated_data.pop("program_service")
+        cancelled_by = validated_data.pop("cancelled_by")
+        center = validated_data.pop("center", None)
+        if not program_service.is_active:
+            raise serializers.ValidationError("Program service is already cancelled.")
+
+        if program_service.service.service_category == ServiceCategory.THERAPY:
+            therapy_program_service = (
+                TherapyProgramService.objects.filter(program_service=program_service)
+                .select_related("program_service")
+                .first()
+            )
+            if therapy_program_service and (
+                therapy_program_service.sessions_used
+                >= therapy_program_service.sessions_count
+            ):
+                raise serializers.ValidationError(
+                    "Service cannot be cancelled since it is already used"
+                )
+
+        cancel_program_service(
+            program_service.pk,
+            program_service.program.pk,
+            center_id=center.pk if center else None,
+            cancelled_by=cancelled_by,
+            cancellation_reason=validated_data.get("cancellation_reason"),
+            cancelled_date=validated_data.get("cancelled_date"),
+        )
+        program_service.refresh_from_db(
+            fields=[
+                "is_active",
+                "cancellation_reason",
+                "cancelled_by",
+                "cancelled_at",
+                "cancelled_date",
+            ]
+        )
+        return program_service
 
 
 class AssessmentProgramServiceSerializer(BaseModelSerializer):
