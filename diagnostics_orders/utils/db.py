@@ -108,10 +108,10 @@ def get_eligible_customer_profile_queryset(search="", center_id=None):
     return queryset.filter(search_query)
 
 
-def get_default_address_text(customer_profile):
+def get_default_address(customer_profile):
     addresses = list(customer_profile.addresses.all())
     if not addresses:
-        return ""
+        return None
     default_address = None
     for address in addresses:
         if address.is_default and address.is_active:
@@ -122,6 +122,11 @@ def get_default_address_text(customer_profile):
             if address.is_active:
                 default_address = address
                 break
+    return default_address
+
+
+def get_default_address_text(customer_profile):
+    default_address = get_default_address(customer_profile)
     if default_address is None:
         return ""
     parts = [
@@ -137,6 +142,7 @@ def get_default_address_text(customer_profile):
 
 def serialize_eligible_customer(customer_profile):
     user = customer_profile.customer.user
+    default_address = get_default_address(customer_profile)
     return {
         "name": profile_label(customer_profile),
         "phone": str(user.phone) if user.phone else "",
@@ -144,6 +150,7 @@ def serialize_eligible_customer(customer_profile):
         "age": calculate_age(customer_profile.date_of_birth),
         "gender": profile_gender(customer_profile),
         "address": get_default_address_text(customer_profile),
+        "pincode": default_address.pincode if default_address else "",
     }
 
 

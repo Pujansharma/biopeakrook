@@ -45,6 +45,7 @@ class EligibleCustomerSerializer(BaseSerializer):
     age = serializers.IntegerField(allow_null=True)
     gender = serializers.CharField(allow_null=True)
     address = serializers.CharField()
+    pincode = serializers.CharField(allow_blank=True)
 
 
 class CheckTimeslotsQuerySerializer(BaseSerializer):
