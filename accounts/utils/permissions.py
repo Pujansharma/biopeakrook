@@ -107,3 +107,7 @@ class CustomerOnboardingPermission(AssociateFeaturePermission):
 
 class PackagesPermission(AssociateFeaturePermission):
     required_any_features = [AssociateRoleFeature.PACKAGES]
+
+
+class DiagnosticsOrdersFeaturePermission(AssociateFeaturePermission):
+    required_any_features = [AssociateRoleFeature.DIAGNOSTICS_ORDERS]
