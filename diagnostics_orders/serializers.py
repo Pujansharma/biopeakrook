@@ -13,6 +13,7 @@ from diagnostics_orders.models import (
     DiagnosticOrderCustomer,
     DiagnosticOrderLine,
     DiagnosticOrderRescheduleHistory,
+    DiagnosticsOrdersSummary,
 )
 from diagnostics_orders.utils.constants import (
     CatalogCategory,
@@ -28,10 +29,16 @@ from diagnostics_orders.utils.db import (
     customer_profile_has_active_diagnostic_order,
     customer_profile_has_completed_pre_consultation,
     get_catalog_items_for_city,
+    get_default_address,
+    get_default_address_text,
+    get_or_create_summary,
 )
 from diagnostics_orders.utils.helpers import (
     build_orange_create_payload,
+    calculate_age,
     max_tat_hours,
+    profile_gender,
+    profile_label,
     resolve_city_from_pincode,
     sum_decimal,
     transform_serviceability_response,
@@ -41,13 +48,38 @@ from integrations.orange_labs import sdk as orange_labs_sdk
 
 
 class EligibleCustomerSerializer(BaseSerializer):
-    name = serializers.CharField()
-    phone = serializers.CharField()
-    user_id = serializers.UUIDField()
-    age = serializers.IntegerField(allow_null=True)
-    gender = serializers.CharField(allow_null=True)
-    address = serializers.CharField()
-    pincode = serializers.CharField(allow_blank=True)
+    name = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+    user_id = serializers.SerializerMethodField()
+    age = serializers.SerializerMethodField()
+    gender = serializers.SerializerMethodField()
+    address = serializers.SerializerMethodField()
+    pincode = serializers.SerializerMethodField()
+
+    def get_name(self, customer_profile):
+        return profile_label(customer_profile)
+
+    def get_phone(self, customer_profile):
+        phone = customer_profile.customer.user.phone
+        return str(phone) if phone else ""
+
+    def get_user_id(self, customer_profile):
+        return customer_profile.customer.user.pk
+
+    def get_age(self, customer_profile):
+        return calculate_age(customer_profile.date_of_birth)
+
+    def get_gender(self, customer_profile):
+        return profile_gender(customer_profile)
+
+    def get_address(self, customer_profile):
+        return get_default_address_text(customer_profile)
+
+    def get_pincode(self, customer_profile):
+        default_address = get_default_address(customer_profile)
+        if default_address is None:
+            return ""
+        return default_address.pincode or ""
 
 
 class CheckTimeslotsQuerySerializer(BaseSerializer):
@@ -293,13 +325,40 @@ class CreateOrderSerializer(BaseSerializer):
     def create(self, validated_data):
         request = self.context["request"]
         idempotency_key = validated_data.get("idempotency_key") or None
-        if idempotency_key:
-            existing = DiagnosticOrder.objects.filter(
-                idempotency_key=idempotency_key
-            ).first()
-            if existing:
-                return existing
 
+        if idempotency_key:
+            with transaction.atomic():
+                get_or_create_summary()
+                DiagnosticsOrdersSummary.objects.select_for_update().filter(id=1).first()
+                existing = DiagnosticOrder.objects.filter(
+                    idempotency_key=idempotency_key
+                ).first()
+                if existing:
+                    return existing
+                request_id, token, orange_response = self._create_orange_order(
+                    validated_data
+                )
+                return self._persist_local_order(
+                    validated_data=validated_data,
+                    request=request,
+                    idempotency_key=idempotency_key,
+                    request_id=request_id,
+                    token=token,
+                    orange_response=orange_response,
+                )
+
+        request_id, token, orange_response = self._create_orange_order(validated_data)
+        with transaction.atomic():
+            return self._persist_local_order(
+                validated_data=validated_data,
+                request=request,
+                idempotency_key=None,
+                request_id=request_id,
+                token=token,
+                orange_response=orange_response,
+            )
+
+    def _create_orange_order(self, validated_data):
         orange_payload = build_orange_create_payload(
             address=validated_data["address"],
             notes=validated_data.get("notes", ""),
@@ -332,56 +391,59 @@ class CreateOrderSerializer(BaseSerializer):
         )
         if not request_id or not token:
             bad_request("Orange Labs response missing request_id or token")
+        return request_id, token, orange_response
 
-        with transaction.atomic():
-            if idempotency_key:
-                existing = DiagnosticOrder.objects.filter(
-                    idempotency_key=idempotency_key
-                ).first()
-                if existing:
-                    return existing
+    def _persist_local_order(
+        self,
+        *,
+        validated_data,
+        request,
+        idempotency_key,
+        request_id,
+        token,
+        orange_response,
+    ):
+        order = DiagnosticOrder.objects.create(
+            request_id=request_id,
+            token=token,
+            status=DiagnosticOrderStatus.ORDER_CREATED,
+            address=validated_data["address"],
+            city=validated_data["city"],
+            pincode=validated_data["pincode"],
+            slot_datetime=validated_data["slot_datetime"],
+            notes=validated_data.get("notes", ""),
+            total_price=validated_data["total_price"],
+            tat_in_hours=validated_data["tat_in_hours"],
+            created_by=request.user if request.user.is_authenticated else None,
+            idempotency_key=idempotency_key,
+            raw_create_response=orange_response,
+        )
 
-            order = DiagnosticOrder.objects.create(
-                request_id=request_id,
-                token=token,
-                status=DiagnosticOrderStatus.ORDER_CREATED,
-                address=validated_data["address"],
-                city=validated_data["city"],
-                pincode=validated_data["pincode"],
-                slot_datetime=validated_data["slot_datetime"],
-                notes=validated_data.get("notes", ""),
-                total_price=validated_data["total_price"],
-                tat_in_hours=validated_data["tat_in_hours"],
-                created_by=request.user if request.user.is_authenticated else None,
-                idempotency_key=idempotency_key,
-                raw_create_response=orange_response,
+        for customer in validated_data["resolved_customers"]:
+            order_customer = DiagnosticOrderCustomer.objects.create(
+                order=order,
+                customer_profile=customer["customer_profile"],
+                name=customer["name"],
+                gender=customer["gender"],
+                age=customer["age"],
+                phone=customer["phone"],
+                customer_total=customer["customer_total"],
+            )
+            DiagnosticOrderLine.objects.bulk_create(
+                [
+                    DiagnosticOrderLine(
+                        order_customer=order_customer,
+                        category=line["category"],
+                        diagnostic_test_id=line["diagnostic_test_id"],
+                        name=line["name"],
+                        price=line["price"],
+                    )
+                    for line in customer["line_snapshots"]
+                ]
             )
 
-            for customer in validated_data["resolved_customers"]:
-                order_customer = DiagnosticOrderCustomer.objects.create(
-                    order=order,
-                    customer_profile=customer["customer_profile"],
-                    name=customer["name"],
-                    gender=customer["gender"],
-                    age=customer["age"],
-                    phone=customer["phone"],
-                    customer_total=customer["customer_total"],
-                )
-                DiagnosticOrderLine.objects.bulk_create(
-                    [
-                        DiagnosticOrderLine(
-                            order_customer=order_customer,
-                            category=line["category"],
-                            diagnostic_test_id=line["diagnostic_test_id"],
-                            name=line["name"],
-                            price=line["price"],
-                        )
-                        for line in customer["line_snapshots"]
-                    ]
-                )
-
-            bump_summary_orders()
-            return order
+        bump_summary_orders()
+        return order
 
 
 class OrderListItemSerializer(BaseSerializer):

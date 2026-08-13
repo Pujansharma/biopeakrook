@@ -8,7 +8,6 @@ from diagnostics_orders.models import (
     DiagnosticsOrdersSummary,
 )
 from diagnostics_orders.utils.constants import TERMINAL_ORDER_STATUSES
-from diagnostics_orders.utils.helpers import calculate_age, profile_gender, profile_label
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.utils.constants import PreConsultationSessionStatus
 
@@ -94,20 +93,6 @@ def get_default_address_text(customer_profile):
         default_address.pincode,
     ]
     return ", ".join(part for part in parts if part)
-
-
-def serialize_eligible_customer(customer_profile):
-    user = customer_profile.customer.user
-    default_address = get_default_address(customer_profile)
-    return {
-        "name": profile_label(customer_profile),
-        "phone": str(user.phone) if user.phone else "",
-        "user_id": user.id,
-        "age": calculate_age(customer_profile.date_of_birth),
-        "gender": profile_gender(customer_profile),
-        "address": get_default_address_text(customer_profile),
-        "pincode": default_address.pincode if default_address else "",
-    }
 
 
 def get_catalog_items_for_city(city, search=""):

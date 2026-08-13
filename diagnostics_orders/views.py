@@ -3,7 +3,6 @@ from datetime import timedelta
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
-from rest_framework.response import Response
 
 from accounts.customers.models import CustomerProfile
 from accounts.utils.permissions import DiagnosticsOrdersFeaturePermission, IsAdminUser
@@ -32,7 +31,6 @@ from diagnostics_orders.utils.constants import (
     CollectionDateFilter,
     TERMINAL_ORDER_STATUSES,
 )
-from diagnostics_orders.utils.db import serialize_eligible_customer
 from diagnostics_orders.utils.helpers import resolve_city_from_pincode
 from pre_consultation.utils.constants import PreConsultationSessionStatus
 
@@ -87,16 +85,6 @@ class EligibleCustomersListView(EligibleCustomersViewMeta, BaseListAPIView):
 
     def get_queryset(self):
         return self.get_eligible_customer_profile_queryset()
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        profiles = page if page is not None else list(queryset)
-        data = [serialize_eligible_customer(profile) for profile in profiles]
-        serializer = self.get_serializer(data, many=True)
-        if page is not None:
-            return self.get_paginated_response(serializer.data)
-        return Response(serializer.data)
 
 
 class CheckTimeslotsView(BaseGenericAPIView):
