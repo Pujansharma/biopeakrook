@@ -51,7 +51,7 @@ def profile_gender(customer_profile):
     gender_value = customer_profile.gender
     if not gender_value:
         return None
-    return Gender.MAPPING.get(gender_value, customer_profile.get_gender_display()).lower()
+    return Gender.MAPPING.get(gender_value, customer_profile.get_gender_display())
 
 
 def orange_catalog_id(value):
@@ -97,7 +97,6 @@ def build_orange_create_payload(address, notes, slot_datetime, customers):
 
 def transform_serviceability_response(response_payload, status_code):
     status_text = ""
-    print(f"response_payload: {response_payload} status_code: {status_code}")
     if isinstance(response_payload, dict):
         status_text = str(response_payload.get("status") or "")
 

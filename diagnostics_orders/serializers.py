@@ -18,6 +18,7 @@ from diagnostics_orders.utils.constants import (
     CatalogCategory,
     DiagnosticCity,
     DiagnosticOrderStatus,
+    TERMINAL_ORDER_STATUSES,
 )
 from diagnostics_orders.utils.db import (
     bump_summary_cancelled,
@@ -289,7 +290,6 @@ class CreateOrderSerializer(BaseSerializer):
         )
         return attrs
 
-    @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
         idempotency_key = validated_data.get("idempotency_key") or None
@@ -306,7 +306,6 @@ class CreateOrderSerializer(BaseSerializer):
             slot_datetime=validated_data["slot_datetime"].strftime("%Y-%m-%dT%H:%M:%S"),
             customers=validated_data["resolved_customers"],
         )
-        print("orange_payload", orange_payload)
         try:
             status_code, orange_response = orange_labs_sdk.create_order(orange_payload)
         except ValueError as exc:
@@ -334,47 +333,55 @@ class CreateOrderSerializer(BaseSerializer):
         if not request_id or not token:
             bad_request("Orange Labs response missing request_id or token")
 
-        order = DiagnosticOrder.objects.create(
-            request_id=request_id,
-            token=token,
-            status=DiagnosticOrderStatus.ORDER_CREATED,
-            address=validated_data["address"],
-            city=validated_data["city"],
-            pincode=validated_data["pincode"],
-            slot_datetime=validated_data["slot_datetime"],
-            notes=validated_data.get("notes", ""),
-            total_price=validated_data["total_price"],
-            tat_in_hours=validated_data["tat_in_hours"],
-            created_by=request.user if request.user.is_authenticated else None,
-            idempotency_key=idempotency_key,
-            raw_create_response=orange_response,
-        )
+        with transaction.atomic():
+            if idempotency_key:
+                existing = DiagnosticOrder.objects.filter(
+                    idempotency_key=idempotency_key
+                ).first()
+                if existing:
+                    return existing
 
-        for customer in validated_data["resolved_customers"]:
-            order_customer = DiagnosticOrderCustomer.objects.create(
-                order=order,
-                customer_profile=customer["customer_profile"],
-                name=customer["name"],
-                gender=customer["gender"],
-                age=customer["age"],
-                phone=customer["phone"],
-                customer_total=customer["customer_total"],
-            )
-            DiagnosticOrderLine.objects.bulk_create(
-                [
-                    DiagnosticOrderLine(
-                        order_customer=order_customer,
-                        category=line["category"],
-                        diagnostic_test_id=line["diagnostic_test_id"],
-                        name=line["name"],
-                        price=line["price"],
-                    )
-                    for line in customer["line_snapshots"]
-                ]
+            order = DiagnosticOrder.objects.create(
+                request_id=request_id,
+                token=token,
+                status=DiagnosticOrderStatus.ORDER_CREATED,
+                address=validated_data["address"],
+                city=validated_data["city"],
+                pincode=validated_data["pincode"],
+                slot_datetime=validated_data["slot_datetime"],
+                notes=validated_data.get("notes", ""),
+                total_price=validated_data["total_price"],
+                tat_in_hours=validated_data["tat_in_hours"],
+                created_by=request.user if request.user.is_authenticated else None,
+                idempotency_key=idempotency_key,
+                raw_create_response=orange_response,
             )
 
-        bump_summary_orders()
-        return order
+            for customer in validated_data["resolved_customers"]:
+                order_customer = DiagnosticOrderCustomer.objects.create(
+                    order=order,
+                    customer_profile=customer["customer_profile"],
+                    name=customer["name"],
+                    gender=customer["gender"],
+                    age=customer["age"],
+                    phone=customer["phone"],
+                    customer_total=customer["customer_total"],
+                )
+                DiagnosticOrderLine.objects.bulk_create(
+                    [
+                        DiagnosticOrderLine(
+                            order_customer=order_customer,
+                            category=line["category"],
+                            diagnostic_test_id=line["diagnostic_test_id"],
+                            name=line["name"],
+                            price=line["price"],
+                        )
+                        for line in customer["line_snapshots"]
+                    ]
+                )
+
+            bump_summary_orders()
+            return order
 
 
 class OrderListItemSerializer(BaseSerializer):
@@ -428,8 +435,13 @@ class RescheduleHistorySerializer(BaseSerializer):
     new_slot_datetime = serializers.DateTimeField()
     reason = serializers.CharField()
     explanation = serializers.CharField()
-    rescheduled_by = serializers.UUIDField(source="rescheduled_by_id", allow_null=True)
+    rescheduled_by = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField()
+
+    def get_rescheduled_by(self, history):
+        if history.rescheduled_by is None:
+            return None
+        return history.rescheduled_by.pk
 
 
 class OrderDetailSerializer(BaseSerializer):
@@ -449,6 +461,14 @@ class RescheduleOrderSerializer(BaseSerializer):
     updated_slot_datetime = serializers.DateTimeField()
     reason = serializers.CharField()
     explanation = serializers.CharField()
+
+    def validate(self, attrs):
+        order = self.context["order"]
+        if order.status in TERMINAL_ORDER_STATUSES:
+            raise serializers.ValidationError(
+                "Cannot reschedule a completed or cancelled order"
+            )
+        return attrs
 
     def save(self, **kwargs):
         order = self.context["order"]
@@ -506,6 +526,14 @@ class RescheduleOrderSerializer(BaseSerializer):
 class CancelOrderSerializer(BaseSerializer):
     reason = serializers.CharField()
     explanation = serializers.CharField()
+
+    def validate(self, attrs):
+        order = self.context["order"]
+        if order.status in TERMINAL_ORDER_STATUSES:
+            raise serializers.ValidationError(
+                "Cannot cancel a completed or cancelled order"
+            )
+        return attrs
 
     def save(self, **kwargs):
         order = self.context["order"]

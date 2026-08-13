@@ -1,23 +1,13 @@
-from datetime import timedelta
-
 from django.db import transaction
-from django.db.models import F, Prefetch, Q
-from django.utils import timezone
+from django.db.models import F, Prefetch
 
-from accounts.customers.models import CustomerProfile
 from diagnostics_orders.models import (
     CatalogCityPrice,
     CatalogItem,
-    DiagnosticOrder,
     DiagnosticOrderCustomer,
-    DiagnosticOrderLine,
-    DiagnosticOrderRescheduleHistory,
     DiagnosticsOrdersSummary,
 )
-from diagnostics_orders.utils.constants import (
-    CollectionDateFilter,
-    TERMINAL_ORDER_STATUSES,
-)
+from diagnostics_orders.utils.constants import TERMINAL_ORDER_STATUSES
 from diagnostics_orders.utils.helpers import calculate_age, profile_gender, profile_label
 from pre_consultation.models import PreConsultationSession
 from pre_consultation.utils.constants import PreConsultationSessionStatus
@@ -64,49 +54,14 @@ def customer_profile_has_completed_pre_consultation(customer_profile):
 
 
 def customer_profile_has_active_diagnostic_order(customer_profile):
-    return DiagnosticOrderCustomer.objects.filter(
-        customer_profile=customer_profile,
-        order__is_active=True,
-    ).exclude(order__status__in=TERMINAL_ORDER_STATUSES).exists()
-
-
-def get_eligible_customer_profile_queryset(search="", center_id=None):
-    active_order_profile_ids = DiagnosticOrderCustomer.objects.filter(
-        order__is_active=True,
-    ).exclude(order__status__in=TERMINAL_ORDER_STATUSES).values_list(
-        "customer_profile_id", flat=True
-    )
-
-    queryset = (
-        CustomerProfile.objects.filter(
-            is_active=True,
-            customer__user__pre_consultation_session__status=(
-                PreConsultationSessionStatus.COMPLETED
-            ),
-            programs__is_active=True,
-            programs__cancelled_at__isnull=True,
-            center_assignments__is_active=True,
+    return (
+        DiagnosticOrderCustomer.objects.filter(
+            customer_profile=customer_profile,
+            order__is_active=True,
         )
-        .exclude(id__in=active_order_profile_ids)
-        .select_related("customer__user")
-        .prefetch_related("addresses")
-        .order_by("-created_at")
-        .distinct()
+        .exclude(order__status__in=TERMINAL_ORDER_STATUSES)
+        .exists()
     )
-
-    if center_id:
-        queryset = queryset.filter(center_assignments__center_id=center_id)
-
-    if not search:
-        return queryset
-
-    search_query = Q()
-    search_query |= Q(first_name__istartswith=search)
-    search_query |= Q(last_name__istartswith=search)
-    search_query |= Q(first_name__icontains=search)
-    search_query |= Q(last_name__icontains=search)
-    search_query |= Q(customer__user__phone__icontains=search)
-    return queryset.filter(search_query)
 
 
 def get_default_address(customer_profile):
@@ -207,62 +162,3 @@ def create_catalog_item(
                 ]
             )
     return catalog_item
-
-
-def get_orders_queryset(
-    search="",
-    status=None,
-    cities=None,
-    collection_date=None,
-):
-    queryset = (
-        DiagnosticOrder.objects.filter(is_active=True)
-        .prefetch_related("customers")
-        .order_by("-created_at")
-    )
-    if status:
-        queryset = queryset.filter(status=status)
-    if cities:
-        queryset = queryset.filter(city__in=cities)
-    if search:
-        search_query = Q(request_id__icontains=search)
-        search_query |= Q(address__icontains=search)
-        search_query |= Q(customers__name__icontains=search)
-        queryset = queryset.filter(search_query).distinct()
-
-    if collection_date and collection_date != CollectionDateFilter.ALL:
-        now = timezone.localdate()
-        if collection_date == CollectionDateFilter.TODAY:
-            queryset = queryset.filter(slot_datetime__date=now)
-        elif collection_date == CollectionDateFilter.TOMORROW:
-            queryset = queryset.filter(slot_datetime__date=now + timedelta(days=1))
-        elif collection_date == CollectionDateFilter.PAST_7_DAYS:
-            queryset = queryset.filter(
-                slot_datetime__date__gte=now - timedelta(days=7),
-                slot_datetime__date__lte=now,
-            )
-        elif collection_date == CollectionDateFilter.UPCOMING:
-            queryset = queryset.filter(slot_datetime__date__gt=now)
-    return queryset
-
-
-def get_order_detail_queryset():
-    return DiagnosticOrder.objects.filter(is_active=True).prefetch_related(
-        Prefetch(
-            "customers",
-            queryset=DiagnosticOrderCustomer.objects.prefetch_related(
-                Prefetch(
-                    "lines",
-                    queryset=DiagnosticOrderLine.objects.all(),
-                )
-            ),
-        ),
-        Prefetch(
-            "reschedule_history",
-            queryset=DiagnosticOrderRescheduleHistory.objects.all(),
-        ),
-    )
-
-
-def get_order_by_request_id(request_id):
-    return get_order_detail_queryset().get(request_id=request_id)
