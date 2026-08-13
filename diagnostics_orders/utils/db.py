@@ -11,6 +11,7 @@ from diagnostics_orders.models import (
     DiagnosticOrder,
     DiagnosticOrderCustomer,
     DiagnosticOrderLine,
+    DiagnosticOrderRescheduleHistory,
     DiagnosticsOrdersSummary,
 )
 from diagnostics_orders.utils.constants import (
@@ -255,7 +256,11 @@ def get_order_detail_queryset():
                     queryset=DiagnosticOrderLine.objects.all(),
                 )
             ),
-        )
+        ),
+        Prefetch(
+            "reschedule_history",
+            queryset=DiagnosticOrderRescheduleHistory.objects.all(),
+        ),
     )
 
 

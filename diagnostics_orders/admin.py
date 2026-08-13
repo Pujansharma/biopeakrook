@@ -7,6 +7,7 @@ from diagnostics_orders.models import (
     DiagnosticOrderCustomer,
     DiagnosticOrderEvent,
     DiagnosticOrderLine,
+    DiagnosticOrderRescheduleHistory,
     DiagnosticsOrdersSummary,
 )
 
@@ -72,6 +73,20 @@ class DiagnosticOrderLineAdmin(admin.ModelAdmin):
 class DiagnosticOrderEventAdmin(admin.ModelAdmin):
     list_display = ("order", "event_type", "orange_event_id", "created_at")
     search_fields = ("order__request_id", "event_type", "orange_event_id")
+
+
+@admin.register(DiagnosticOrderRescheduleHistory)
+class DiagnosticOrderRescheduleHistoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "order",
+        "previous_slot_datetime",
+        "new_slot_datetime",
+        "reason",
+        "rescheduled_by",
+        "created_at",
+    )
+    search_fields = ("order__request_id", "reason")
+    raw_id_fields = ("order", "rescheduled_by")
 
 
 @admin.register(DiagnosticsOrdersSummary)

@@ -147,7 +147,8 @@ class RescheduleOrderView(BaseGenericAPIView):
 
     def patch(self, request, request_id, *args, **kwargs):
         order = _get_order_or_404(request_id)
-        serializer = self.get_serializer(data=request.data, context={"order": order})
+        context = {**self.get_serializer_context(), "order": order}
+        serializer = self.get_serializer(data=request.data, context=context)
         serializer.is_valid(raise_exception=True)
         data = serializer.save()
         return self.send_response("Order rescheduled.", data=data)

@@ -167,6 +167,33 @@ class DiagnosticOrderEvent(BaseUUIDModel):
         return f"{self.order_id}:{self.event_type}"
 
 
+class DiagnosticOrderRescheduleHistory(BaseUUIDModel):
+    order = models.ForeignKey(
+        DiagnosticOrder,
+        on_delete=models.CASCADE,
+        related_name="reschedule_history",
+    )
+    previous_slot_datetime = models.DateTimeField()
+    new_slot_datetime = models.DateTimeField()
+    reason = models.CharField(max_length=255)
+    explanation = models.TextField(blank=True, default="")
+    rescheduled_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_order_reschedules",
+    )
+
+    class Meta:
+        db_table = "diagnostics_orders_order_reschedule_history"
+        ordering = ["-created_at"]
+        verbose_name_plural = "Diagnostic Order Reschedule Histories"
+
+    def __str__(self):
+        return f"{self.order_id}:{self.previous_slot_datetime}:{self.new_slot_datetime}"
+
+
 class DiagnosticsOrdersSummary(models.Model):
     id = models.SmallIntegerField(primary_key=True, default=1, editable=False)
     total_orders = models.PositiveIntegerField(default=0)

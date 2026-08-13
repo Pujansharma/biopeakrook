@@ -12,6 +12,7 @@ from diagnostics_orders.models import (
     DiagnosticOrder,
     DiagnosticOrderCustomer,
     DiagnosticOrderLine,
+    DiagnosticOrderRescheduleHistory,
 )
 from diagnostics_orders.utils.constants import (
     CatalogCategory,
@@ -422,6 +423,15 @@ class OrderCustomerDetailSerializer(BaseSerializer):
         return OrderLineSerializer(lines, many=True).data
 
 
+class RescheduleHistorySerializer(BaseSerializer):
+    previous_slot_datetime = serializers.DateTimeField()
+    new_slot_datetime = serializers.DateTimeField()
+    reason = serializers.CharField()
+    explanation = serializers.CharField()
+    rescheduled_by = serializers.UUIDField(source="rescheduled_by_id", allow_null=True)
+    created_at = serializers.DateTimeField()
+
+
 class OrderDetailSerializer(BaseSerializer):
     address = serializers.CharField()
     request_id = serializers.CharField()
@@ -432,6 +442,7 @@ class OrderDetailSerializer(BaseSerializer):
     status = serializers.CharField()
     reports = serializers.JSONField()
     customers = OrderCustomerDetailSerializer(many=True)
+    reschedule_history = RescheduleHistorySerializer(many=True)
 
 
 class RescheduleOrderSerializer(BaseSerializer):
@@ -441,15 +452,19 @@ class RescheduleOrderSerializer(BaseSerializer):
 
     def save(self, **kwargs):
         order = self.context["order"]
+        previous_slot_datetime = order.slot_datetime
+        new_slot_datetime = self.validated_data["updated_slot_datetime"]
+        reason = self.validated_data["reason"]
+        explanation = self.validated_data["explanation"]
+        request = self.context.get("request")
+        rescheduled_by = request.user if request is not None else None
         try:
             status_code, response = orange_labs_sdk.reschedule_order(
                 request_id=order.request_id,
                 token=order.token,
-                requested_slot_time=self.validated_data["updated_slot_datetime"].strftime(
-                    "%Y-%m-%dT%H:%M:%S"
-                ),
-                reason=self.validated_data["reason"],
-                explanation=self.validated_data["explanation"],
+                requested_slot_time=new_slot_datetime.strftime("%Y-%m-%dT%H:%M:%S"),
+                reason=reason,
+                explanation=explanation,
             )
         except ValueError as exc:
             bad_request(str(exc))
@@ -461,18 +476,27 @@ class RescheduleOrderSerializer(BaseSerializer):
             )
             bad_request(str(detail))
 
-        order.slot_datetime = self.validated_data["updated_slot_datetime"]
-        order.last_reschedule_reason = self.validated_data["reason"]
-        order.last_reschedule_explanation = self.validated_data["explanation"]
-        order.save(
-            update_fields=[
-                "slot_datetime",
-                "last_reschedule_reason",
-                "last_reschedule_explanation",
-                "updated_at",
-            ]
-        )
-        bump_summary_rescheduled()
+        with transaction.atomic():
+            DiagnosticOrderRescheduleHistory.objects.create(
+                order=order,
+                previous_slot_datetime=previous_slot_datetime,
+                new_slot_datetime=new_slot_datetime,
+                reason=reason,
+                explanation=explanation,
+                rescheduled_by=rescheduled_by,
+            )
+            order.slot_datetime = new_slot_datetime
+            order.last_reschedule_reason = reason
+            order.last_reschedule_explanation = explanation
+            order.save(
+                update_fields=[
+                    "slot_datetime",
+                    "last_reschedule_reason",
+                    "last_reschedule_explanation",
+                    "updated_at",
+                ]
+            )
+            bump_summary_rescheduled()
         status_value = response.get("status")
         if isinstance(status_value, dict):
             status_value = status_value.get("status")
