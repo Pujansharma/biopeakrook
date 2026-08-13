@@ -11,6 +11,9 @@
 - Prefer explicit `BaseModelSerializer` contract with `Meta.model` + declared fields over overriding `to_representation()` to delegate to another serializer.
 - Keep related-object response fields nested; don't flatten their attributes to top level.
 - Don't repeat explicit `read_only=True` serializer fields in `Meta.read_only_fields`.
+- Keep related-object response fields nested; don't duplicate their attributes as flattened top-level fields.
+- Don't repeat explicitly declared `read_only=True` serializer fields in `Meta.read_only_fields`.
+- When user says "update postman collection", always sync changes to Postman cloud (`Biopeak-Nexus` collection uid `56091494-351b66f2-736b-4338-b684-ee520aa19e94`) via `POSTMAN_API_KEY`, not just the local `docs/postman/` JSON files.
 
 ---
 
@@ -41,6 +44,8 @@
 | Order reschedule history (2026-08-14) | `DiagnosticOrderRescheduleHistory` rows written after successful Orange reschedule (old/new slot, reason, explanation, `rescheduled_by`). Keep denormalized `last_reschedule_*` on order + `total_rescheduled` summary. Nested `reschedule_history` on `GET /diagnostics_orders/order/<request_id>/` only — no dedicated history endpoint. Postman local + cloud `diagnostics_orders` docs/example updated. User generates migration. |
 | Diagnostics `order_link` (2026-08-11) | ~~Dropped~~ `order_link` + `raw_create_request` removed from `DiagnosticOrder`. Keep `raw_create_response`. Create/detail APIs no longer expose `order_link`. User generates migration. |
 | Orange create payload shape (2026-08-11) | Create-order body: plain address; gender via `Gender.MAPPING` on profile (`Male`/`Female`/`Other`); `age` + `test_id`/`package_id` as strings per Orange OpenAPI. Serviceability query encoding unchanged. |
+| Leads API v2 (2026-08-10) | Admin writes on `/leads/v2/` (POST create + shell, PATCH update + shell sync). v1 GET list/detail, POST, PATCH return 400. v1 DELETE still on `/leads/{id}/`. Postman repo: `docs/postman/collections/leads.postman_collection.json`. Postman cloud folder `leads` in `Biopeak-Nexus` collection. Bypass login (`/auth/login-phone-direct/`) = User lookup only, no shell provision. No backfill for legacy leads — v2 shell provisioning applies to new creates only. |
+| Emergency contact dropped (2026-08-07) | `CustomerProfile.emergency_contact_name` / `emergency_contact_phone` removed. Pre-consultation patient baseline layer no longer reads/writes those fields. |
 
 ---
 

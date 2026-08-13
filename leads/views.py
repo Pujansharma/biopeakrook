@@ -8,6 +8,7 @@ from core.utils.views import (
     BaseCreateAPIView,
     BaseGenericAPIView,
     BaseListCreateAPIView,
+    BaseRetrieveUpdateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
 )
 from leads.models import Lead
@@ -15,6 +16,14 @@ from leads.serializers import (
     LeadConvertClientSerializer,
     LeadDetailSerializer,
     LeadListCreateSerializer,
+    LeadV2DetailSerializer,
+    LeadV2ListCreateSerializer,
+)
+from leads.utils.constants import (
+    LEAD_V1_CREATE_DEPRECATED,
+    LEAD_V1_GET_DEPRECATED,
+    LEAD_V1_LIST_DEPRECATED,
+    LEAD_V1_UPDATE_DEPRECATED,
 )
 from leads.utils.db import (
     decrement_leads_assigned,
@@ -24,10 +33,7 @@ from leads.utils.db import (
 )
 
 
-class LeadsView(BaseListCreateAPIView):
-    permission_classes = [IsAdminUser | IsAssociateUser]
-    serializer_class = LeadListCreateSerializer
-
+class LeadListViewMeta(BaseGenericAPIView):
     def get_queryset(self) -> object:
         filter_kwargs = {}
         search = Q()
@@ -48,8 +54,8 @@ class LeadsView(BaseListCreateAPIView):
             filter_kwargs["is_joined"] = bool(int(joined_query))
 
         if profile_query in ["0", "1"]:
-            _status = bool(int(profile_query))
-            filter_kwargs['customer_profile__isnull'] = not _status
+            has_customer_profile = bool(int(profile_query))
+            filter_kwargs["customer_profile__isnull"] = not has_customer_profile
 
         if search_query:
             search |= Q(first_name__istartswith=search_query)
@@ -79,15 +85,10 @@ class LeadsView(BaseListCreateAPIView):
             .filter(search, **filter_kwargs)
         )
 
-    def perform_create(self, serializer: LeadListCreateSerializer) -> None:
-        serializer.save(created_by=self.request.user)
 
-
-class LeadDetailView(BaseRetrieveUpdateDestroyAPIView):
-    serializer_class = LeadDetailSerializer
-    permission_classes = [IsAdminUser | IsAssociateUser]
-
-    def get_queryset(self) -> object:
+class LeadDetailViewMeta(BaseGenericAPIView):
+    @classmethod
+    def get_lead_detail_queryset(cls):
         return Lead.objects.select_related(
             "home_center",
             "customer_profile",
@@ -96,6 +97,54 @@ class LeadDetailView(BaseRetrieveUpdateDestroyAPIView):
             "created_by",
             "updated_by",
         )
+
+    def get_queryset(self) -> object:
+        return self.get_lead_detail_queryset()
+
+
+class LeadsView(LeadListViewMeta, BaseListCreateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = LeadListCreateSerializer
+
+    def get(self, request, *args, **kwargs):
+        self.raise_bad_request(LEAD_V1_LIST_DEPRECATED)
+
+    def post(self, request, *args, **kwargs):
+        self.raise_bad_request(LEAD_V1_CREATE_DEPRECATED)
+
+
+class LeadsV2View(LeadListViewMeta, BaseListCreateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_serializer_class(self) -> type:
+        if self.request.method == "POST":
+            return LeadV2ListCreateSerializer
+        return LeadListCreateSerializer
+
+    def perform_create(self, serializer: LeadV2ListCreateSerializer) -> None:
+        serializer.save(created_by=self.request.user)
+
+
+class LeadV2DetailView(LeadDetailViewMeta, BaseRetrieveUpdateAPIView):
+    serializer_class = LeadV2DetailSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def perform_update(self, serializer: LeadV2DetailSerializer) -> None:
+        serializer.save(updated_by=self.request.user)
+
+
+class LeadDetailView(LeadDetailViewMeta, BaseRetrieveUpdateDestroyAPIView):
+    serializer_class = LeadDetailSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        self.raise_bad_request(LEAD_V1_GET_DEPRECATED)
+
+    def patch(self, request, *args, **kwargs):
+        self.raise_bad_request(LEAD_V1_UPDATE_DEPRECATED)
+
+    def put(self, request, *args, **kwargs):
+        self.raise_bad_request(LEAD_V1_UPDATE_DEPRECATED)
 
     def perform_update(self, serializer: LeadDetailSerializer) -> None:
         serializer.save(updated_by=self.request.user)
