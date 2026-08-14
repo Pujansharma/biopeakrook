@@ -47,10 +47,12 @@ INSTALLED_APPS = [
     "programs.vouchers",
     "products",
     "test_kit_inventory",
+    "diagnostics_orders",
     "inventory",
     "webhooks",
     "webhooks.bugspeaks",
     "webhooks.strand_genomics",
+    "webhooks.orange_labs",
     "pre_consultation",
 ]
 

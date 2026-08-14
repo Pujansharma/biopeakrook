@@ -24,6 +24,7 @@ class AssociateRoleFeature:
     APPOINTMENTS = "appointments"
     APPOINTMENT_DATA_SCOPE = "appointment_data_scope"
     PACKAGES = "packages"
+    DIAGNOSTICS_ORDERS = "diagnostics_orders"
 
     CHOICES = (
         (ALL, "All"),
@@ -32,6 +33,7 @@ class AssociateRoleFeature:
         (APPOINTMENTS, "Appointments"),
         (APPOINTMENT_DATA_SCOPE, "Appointment Data Scope"),
         (PACKAGES, "Packages"),
+        (DIAGNOSTICS_ORDERS, "Diagnostics Orders"),
     )
 
 
