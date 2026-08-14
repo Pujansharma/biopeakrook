@@ -22,7 +22,7 @@ from programs.services.utils.constants import ServiceCategory
 
 class AssessmentServiceListView(BaseListCreateAPIView):
     serializer_class = AssessmentServiceSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser | (IsAssociateUser & ReadOnly)]
 
     def get_queryset(self):
         search = Q()

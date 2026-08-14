@@ -381,6 +381,9 @@ class CompositeProgramServicesListView(
         service_category = self.request.query_params.get('category')
         if service_category:
             filter_kwargs['service__service_category'] = service_category
+        assignment_type = self.request.query_params.get("assignment_type")
+        if assignment_type:
+            filter_kwargs["assignment_type"] = assignment_type
         center_identifier = getattr(self.request, 'center_id', None)
         if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
             filter_kwargs["program__in"] = self.get_associate_program_queryset(

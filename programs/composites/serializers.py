@@ -45,6 +45,11 @@ class CompositeTemplateServiceReferenceSerializer(BaseSerializer):
     quantity = serializers.IntegerField(min_value=1, required=False, write_only=True)
 
 
+class CompositeAddOnServiceReferenceSerializer(BaseSerializer):
+    id = serializers.UUIDField(required=True, write_only=True)
+    quantity = serializers.IntegerField(min_value=1, required=False, write_only=True)
+
+
 class CompositePrerequisiteServiceReferenceSerializer(BaseSerializer):
     id = serializers.UUIDField(required=True)
 
@@ -1178,7 +1183,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
         read_only=True,
     )
     composite_program_id = serializers.UUIDField(write_only=True, required=True)
-    add_services = CompositeTemplateServiceReferenceSerializer(
+    add_services = CompositeAddOnServiceReferenceSerializer(
         many=True,
         required=True,
         allow_empty=False,
