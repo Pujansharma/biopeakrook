@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
-from core.utils.models import BaseUUIDModel, BaseModel
+from core.utils.models import BaseModel, BaseUUIDModel
 from programs.composites.utils.constants import CompositeAssessmentType
 from programs.utils.constants import ProgramType, RedemptionType, ServiceAssignment
 from programs.utils.helper import generate_redeemable_code
@@ -92,11 +92,6 @@ class ProgramService(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["program", "service"], name="unique_program_service"
-            ),
-        ]
 
     def __str__(self):
         return f"{self.pk}"

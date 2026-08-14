@@ -638,10 +638,10 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
             validated_data["composite_template"] = composite_template
             validated_data["template_description"] = composite_template.description
             composite_program = super().create(validated_data)
-            service_quantities = {
-                template_service.service.pk: template_service.quantity
+            service_quantities = [
+                template_service.quantity
                 for template_service in template_services
-            }
+            ]
             program_services = [
                 ProgramService(
                     program=program,

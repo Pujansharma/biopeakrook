@@ -15,6 +15,7 @@ from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import (
+    BaseAssociateRBACPermission,
     IsAdminUser,
     IsAssociateUser,
     PackagesPermission,
@@ -344,6 +345,16 @@ class CompositeProgramDetailView(
     serializer_class = CompositeProgramDetailSerializer
     permission_classes = [IsAdminUser | PackagesPermission]
 
+    def get_permissions(self):
+        permission_classes_by_method = {
+            "GET": [IsAdminUser | BaseAssociateRBACPermission],
+        }
+        permission_classes = permission_classes_by_method.get(
+            self.request.method,
+            self.permission_classes,
+        )
+        return [permission_class() for permission_class in permission_classes]
+
     def get_queryset(self):
         filter_kwargs = {}
         center_identifier = getattr(self.request, 'center_id', None)
@@ -361,7 +372,7 @@ class CompositeProgramServicesListView(
     CompositeProgramViewMeta,
 ):
     serializer_class = CompositeProgramServiceSerializer
-    permission_classes = [IsAdminUser | PackagesPermission]
+    permission_classes = [IsAdminUser | BaseAssociateRBACPermission]
 
     def get_queryset(self):
         filter_kwargs = {
@@ -421,7 +432,18 @@ class CompositeProgramCancelView(BaseCreateAPIView, CompositeProgramViewMeta):
 
 class CompositeAddOnView(BaseCreateAPIView, CompositeProgramViewMeta):
     serializer_class = CompositeAddOnSerializer
-    permission_classes = [IsAdminUser | IsAssociateUser]
+    permission_classes = [IsAdminUser | BaseAssociateRBACPermission]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        center_identifier = getattr(self.request, "center_id", None)
+        composite_programs = self.get_composite_program_queryset(center_identifier)
+        if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
+            composite_programs = composite_programs.filter(
+                program__in=self.get_associate_program_queryset(center_identifier)
+            )
+        context["composite_program_queryset"] = composite_programs.distinct()
+        return context
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

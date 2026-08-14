@@ -208,19 +208,23 @@ SERVICE_EXTENSION_CREATORS = {
 
 def create_program_service_extensions(
         program_services: list[ProgramService],
-        service_quantities: dict,
-) -> None:
+        service_quantities: list[int | None],
+):
     services_by_category = {
         service_category: []
         for service_category in SERVICE_EXTENSION_CREATORS
     }
-    for program_service in program_services:
+    for program_service, service_quantity in zip(
+            program_services,
+            service_quantities,
+            strict=True,
+    ):
         services_by_category[
             program_service.service.service_category
         ].append(
             {
                 "program_service": program_service,
-                "quantity": service_quantities.get(program_service.service.pk),
+                "quantity": service_quantity,
             }
         )
     for service_category, extension_creator in SERVICE_EXTENSION_CREATORS.items():
