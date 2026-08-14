@@ -899,46 +899,8 @@ not be submitted through PUT or PATCH.
 
 ### POST Composite Program Add-Ons
 
-#### URL
-
-```text
-<baseURL>/programs/composites/add-ons/
-```
-
-#### Request Payload
-
-```json
-{
-  "composite_program_id": "<composite_program_uuid>",
-  "add_services": [
-    {
-      "id": "<service_uuid>",
-      "quantity": "<positive_integer_required_for_therapy>"
-    }
-  ]
-}
-```
-
-`add_services` must be non-empty. Services must be active and must not already
-belong to the composite program. `quantity` is required for therapy services.
-
-#### Response Structure
-
-The response data uses the composite-program response structure documented
-above. The backend returns refreshed values for:
-
-```json
-{
-  "services_count": "<integer>",
-  "add_ons_count": "<integer>",
-  "assessment_services_count": "<integer>",
-  "therapy_services_count": "<integer>",
-  "consultation_services_count": "<integer>"
-}
-```
-
-After success, replace the local composite-program object with the response
-data. Do not increment or recompute any count in frontend state.
+The repeatable add-on workflow and current API contract are documented in
+[Composite Program Add-Ons — Frontend ePRD](composite-program-add-ons-frontend-eprd.md).
 
 ### GET Composite Program Services
 

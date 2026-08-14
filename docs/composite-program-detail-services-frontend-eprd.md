@@ -15,6 +15,9 @@ This ePRD covers only these backend routes:
 | `GET` | Retrieve the complete paginated service list | `/programs/composites/programs/:program_id/services/` |
 | `POST` | Cancel the composite program | `/programs/composites/programs/:program_id/cancel/` |
 
+Adding repeatable assessment and therapy occurrences is specified separately
+in [Composite Program Add-Ons — Frontend ePRD](composite-program-add-ons-frontend-eprd.md).
+
 `program_id` is the composite program UUID. It is also the UUID of the linked
 base program because the composite program uses the program relation as its
 primary key.
@@ -33,9 +36,10 @@ Associate requests also require:
 X-Center-ID: <center_uuid>
 ```
 
-An associate must have an active assignment to that center and the `packages`
-feature, or the all-features role. The requested program must be owned by or
-redeemable at the selected center.
+An associate must have an active assignment to that center. Detail GET and
+service-list GET access do not require the `packages` feature. PUT, PATCH, and
+cancellation retain the `packages` feature or all-features requirement. The
+requested program must be owned by or redeemable at the selected center.
 
 Administrators can access the detail, update, and service-list operations
 without `X-Center-ID`. However, `can_redeem` is center-contextual. The frontend
@@ -343,7 +347,7 @@ Do not merge computed counters or nested objects manually.
 ### 6.1 Request
 
 ```http
-GET /programs/composites/programs/:program_id/services/?page=1&limit=10&category=therapy
+GET /programs/composites/programs/:program_id/services/?page=1&limit=10&category=therapy&assignment_type=add_on
 Authorization: Bearer <access_token>
 X-Center-ID: <center_uuid>
 ```
@@ -361,6 +365,7 @@ null
 | `page` | No | Positive integer | Requested page; defaults to the first page |
 | `limit` | No | Integer up to `50` | Page size; defaults to `10` and is capped at `50` |
 | `category` | No | `therapy`, `assessment`, `consultation` | Exact service-category filter |
+| `assignment_type` | No | `add_on`, `standalone` | Exact ProgramService assignment-type filter |
 
 The backend currently does not validate `category` against the documented
 enum. Any other value normally produces an empty result. The frontend must send
@@ -775,14 +780,15 @@ interface CancelResponse {
 Maintain these state groups independently:
 
 - detail data, loading, error, and update state;
-- services data, count, pagination, category, loading, and error state;
+- services data, count, pagination, category, assignment type, loading, and
+  error state;
 - selected center context;
 - edit form dirty state;
 - cancellation confirmation, submission, and error state.
 
-Changing page, limit, category, program ID, or center context must invalidate
-and refetch the affected service query. Changing program ID or center context
-must also refetch detail data.
+Changing page, limit, category, assignment type, program ID, or center context
+must invalidate and refetch the affected service query. Changing program ID or
+center context must also refetch detail data.
 
 Do not use preview services as page-one service-list data because the preview
 has no pagination metadata and is limited independently.
@@ -797,6 +803,8 @@ response.
 
 - Show `uid` as the human-facing program reference and `id` only where a UUID is
   operationally useful.
+- Provide the **Add add-ons** action described in the standalone add-ons ePRD
+  when the program is active and unexpired.
 - Show the client, owning center, template, expiry, active state, pricing mode,
   and creation metadata.
 - Show cancellation metadata when it is present.
@@ -807,6 +815,8 @@ response.
 
 - Provide All, Therapy, Assessment, and Consultation filters.
 - Send category codes, never display labels, to the API.
+- Provide All, Add On, and Standalone assignment filters and send only
+  `assignment_type_code` values.
 - Show service name, category, assignment type, session usage, status, and
   redemption eligibility.
 - Distinguish `sessions_count: 0` as Unlimited for therapy services.
@@ -851,6 +861,8 @@ response.
 - The detail service preview is never treated as the complete service list.
 - The services screen supports `page`, `limit`, and the three documented
   category codes.
+- The services screen supports `assignment_type=add_on|standalone` without
+  changing the existing response structure.
 - Empty service results render a valid empty state.
 - The frontend displays all server-maintained counters without recalculating
   them.
