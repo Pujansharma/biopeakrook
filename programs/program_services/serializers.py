@@ -212,56 +212,9 @@ class AssessmentServiceResultSerializer(BaseModelSerializer):
         return service_result
 
     def update(self, instance: ServiceResult, validated_data: dict):
-        product_was_provided = "product_id" in validated_data
-        document_type_was_provided = "document_type" in validated_data
-        product_identifier = validated_data.pop("product_id", None)
-
-        with transaction.atomic():
-            service_result = (
-                ServiceResult.objects.select_related(
-                    "program_service__service",
-                    "product",
-                    "product__provider",
-                )
-                .filter(pk=instance.pk)
-                .first()
-            )
-            product = service_result.product
-            if product_was_provided:
-                product = self.get_assigned_product(
-                    service_result.program_service,
-                    product_identifier,
-                )
-            document_type = validated_data.get(
-                "document_type",
-                service_result.document_type,
-            )
-            current_product_identifier = (
-                service_result.product.pk if service_result.product else None
-            )
-            product_changed = (
-                    product_was_provided and product.pk != current_product_identifier
-            )
-            document_type_changed = (
-                    document_type_was_provided
-                    and document_type != service_result.document_type
-            )
-            metadata_changed = product_changed or document_type_changed
-            if metadata_changed and service_result.documents.exists():
-                raise serializers.ValidationError(
-                    "Product and document type cannot be changed after documents "
-                    "have been uploaded."
-                )
-            if product_was_provided or document_type_was_provided:
-                if not product:
-                    raise serializers.ValidationError(
-                        {"product_id": "A product is required for the result."}
-                    )
-                self._validate_document_type(product, document_type)
-            if product_was_provided:
-                self.set_product_metadata(validated_data, product)
-            service_result = super().update(service_result, validated_data)
-        return service_result
+        validated_data.pop('product_id', None)
+        validated_data.pop("document_type", None)
+        return super().update(instance, validated_data)
 
 
 class AssessmentServiceDocumentSerializer(BaseModelSerializer):
@@ -362,8 +315,8 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
                 .first()
             )
             if therapy_program_service and (
-                therapy_program_service.sessions_used
-                >= therapy_program_service.sessions_count
+                    therapy_program_service.sessions_used
+                    >= therapy_program_service.sessions_count
             ):
                 raise serializers.ValidationError(
                     "Service cannot be cancelled since it is already used"
