@@ -92,7 +92,7 @@ class OrangeLabsWebhookView(BaseCreateAPIView):
             signature_header=signature_header,
             secret=secret,
         ):
-            self.raise_permission_denied("Invalid Orange Labs webhook signature")
+            self.raise_permission_denied("Invalid Biopeak Health webhook signature")
 
         orange_event_id = request.headers.get("X-OH-Event-Id") or None
         serializer = self.get_serializer(
