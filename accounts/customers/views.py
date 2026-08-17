@@ -246,9 +246,12 @@ class CustomerAssociateListView(BaseListAPIView):
         user = self.request.user
         center_ids = self.request.query_params.getlist("center_id", [])
         header_center_id = getattr(self.request, 'center_id', None) or ""
-
+        role_id = self.request.query_params.get('role_id', None)
         if header_center_id:
             center_ids.append(header_center_id)
+        if role_id:
+            filter_kwargs['associate__center_assignments__role'] = role_id
+            filter_kwargs["associate__center_assignments__center"] = header_center_id
 
         search_param = self.request.query_params.get("search", "").strip()
         if search_param:
