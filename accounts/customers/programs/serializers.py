@@ -34,7 +34,7 @@ from programs.serializers import (
 from programs.services.models import Service
 from programs.services.serializers import BaseServiceSerializer
 from programs.services.utils.constants import ServiceCategory
-from programs.utils.constants import ProgramType
+from programs.utils.constants import ProgramType, ServiceAssignment
 from programs.utils.db import (
     update_program_redeemable_centers_count,
     update_program_services_count,
@@ -321,6 +321,103 @@ class CustomerCompositeTemplateReferenceSerializer(BaseModelSerializer):
     class Meta:
         model = CompositeTemplate
         fields = ["id", "name", "description", "is_active"]
+
+
+class CustomerCompositeProgramServiceFilterSerializer(BaseSerializer):
+    service_category = serializers.ChoiceField(
+        choices=[
+            ServiceCategory.ASSESSMENT,
+            ServiceCategory.THERAPY,
+        ],
+        required=False,
+    )
+    assignment_type = serializers.ChoiceField(
+        choices=ServiceAssignment,
+        required=False,
+    )
+    composite_program = serializers.UUIDField(required=False)
+    search = serializers.CharField(required=False, allow_blank=True)
+    active = serializers.ChoiceField(
+        choices=["0", "1"],
+        required=False,
+    )
+
+
+class CustomerCompositeProgramListReferenceSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
+    name = serializers.CharField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = CompositeProgram
+        fields = ["id", "uid", "name"]
+
+
+class CustomerCompositeProgramServiceListSerializer(BaseModelSerializer):
+    composite_program = CustomerCompositeProgramListReferenceSerializer(
+        source="program.composite_program",
+        read_only=True,
+    )
+    service = BaseServiceSerializer(read_only=True)
+    assignment_type_code = serializers.CharField(
+        source="assignment_type",
+        read_only=True,
+    )
+    can_redeem = serializers.BooleanField(default=True, read_only=True)
+    sessions_count = serializers.IntegerField(
+        source="therapy_service.sessions_count",
+        read_only=True,
+        default=None,
+        allow_null=True,
+    )
+    sessions_used = serializers.IntegerField(
+        source="therapy_service.sessions_used",
+        read_only=True,
+        default=None,
+        allow_null=True,
+    )
+    sessions_cancelled = serializers.IntegerField(
+        source="therapy_service.sessions_cancelled",
+        read_only=True,
+        default=None,
+        allow_null=True,
+    )
+    redeem_code = serializers.CharField(
+        source="therapy_service.redeem_code",
+        read_only=True,
+        default=None,
+        allow_null=True,
+    )
+    cancelled_by = BaseUserSerializer(read_only=True)
+    created_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = ProgramService
+        fields = [
+            "id",
+            "composite_program",
+            "service",
+            "assignment_type",
+            "assignment_type_code",
+            "sessions_count",
+            "sessions_used",
+            "sessions_cancelled",
+            "redeem_code",
+            "results_count",
+            "documents_count",
+            "reports_count",
+            "raw_data_count",
+            "can_redeem",
+            "cancellation_reason",
+            "cancelled_by",
+            "cancelled_at",
+            "cancelled_date",
+            "created_date",
+            "created_by",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class CustomerCompositeProgramServiceSerializer(BaseModelSerializer):
@@ -638,10 +735,10 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
             validated_data["composite_template"] = composite_template
             validated_data["template_description"] = composite_template.description
             composite_program = super().create(validated_data)
-            service_quantities = {
-                template_service.service.pk: template_service.quantity
+            service_quantities = [
+                template_service.quantity
                 for template_service in template_services
-            }
+            ]
             program_services = [
                 ProgramService(
                     program=program,

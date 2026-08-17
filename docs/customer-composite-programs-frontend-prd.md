@@ -19,6 +19,10 @@ Services are assigned from the selected composite template during creation.
 They are always read-only in this feature and cannot be added, removed, or
 modified through PATCH.
 
+Post-creation assessment and therapy add-ons and the profile-scoped assigned
+service list are documented separately in
+[Composite Program Add-Ons — Frontend ePRD](composite-program-add-ons-frontend-eprd.md).
+
 ## 2. Access and Headers
 
 All requests require:

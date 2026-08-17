@@ -12,6 +12,8 @@ from accounts.centers.models import Center
 from accounts.customers.models import CustomerProfile
 from accounts.customers.programs.serializers import (
     CustomerCompositeProgramSerializer,
+    CustomerCompositeProgramServiceFilterSerializer,
+    CustomerCompositeProgramServiceListSerializer,
     CustomerTherapyProgramSerializer,
 )
 from accounts.utils.constants import UserType
@@ -19,9 +21,15 @@ from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.permissions import ReadOnly
-from core.utils.views.main import BaseGenericAPIView, BaseListCreateAPIView
+from core.utils.views.main import (
+    BaseGenericAPIView,
+    BaseListAPIView,
+    BaseListCreateAPIView,
+)
 from programs.composites.views import CompositeProgramViewMeta
 from programs.models import ProgramService, TherapyProgram
+from programs.services.utils.constants import ServiceCategory
+from programs.utils.constants import ProgramType
 
 
 class CustomerProgramViewMeta(BaseGenericAPIView):
@@ -194,4 +202,66 @@ class CustomerCompositeProgramsView(
             customer_profile=self.get_customer_profile(center),
             center=center,
             created_by=self.request.user,
+        )
+
+
+class CustomerCompositeProgramServicesView(
+    BaseListAPIView,
+    CustomerCompositeProgramViewMeta,
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = CustomerCompositeProgramServiceListSerializer
+
+    def get_filters(self):
+        serializer = CustomerCompositeProgramServiceFilterSerializer(
+            data=self.request.query_params
+        )
+        serializer.is_valid(raise_exception=True)
+        return serializer.validated_data
+
+    def get_queryset(self):
+        center = self.get_center()
+        customer_profile = self.get_customer_profile(center)
+        filters = self.get_filters()
+        filter_kwargs = {
+            "program__program_type": ProgramType.COMPOSITE,
+            "program__customer_profile": customer_profile,
+            "service__service_category__in": [
+                ServiceCategory.ASSESSMENT,
+                ServiceCategory.THERAPY,
+            ],
+        }
+
+        service_category = filters.get("service_category")
+        assignment_type = filters.get("assignment_type")
+        composite_program_identifier = filters.get("composite_program")
+        search = filters.get("search", "").strip()
+        active = filters.get("active")
+
+        if service_category:
+            filter_kwargs["service__service_category"] = service_category
+        if assignment_type:
+            filter_kwargs["assignment_type"] = assignment_type
+        if composite_program_identifier:
+            filter_kwargs[
+                "program__composite_program__pk"
+            ] = composite_program_identifier
+        if search:
+            filter_kwargs["service__name__icontains"] = search
+        if active is not None:
+            filter_kwargs["is_active"] = bool(int(active))
+
+        return (
+            self.get_composite_program_service_queryset(center.pk)
+            .select_related(
+                "program",
+                "program__composite_program",
+            )
+            .filter(
+                Q(program__center=center)
+                | Q(program__redeemable_centers=center),
+                **filter_kwargs,
+            )
+            .order_by("-created_at")
+            .distinct()
         )

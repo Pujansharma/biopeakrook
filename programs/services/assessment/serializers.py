@@ -4,7 +4,11 @@ from rest_framework import serializers
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer
 from products.models import Product
-from products.serializers import ProductIDSerializer, BaseProductSerializer
+from products.serializers import (
+    BaseProductSerializer,
+    BaseProviderSerializer,
+    ProductIDSerializer,
+)
 from programs.services.models import (
     Service,
     ServiceProductAssignment,
@@ -80,6 +84,14 @@ class AssessmentServiceSerializerMeta(BaseServiceSerializerMeta):
             service=service,
             product__pk__in=product_ids,
         ).delete()
+
+
+class AssessmentServiceProductSerializer(BaseModelSerializer):
+    provider = BaseProviderSerializer(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = ["id", "name", "code", "provider"]
 
 
 class AssessmentServiceSerializer(AssessmentServiceSerializerMeta, BaseModelSerializer):
