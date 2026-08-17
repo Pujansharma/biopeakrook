@@ -1,8 +1,6 @@
-from django.db import transaction
-from django.db.models import F, Prefetch
+from django.db.models import F
 
 from diagnostics_orders.models import (
-    CatalogCityPrice,
     CatalogItem,
     DiagnosticOrderCustomer,
     DiagnosticsOrdersSummary,
@@ -95,55 +93,12 @@ def get_default_address_text(customer_profile):
     return ", ".join(part for part in parts if part)
 
 
-def get_catalog_items_for_city(city, search=""):
-    queryset = (
-        CatalogItem.objects.filter(
-            is_active=True,
-            city_prices__city=city,
-            city_prices__is_active=True,
-        )
-        .prefetch_related(
-            Prefetch(
-                "city_prices",
-                queryset=CatalogCityPrice.objects.filter(city=city, is_active=True),
-                to_attr="matched_city_prices",
-            )
-        )
-        .distinct()
-        .order_by("name")
-    )
+def get_catalog_items(search=""):
+    queryset = CatalogItem.objects.filter(is_active=True).order_by("name")
     if search:
         queryset = queryset.filter(name__icontains=search)
     return queryset
 
 
-def create_catalog_item(
-    *,
-    category,
-    is_custom_package,
-    name,
-    diagnostic_test_id,
-    fasting_required,
-    city_prices=None,
-):
-    with transaction.atomic():
-        catalog_item = CatalogItem.objects.create(
-            category=category,
-            is_custom_package=is_custom_package,
-            name=name,
-            diagnostic_test_id=diagnostic_test_id,
-            fasting_required=fasting_required,
-        )
-        if city_prices:
-            CatalogCityPrice.objects.bulk_create(
-                [
-                    CatalogCityPrice(
-                        catalog_item=catalog_item,
-                        city=city_price["city"],
-                        price=city_price["price"],
-                        tat_in_hours=city_price.get("tat_in_hours"),
-                    )
-                    for city_price in city_prices
-                ]
-            )
-    return catalog_item
+def create_catalog_item(*, test_id, name, price):
+    return CatalogItem.objects.create(test_id=test_id, name=name, price=price)

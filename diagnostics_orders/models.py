@@ -3,52 +3,22 @@ from django.db import models
 from accounts.customers.models import CustomerProfile
 from accounts.utils import get_user_model
 from core.utils.models import BaseUUIDModel
-from diagnostics_orders.utils.constants import (
-    CatalogCategory,
-    DiagnosticCity,
-    DiagnosticOrderStatus,
-)
+from diagnostics_orders.utils.constants import DiagnosticOrderStatus
 
 User = get_user_model()
 
 
 class CatalogItem(BaseUUIDModel):
-    category = models.CharField(max_length=20, choices=CatalogCategory.choices)
-    is_custom_package = models.BooleanField(default=False)
+    test_id = models.PositiveIntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=255)
-    diagnostic_test_id = models.CharField(max_length=64, unique=True, db_index=True)
-    fasting_required = models.BooleanField(default=False)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
 
     class Meta:
         db_table = "diagnostics_orders_catalog_item"
         ordering = ["name", "-created_at"]
 
     def __str__(self):
-        return f"{self.diagnostic_test_id} — {self.name}"
-
-
-class CatalogCityPrice(BaseUUIDModel):
-    catalog_item = models.ForeignKey(
-        CatalogItem,
-        on_delete=models.PROTECT,
-        related_name="city_prices",
-    )
-    city = models.CharField(max_length=8, choices=DiagnosticCity.choices, db_index=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    tat_in_hours = models.PositiveIntegerField(null=True, blank=True)
-
-    class Meta:
-        db_table = "diagnostics_orders_catalog_city_price"
-        ordering = ["city", "catalog_item__name"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["catalog_item", "city"],
-                name="uniq_diagnostics_catalog_item_city",
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.catalog_item_id}:{self.city}"
+        return f"{self.test_id} — {self.name}"
 
 
 class DiagnosticOrder(BaseUUIDModel):
@@ -61,8 +31,7 @@ class DiagnosticOrder(BaseUUIDModel):
         db_index=True,
     )
     address = models.TextField()
-    city = models.CharField(max_length=8, choices=DiagnosticCity.choices, db_index=True)
-    pincode = models.CharField(max_length=20)
+    pincode = models.CharField(max_length=20, blank=True, default="")
     slot_datetime = models.DateTimeField(db_index=True)
     notes = models.TextField(blank=True, default="")
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -89,7 +58,6 @@ class DiagnosticOrder(BaseUUIDModel):
         db_table = "diagnostics_orders_order"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["city", "slot_datetime"], name="diag_ord_city_slot_idx"),
             models.Index(fields=["status", "slot_datetime"], name="diag_ord_status_slot_idx"),
         ]
 
@@ -134,8 +102,7 @@ class DiagnosticOrderLine(BaseUUIDModel):
         on_delete=models.CASCADE,
         related_name="lines",
     )
-    category = models.CharField(max_length=20, choices=CatalogCategory.choices)
-    diagnostic_test_id = models.CharField(max_length=64)
+    test_id = models.PositiveIntegerField()
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -144,7 +111,7 @@ class DiagnosticOrderLine(BaseUUIDModel):
         ordering = ["created_at"]
 
     def __str__(self):
-        return f"{self.diagnostic_test_id}:{self.name}"
+        return f"{self.test_id}:{self.name}"
 
 
 class DiagnosticOrderEvent(BaseUUIDModel):
