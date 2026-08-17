@@ -8,6 +8,7 @@ from accounts.customers.models import CustomerProfile
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView
 from diagnostics_orders.models import (
+    CatalogItem,
     DiagnosticOrder,
     DiagnosticOrderCustomer,
     DiagnosticOrderLine,
@@ -17,6 +18,7 @@ from diagnostics_orders.serializers import (
     AddTestPackageResponseSerializer,
     AddTestPackageSerializer,
     CancelOrderSerializer,
+    CatalogItemResponseSerializer,
     CheckTimeslotsQuerySerializer,
     CreateOrderSerializer,
     EligibleCustomerSerializer,
@@ -24,7 +26,6 @@ from diagnostics_orders.serializers import (
     OrderListItemSerializer,
     RescheduleOrderSerializer,
     TestPackagesQuerySerializer,
-    build_test_packages_payload,
     build_timeslots_payload,
 )
 from diagnostics_orders.utils.constants import (
@@ -107,9 +108,13 @@ class TestPackagesListView(BaseGenericAPIView):
     def get(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
-        data = build_test_packages_payload(
-            search=serializer.validated_data.get("search", ""),
-        )
+        search = serializer.validated_data.get("search", "").strip()
+        queryset = CatalogItem.objects.filter(is_active=True).order_by("name")
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        data = {
+            "tests": CatalogItemResponseSerializer(queryset, many=True).data,
+        }
         return self.send_response("Catalog fetched.", data=data)
 
 

@@ -23,10 +23,8 @@ from diagnostics_orders.utils.db import (
     bump_summary_cancelled,
     bump_summary_orders,
     bump_summary_rescheduled,
-    create_catalog_item,
     customer_profile_has_active_diagnostic_order,
     customer_profile_has_completed_pre_consultation,
-    get_catalog_items,
     get_default_address,
     get_default_address_text,
     get_or_create_summary,
@@ -113,7 +111,7 @@ class AddTestPackageSerializer(BaseSerializer):
         return name
 
     def create(self, validated_data):
-        return create_catalog_item(
+        return CatalogItem.objects.create(
             test_id=validated_data["test_id"],
             name=validated_data["name"],
             price=validated_data["price"],
@@ -534,11 +532,6 @@ class CancelOrderSerializer(BaseSerializer):
         if isinstance(status_value, dict):
             status_value = status_value.get("status")
         return {"status": status_value or order.status}
-
-
-def build_test_packages_payload(search=""):
-    items = get_catalog_items(search=search)
-    return {"tests": CatalogItemResponseSerializer(items, many=True).data}
 
 
 def build_timeslots_payload(address, request_date):

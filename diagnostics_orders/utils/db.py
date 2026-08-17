@@ -1,7 +1,6 @@
 from django.db.models import F
 
 from diagnostics_orders.models import (
-    CatalogItem,
     DiagnosticOrderCustomer,
     DiagnosticsOrdersSummary,
 )
@@ -91,14 +90,3 @@ def get_default_address_text(customer_profile):
         default_address.pincode,
     ]
     return ", ".join(part for part in parts if part)
-
-
-def get_catalog_items(search=""):
-    queryset = CatalogItem.objects.filter(is_active=True).order_by("name")
-    if search:
-        queryset = queryset.filter(name__icontains=search)
-    return queryset
-
-
-def create_catalog_item(*, test_id, name, price):
-    return CatalogItem.objects.create(test_id=test_id, name=name, price=price)

@@ -3,73 +3,103 @@
 from django.db import migrations, models
 
 
+def wipe_diagnostics_catalog_and_orders(apps, schema_editor):
+    """One-time wipe so national-catalog AddField defaults never poison rows.
+
+    Deletes all diagnostics orders (cascades customers/lines/events/history),
+    city prices, catalog items, and summary. Irreversible. Empty tables = no-op.
+    """
+    DiagnosticOrder = apps.get_model("diagnostics_orders", "DiagnosticOrder")
+    CatalogCityPrice = apps.get_model("diagnostics_orders", "CatalogCityPrice")
+    CatalogItem = apps.get_model("diagnostics_orders", "CatalogItem")
+    DiagnosticsOrdersSummary = apps.get_model(
+        "diagnostics_orders", "DiagnosticsOrdersSummary"
+    )
+
+    DiagnosticOrder.objects.all().delete()
+    CatalogCityPrice.objects.all().delete()
+    CatalogItem.objects.all().delete()
+    DiagnosticsOrdersSummary.objects.all().delete()
+
+
+def noop_reverse(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('diagnostics_orders', '0004_alter_diagnosticorder_status_and_more'),
+        ("diagnostics_orders", "0004_alter_diagnosticorder_status_and_more"),
     ]
 
     operations = [
-        migrations.RemoveConstraint(
-            model_name='catalogcityprice',
-            name='uniq_diagnostics_catalog_item_city',
+        migrations.RunPython(
+            wipe_diagnostics_catalog_and_orders,
+            noop_reverse,
         ),
         migrations.RemoveIndex(
-            model_name='diagnosticorder',
-            name='diag_ord_city_slot_idx',
+            model_name="diagnosticorder",
+            name="diag_ord_city_slot_idx",
         ),
         migrations.RemoveField(
-            model_name='catalogitem',
-            name='category',
+            model_name="catalogitem",
+            name="category",
         ),
         migrations.RemoveField(
-            model_name='catalogitem',
-            name='diagnostic_test_id',
+            model_name="catalogitem",
+            name="diagnostic_test_id",
         ),
         migrations.RemoveField(
-            model_name='catalogitem',
-            name='fasting_required',
+            model_name="catalogitem",
+            name="fasting_required",
         ),
         migrations.RemoveField(
-            model_name='catalogitem',
-            name='is_custom_package',
+            model_name="catalogitem",
+            name="is_custom_package",
         ),
         migrations.RemoveField(
-            model_name='diagnosticorderline',
-            name='category',
+            model_name="diagnosticorderline",
+            name="category",
         ),
         migrations.RemoveField(
-            model_name='diagnosticorderline',
-            name='diagnostic_test_id',
+            model_name="diagnosticorderline",
+            name="diagnostic_test_id",
         ),
         migrations.AddField(
-            model_name='catalogitem',
-            name='price',
+            model_name="catalogitem",
+            name="price",
             field=models.DecimalField(decimal_places=2, default=0.0, max_digits=10),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='catalogitem',
-            name='test_id',
-            field=models.PositiveIntegerField(db_index=True, default=0, unique=True),
+            model_name="catalogitem",
+            name="test_id",
+            field=models.PositiveIntegerField(default=0, unique=True),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='diagnosticorderline',
-            name='test_id',
+            model_name="diagnosticorderline",
+            name="test_id",
             field=models.PositiveIntegerField(default=0),
             preserve_default=False,
         ),
+        migrations.AddConstraint(
+            model_name="diagnosticorderline",
+            constraint=models.UniqueConstraint(
+                fields=["order_customer", "test_id"],
+                name="uniq_diagnostics_order_line_test",
+            ),
+        ),
         migrations.AlterField(
-            model_name='diagnosticorder',
-            name='pincode',
-            field=models.CharField(blank=True, default='', max_length=20),
+            model_name="diagnosticorder",
+            name="pincode",
+            field=models.CharField(blank=True, default="", max_length=20),
         ),
         migrations.RemoveField(
-            model_name='diagnosticorder',
-            name='city',
+            model_name="diagnosticorder",
+            name="city",
         ),
         migrations.DeleteModel(
-            name='CatalogCityPrice',
+            name="CatalogCityPrice",
         ),
     ]

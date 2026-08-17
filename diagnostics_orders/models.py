@@ -9,7 +9,7 @@ User = get_user_model()
 
 
 class CatalogItem(BaseUUIDModel):
-    test_id = models.PositiveIntegerField(unique=True, db_index=True)
+    test_id = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -109,6 +109,12 @@ class DiagnosticOrderLine(BaseUUIDModel):
     class Meta:
         db_table = "diagnostics_orders_order_line"
         ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order_customer", "test_id"],
+                name="uniq_diagnostics_order_line_test",
+            )
+        ]
 
     def __str__(self):
         return f"{self.test_id}:{self.name}"
