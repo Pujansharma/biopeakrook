@@ -3,20 +3,6 @@ from decimal import Decimal
 from urllib.parse import quote, unquote
 
 from accounts.users.utils.constants import Gender
-from diagnostics_orders.utils.constants import PINCODE_CITY_RANGES
-
-
-def resolve_city_from_pincode(pincode):
-    if pincode is None:
-        return None
-    pincode_text = str(pincode).strip()
-    if not pincode_text.isdigit():
-        return None
-    pincode_value = int(pincode_text)
-    for city_code, start, end in PINCODE_CITY_RANGES:
-        if start <= pincode_value <= end:
-            return city_code
-    return None
 
 
 def calculate_age(date_of_birth, today=None):
@@ -62,14 +48,11 @@ def build_orange_create_payload(address, notes, slot_datetime, customers):
     primary = customers[0]
     patient_details = []
     for customer in customers:
-        tests = []
+        tests = [
+            {"test_id": orange_catalog_id(test_id)}
+            for test_id in customer["diagnostic_tests"]
+        ]
         packages = []
-        for item in customer["diagnostic_tests"]:
-            catalog_id = orange_catalog_id(item["diagnostic_test_id"])
-            if item["category"] == "test":
-                tests.append({"test_id": catalog_id})
-            else:
-                packages.append({"package_id": catalog_id})
         profile = customer["customer_profile"]
         patient_details.append(
             {
@@ -189,13 +172,6 @@ def _normalize_slot_list(slots):
         elif slot:
             normalized.append({"datetime": slot})
     return normalized
-
-
-def max_tat_hours(tat_values):
-    values = [value for value in tat_values if value is not None]
-    if not values:
-        return None
-    return max(values)
 
 
 def sum_decimal(values):

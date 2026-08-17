@@ -5,9 +5,10 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
 from accounts.customers.models import CustomerProfile
-from accounts.utils.permissions import DiagnosticsOrdersFeaturePermission, IsAdminUser
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView
 from diagnostics_orders.models import (
+    CatalogItem,
     DiagnosticOrder,
     DiagnosticOrderCustomer,
     DiagnosticOrderLine,
@@ -17,6 +18,7 @@ from diagnostics_orders.serializers import (
     AddTestPackageResponseSerializer,
     AddTestPackageSerializer,
     CancelOrderSerializer,
+    CatalogItemResponseSerializer,
     CheckTimeslotsQuerySerializer,
     CreateOrderSerializer,
     EligibleCustomerSerializer,
@@ -24,14 +26,12 @@ from diagnostics_orders.serializers import (
     OrderListItemSerializer,
     RescheduleOrderSerializer,
     TestPackagesQuerySerializer,
-    build_test_packages_payload,
     build_timeslots_payload,
 )
 from diagnostics_orders.utils.constants import (
     CollectionDateFilter,
     TERMINAL_ORDER_STATUSES,
 )
-from diagnostics_orders.utils.helpers import resolve_city_from_pincode
 from pre_consultation.utils.constants import PreConsultationSessionStatus
 
 
@@ -80,7 +80,7 @@ class EligibleCustomersViewMeta(BaseGenericAPIView):
 
 
 class EligibleCustomersListView(EligibleCustomersViewMeta, BaseListAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = EligibleCustomerSerializer
 
     def get_queryset(self):
@@ -88,7 +88,7 @@ class EligibleCustomersListView(EligibleCustomersViewMeta, BaseListAPIView):
 
 
 class CheckTimeslotsView(BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CheckTimeslotsQuerySerializer
 
     def get(self, request, *args, **kwargs):
@@ -102,24 +102,24 @@ class CheckTimeslotsView(BaseGenericAPIView):
 
 
 class TestPackagesListView(BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = TestPackagesQuerySerializer
 
     def get(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
-        city = resolve_city_from_pincode(serializer.validated_data["pincode"])
-        if not city:
-            self.raise_bad_request("Unsupported or invalid pincode")
-        data = build_test_packages_payload(
-            city=city,
-            search=serializer.validated_data.get("search", ""),
-        )
+        search = serializer.validated_data.get("search", "").strip()
+        queryset = CatalogItem.objects.filter(is_active=True).order_by("name")
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        data = {
+            "tests": CatalogItemResponseSerializer(queryset, many=True).data,
+        }
         return self.send_response("Catalog fetched.", data=data)
 
 
 class AddTestPackageView(BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AddTestPackageSerializer
 
     def post(self, request, *args, **kwargs):
@@ -135,7 +135,7 @@ class AddTestPackageView(BaseGenericAPIView):
 
 
 class CreateOrderView(BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CreateOrderSerializer
 
     def post(self, request, *args, **kwargs):
@@ -154,7 +154,6 @@ class OrdersListViewMeta(BaseGenericAPIView):
         filter_kwargs = {}
         search = self.request.query_params.get("search", "").strip()
         status = self.request.query_params.get("status")
-        cities = self.request.query_params.getlist("cities")
         collection_date = self.request.query_params.get(
             "collection_date", CollectionDateFilter.ALL
         )
@@ -163,8 +162,6 @@ class OrdersListViewMeta(BaseGenericAPIView):
 
         if status:
             filter_kwargs["status"] = status
-        if cities:
-            filter_kwargs["city__in"] = cities
 
         queryset = (
             DiagnosticOrder.objects.filter(is_active=True, **filter_kwargs)
@@ -197,7 +194,7 @@ class OrdersListViewMeta(BaseGenericAPIView):
 
 
 class OrdersListView(OrdersListViewMeta, BaseListAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = OrderListItemSerializer
 
     def get_queryset(self):
@@ -232,7 +229,7 @@ class DiagnosticOrderViewMeta(BaseGenericAPIView):
 
 
 class OrderDetailView(DiagnosticOrderViewMeta, BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = OrderDetailSerializer
 
     def get(self, request, request_id, *args, **kwargs):
@@ -242,7 +239,7 @@ class OrderDetailView(DiagnosticOrderViewMeta, BaseGenericAPIView):
 
 
 class RescheduleOrderView(DiagnosticOrderViewMeta, BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = RescheduleOrderSerializer
 
     def patch(self, request, request_id, *args, **kwargs):
@@ -255,7 +252,7 @@ class RescheduleOrderView(DiagnosticOrderViewMeta, BaseGenericAPIView):
 
 
 class CancelOrderView(DiagnosticOrderViewMeta, BaseGenericAPIView):
-    permission_classes = [IsAdminUser | DiagnosticsOrdersFeaturePermission]
+    permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CancelOrderSerializer
 
     def patch(self, request, request_id, *args, **kwargs):

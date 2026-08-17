@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from accounts.customers.models import CustomerProfile
 from core.utils.exceptions import bad_request
-from core.utils.serializers import BaseSerializer
+from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from diagnostics_orders.models import (
     CatalogItem,
     DiagnosticOrder,
@@ -16,8 +16,6 @@ from diagnostics_orders.models import (
     DiagnosticsOrdersSummary,
 )
 from diagnostics_orders.utils.constants import (
-    CatalogCategory,
-    DiagnosticCity,
     DiagnosticOrderStatus,
     TERMINAL_ORDER_STATUSES,
 )
@@ -25,10 +23,8 @@ from diagnostics_orders.utils.db import (
     bump_summary_cancelled,
     bump_summary_orders,
     bump_summary_rescheduled,
-    create_catalog_item,
     customer_profile_has_active_diagnostic_order,
     customer_profile_has_completed_pre_consultation,
-    get_catalog_items_for_city,
     get_default_address,
     get_default_address_text,
     get_or_create_summary,
@@ -36,10 +32,8 @@ from diagnostics_orders.utils.db import (
 from diagnostics_orders.utils.helpers import (
     build_orange_create_payload,
     calculate_age,
-    max_tat_hours,
     profile_gender,
     profile_label,
-    resolve_city_from_pincode,
     sum_decimal,
     transform_serviceability_response,
     url_decode_address,
@@ -92,40 +86,23 @@ class CheckTimeslotsQuerySerializer(BaseSerializer):
         return value
 
 
-class CatalogItemResponseSerializer(BaseSerializer):
-    id = serializers.CharField()
-    name = serializers.CharField()
-    price = serializers.DecimalField(max_digits=10, decimal_places=2)
-    fasting_required = serializers.BooleanField()
-
-
-class CatalogCityPriceInputSerializer(BaseSerializer):
-    city = serializers.ChoiceField(choices=DiagnosticCity.choices)
-    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
-    tat_in_hours = serializers.IntegerField(
-        required=False, allow_null=True, min_value=0, default=None
-    )
+class CatalogItemResponseSerializer(BaseModelSerializer):
+    class Meta:
+        model = CatalogItem
+        fields = ("test_id", "name", "price")
 
 
 class AddTestPackageSerializer(BaseSerializer):
-    category = serializers.ChoiceField(choices=CatalogCategory.choices)
-    is_custom_package = serializers.BooleanField(required=False, default=False)
+    test_id = serializers.IntegerField(min_value=1)
     name = serializers.CharField(max_length=255)
-    diagnostic_test_id = serializers.CharField(max_length=64)
-    fasting_required = serializers.BooleanField(required=False, default=False)
-    city_prices = CatalogCityPriceInputSerializer(
-        many=True, required=False, default=list
-    )
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
 
-    def validate_diagnostic_test_id(self, value):
-        diagnostic_test_id = value.strip()
-        if not diagnostic_test_id:
-            raise serializers.ValidationError("diagnostic_test_id is required")
-        if CatalogItem.objects.filter(diagnostic_test_id=diagnostic_test_id).exists():
+    def validate_test_id(self, value):
+        if CatalogItem.objects.filter(test_id=value).exists():
             raise serializers.ValidationError(
-                "Catalog item with this diagnostic_test_id already exists"
+                "Catalog item with this test_id already exists"
             )
-        return diagnostic_test_id
+        return value
 
     def validate_name(self, value):
         name = value.strip()
@@ -133,62 +110,22 @@ class AddTestPackageSerializer(BaseSerializer):
             raise serializers.ValidationError("name is required")
         return name
 
-    def validate_city_prices(self, value):
-        cities = [city_price["city"] for city_price in value]
-        if len(cities) != len(set(cities)):
-            raise serializers.ValidationError("Duplicate city in city_prices")
-        return value
-
-    def validate(self, attrs):
-        category = attrs["category"]
-        is_custom_package = attrs.get("is_custom_package", False)
-        if is_custom_package and category != CatalogCategory.PACKAGE:
-            raise serializers.ValidationError(
-                {"is_custom_package": "Custom packages must use category package"}
-            )
-        if category == CatalogCategory.TEST:
-            attrs["is_custom_package"] = False
-        return attrs
-
     def create(self, validated_data):
-        return create_catalog_item(
-            category=validated_data["category"],
-            is_custom_package=validated_data.get("is_custom_package", False),
+        return CatalogItem.objects.create(
+            test_id=validated_data["test_id"],
             name=validated_data["name"],
-            diagnostic_test_id=validated_data["diagnostic_test_id"],
-            fasting_required=validated_data.get("fasting_required", False),
-            city_prices=validated_data.get("city_prices") or [],
+            price=validated_data["price"],
         )
 
 
-class AddTestPackageResponseSerializer(BaseSerializer):
-    id = serializers.UUIDField()
-    category = serializers.CharField()
-    is_custom_package = serializers.BooleanField()
-    name = serializers.CharField()
-    diagnostic_test_id = serializers.CharField()
-    fasting_required = serializers.BooleanField()
-    city_prices = serializers.SerializerMethodField()
-
-    def get_city_prices(self, catalog_item):
-        return [
-            {
-                "city": city_price.city,
-                "price": city_price.price,
-                "tat_in_hours": city_price.tat_in_hours,
-            }
-            for city_price in catalog_item.city_prices.all()
-        ]
+class AddTestPackageResponseSerializer(BaseModelSerializer):
+    class Meta:
+        model = CatalogItem
+        fields = ("id", "test_id", "name", "price")
 
 
 class TestPackagesQuerySerializer(BaseSerializer):
-    pincode = serializers.CharField()
     search = serializers.CharField(required=False, allow_blank=True, default="")
-
-
-class DiagnosticTestInputSerializer(BaseSerializer):
-    diagnostic_test_id = serializers.CharField()
-    category = serializers.ChoiceField(choices=CatalogCategory.choices)
 
 
 class CreateOrderCustomerSerializer(BaseSerializer):
@@ -197,11 +134,14 @@ class CreateOrderCustomerSerializer(BaseSerializer):
     gender = serializers.CharField()
     age = serializers.IntegerField(min_value=0)
     phone = serializers.CharField()
-    diagnostic_tests = DiagnosticTestInputSerializer(many=True)
+    diagnostic_tests = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
 
     def validate_diagnostic_tests(self, value):
-        if not value:
-            raise serializers.ValidationError("At least one diagnostic test is required")
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Duplicate test_id in diagnostic_tests")
         return value
 
 
@@ -220,14 +160,20 @@ class CreateOrderSerializer(BaseSerializer):
     def validate(self, attrs):
         address = url_decode_address(attrs["address"])
         attrs["address"] = address
-        pincode = _extract_pincode_from_address(address)
-        city = resolve_city_from_pincode(pincode) if pincode else None
-        if not city:
-            raise serializers.ValidationError(
-                {"address": "Unable to resolve city from address pincode"}
+        attrs["pincode"] = _extract_pincode_from_address(address) or ""
+
+        requested_test_ids = {
+            test_id
+            for customer_data in attrs["customers"]
+            for test_id in customer_data["diagnostic_tests"]
+        }
+        catalog_items = {
+            catalog_item.test_id: catalog_item
+            for catalog_item in CatalogItem.objects.filter(
+                is_active=True,
+                test_id__in=requested_test_ids,
             )
-        attrs["pincode"] = pincode
-        attrs["city"] = city
+        }
 
         resolved_customers = []
         for customer_data in attrs["customers"]:
@@ -261,42 +207,17 @@ class CreateOrderSerializer(BaseSerializer):
                 )
 
             line_snapshots = []
-            for item in customer_data["diagnostic_tests"]:
-                catalog_item = (
-                    CatalogItem.objects.filter(
-                        is_active=True,
-                        diagnostic_test_id=item["diagnostic_test_id"],
-                        category=item["category"],
-                    )
-                    .prefetch_related("city_prices")
-                    .first()
-                )
-                if not catalog_item:
+            for test_id in customer_data["diagnostic_tests"]:
+                catalog_item = catalog_items.get(test_id)
+                if catalog_item is None:
                     raise serializers.ValidationError(
-                        {
-                            "customers": (
-                                f"Unknown catalog item {item['diagnostic_test_id']}"
-                            )
-                        }
-                    )
-                city_price = catalog_item.city_prices.filter(
-                    city=city, is_active=True
-                ).first()
-                if not city_price:
-                    raise serializers.ValidationError(
-                        {
-                            "customers": (
-                                f"No price for {item['diagnostic_test_id']} in {city}"
-                            )
-                        }
+                        {"customers": f"Unknown catalog item {test_id}"}
                     )
                 line_snapshots.append(
                     {
-                        "category": item["category"],
-                        "diagnostic_test_id": item["diagnostic_test_id"],
+                        "test_id": test_id,
                         "name": catalog_item.name,
-                        "price": city_price.price,
-                        "tat_in_hours": city_price.tat_in_hours,
+                        "price": catalog_item.price,
                     }
                 )
 
@@ -314,11 +235,6 @@ class CreateOrderSerializer(BaseSerializer):
         attrs["resolved_customers"] = resolved_customers
         attrs["total_price"] = sum_decimal(
             customer["customer_total"] for customer in resolved_customers
-        )
-        attrs["tat_in_hours"] = max_tat_hours(
-            line["tat_in_hours"]
-            for customer in resolved_customers
-            for line in customer["line_snapshots"]
         )
         return attrs
 
@@ -408,12 +324,11 @@ class CreateOrderSerializer(BaseSerializer):
             token=token,
             status=DiagnosticOrderStatus.ORDER_CREATED,
             address=validated_data["address"],
-            city=validated_data["city"],
             pincode=validated_data["pincode"],
             slot_datetime=validated_data["slot_datetime"],
             notes=validated_data.get("notes", ""),
             total_price=validated_data["total_price"],
-            tat_in_hours=validated_data["tat_in_hours"],
+            tat_in_hours=None,
             created_by=request.user if request.user.is_authenticated else None,
             idempotency_key=idempotency_key,
             raw_create_response=orange_response,
@@ -433,8 +348,7 @@ class CreateOrderSerializer(BaseSerializer):
                 [
                     DiagnosticOrderLine(
                         order_customer=order_customer,
-                        category=line["category"],
-                        diagnostic_test_id=line["diagnostic_test_id"],
+                        test_id=line["test_id"],
                         name=line["name"],
                         price=line["price"],
                     )
@@ -465,6 +379,7 @@ class OrderListItemSerializer(BaseSerializer):
 
 
 class OrderLineSerializer(BaseSerializer):
+    test_id = serializers.IntegerField()
     name = serializers.CharField()
     price = serializers.DecimalField(max_digits=10, decimal_places=2)
 
@@ -472,24 +387,7 @@ class OrderLineSerializer(BaseSerializer):
 class OrderCustomerDetailSerializer(BaseSerializer):
     name = serializers.CharField()
     customer_total = serializers.DecimalField(max_digits=10, decimal_places=2)
-    tests = serializers.SerializerMethodField()
-    packages = serializers.SerializerMethodField()
-
-    def get_tests(self, order_customer):
-        lines = [
-            line
-            for line in order_customer.lines.all()
-            if line.category == CatalogCategory.TEST
-        ]
-        return OrderLineSerializer(lines, many=True).data
-
-    def get_packages(self, order_customer):
-        lines = [
-            line
-            for line in order_customer.lines.all()
-            if line.category == CatalogCategory.PACKAGE
-        ]
-        return OrderLineSerializer(lines, many=True).data
+    tests = OrderLineSerializer(many=True, source="lines")
 
 
 class RescheduleHistorySerializer(BaseSerializer):
@@ -634,35 +532,6 @@ class CancelOrderSerializer(BaseSerializer):
         if isinstance(status_value, dict):
             status_value = status_value.get("status")
         return {"status": status_value or order.status}
-
-
-def build_test_packages_payload(city, search=""):
-    items = get_catalog_items_for_city(city, search=search)
-    tests = []
-    packages = []
-    custom_packages = []
-    for item in items:
-        matched = getattr(item, "matched_city_prices", None) or []
-        if not matched:
-            continue
-        city_price = matched[0]
-        payload = {
-            "id": item.diagnostic_test_id,
-            "name": item.name,
-            "price": city_price.price,
-            "fasting_required": item.fasting_required,
-        }
-        if item.category == CatalogCategory.TEST:
-            tests.append(payload)
-        elif item.is_custom_package:
-            custom_packages.append(payload)
-        else:
-            packages.append(payload)
-    return {
-        "tests": tests,
-        "packages": packages,
-        "custom_packages": custom_packages,
-    }
 
 
 def build_timeslots_payload(address, request_date):
