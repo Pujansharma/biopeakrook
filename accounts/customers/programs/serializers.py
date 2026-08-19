@@ -13,7 +13,9 @@ from accounts.users.serializers import BaseUserSerializer
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+from products.serializers import BaseProductSerializer
 from programs.composites.models import CompositeTemplate, CompositeTemplateService
+from programs.composites.serializers import BaseCompositeTemplateSerializer
 from programs.composites.utils.constants import CompositeAssessmentType
 from programs.composites.utils.db import (
     create_program_service_extensions,
@@ -31,7 +33,7 @@ from programs.serializers import (
     RedeemableCenterField,
     ServiceField,
 )
-from programs.services.models import Service
+from programs.services.models import Service, ServiceDocument, ServiceResult
 from programs.services.serializers import BaseServiceSerializer
 from programs.services.utils.constants import ServiceCategory
 from programs.utils.constants import ProgramType, ServiceAssignment
@@ -312,17 +314,6 @@ class CustomerCompositeProgramCenterSerializer(BaseSerializer):
     name = serializers.CharField(read_only=True)
 
 
-class CustomerCompositeTemplateReferenceSerializer(BaseModelSerializer):
-    id = serializers.UUIDField(source="pk", read_only=True)
-    name = serializers.CharField(read_only=True)
-    description = serializers.CharField(read_only=True, allow_null=True)
-    is_active = serializers.BooleanField(read_only=True)
-
-    class Meta:
-        model = CompositeTemplate
-        fields = ["id", "name", "description", "is_active"]
-
-
 class CustomerCompositeProgramServiceFilterSerializer(BaseSerializer):
     service_category = serializers.ChoiceField(
         choices=[
@@ -347,10 +338,13 @@ class CustomerCompositeProgramListReferenceSerializer(BaseModelSerializer):
     id = serializers.UUIDField(source="pk", read_only=True)
     uid = serializers.CharField(source="program.uid", read_only=True)
     name = serializers.CharField(read_only=True, allow_null=True)
+    template = BaseCompositeTemplateSerializer(
+        source='composite_template', read_only=True
+    )
 
     class Meta:
         model = CompositeProgram
-        fields = ["id", "uid", "name"]
+        fields = ["id", "uid", "name", 'template']
 
 
 class CustomerCompositeProgramServiceListSerializer(BaseModelSerializer):
@@ -513,7 +507,7 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
         read_only=True,
     )
     center = MinimumCenterSerializer(source="program.center", read_only=True)
-    composite_template = CustomerCompositeTemplateReferenceSerializer(read_only=True)
+    composite_template = BaseCompositeTemplateSerializer(read_only=True)
     composite_template_id = serializers.UUIDField(write_only=True, required=True)
     uid = serializers.CharField(source='program.uid', read_only=True)
     program_type = serializers.ChoiceField(
@@ -554,6 +548,10 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
     assessment_services_count = serializers.IntegerField(read_only=True)
     therapy_services_count = serializers.IntegerField(read_only=True)
     consultation_services_count = serializers.IntegerField(read_only=True)
+    results_count = serializers.IntegerField(read_only=True)
+    documents_count = serializers.IntegerField(read_only=True)
+    reports_count = serializers.IntegerField(read_only=True)
+    raw_data_count = serializers.IntegerField(read_only=True)
     redeemable_centers_count = serializers.IntegerField(
         source="program.redeemable_centers_count",
         read_only=True,
@@ -608,6 +606,10 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
             "assessment_services_count",
             "therapy_services_count",
             "consultation_services_count",
+            "results_count",
+            "documents_count",
+            "reports_count",
+            "raw_data_count",
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
@@ -719,7 +721,7 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
                     )
                 }
             )
- 
+
         with transaction.atomic():
             program_uid = generate_program_unique_id()
             program = Program.objects.create(
@@ -777,3 +779,97 @@ class CustomerCompositeProgramSerializer(BaseModelSerializer):
             many=True,
             context=self.context,
         ).data
+
+
+class BaseCompositeProgramSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="pk", read_only=True)
+    uid = serializers.CharField(source="program.uid", read_only=True)
+
+    class Meta:
+        model = CompositeProgram
+        fields = [
+            "id",
+            "uid",
+            "name",
+        ]
+        read_only_fields = fields
+
+
+class CustomerServiceDocumentProgramServiceSerializer(BaseModelSerializer):
+    service = BaseServiceSerializer(read_only=True)
+    composite_program = BaseCompositeProgramSerializer(
+        source="program.composite_program",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+    composite_template = BaseCompositeTemplateSerializer(
+        source="program.composite_program.composite_template",
+        read_only=True,
+        allow_null=True,
+        default=None,
+    )
+
+    class Meta:
+        model = ProgramService
+        fields = [
+            "id",
+            "service",
+            "composite_program",
+            "composite_template",
+        ]
+
+
+class CustomerResultSerializer(BaseModelSerializer):
+    program_service = CustomerServiceDocumentProgramServiceSerializer(
+        read_only=True
+    )
+    product = BaseProductSerializer(read_only=True)
+    result_mode_code = serializers.CharField(
+        source="result_mode",
+        read_only=True,
+    )
+    document_type_code = serializers.CharField(
+        source="document_type",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ServiceResult
+        fields = [
+            "id",
+            "program_service",
+            "product",
+            "provider_name",
+            "product_name",
+            "result_mode",
+            "result_mode_code",
+            "document_type",
+            "document_type_code",
+            "documents_count",
+            "sample_collection_date",
+            "report_generation_date",
+        ]
+
+
+class CustomerServiceDocumentSerializer(BaseModelSerializer):
+    document_category_code = serializers.CharField(
+        source="document_category",
+        read_only=True,
+    )
+    result = CustomerResultSerializer(read_only=True)
+
+    class Meta:
+        model = ServiceDocument
+        fields = [
+            "id",
+            "result",
+            "file",
+            "filename",
+            "content_type",
+            "document_category",
+            "document_category_code",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]

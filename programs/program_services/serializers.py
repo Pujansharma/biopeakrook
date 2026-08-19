@@ -9,6 +9,10 @@ from core.utils.serializers import BaseModelSerializer
 from products.models import Product
 from products.serializers import BaseProductSerializer
 from products.utils.documents import get_allowed_document_type_choices
+from programs.composites.utils.db import (
+    update_composite_program_document_counts,
+    update_composite_program_results_count,
+)
 from programs.models import ProgramService, TherapyProgramService
 from programs.program_services.utils.db import (
     update_program_service_document_counts,
@@ -190,7 +194,7 @@ class AssessmentServiceResultSerializer(BaseModelSerializer):
 
         with transaction.atomic():
             current_program_service = (
-                ProgramService.objects.select_related("service")
+                ProgramService.objects.select_related("service", "program")
                 .filter(pk=program_service.pk)
                 .first()
             )
@@ -209,6 +213,9 @@ class AssessmentServiceResultSerializer(BaseModelSerializer):
             validated_data["result_mode"] = ServiceResultMode.UPLOAD
             service_result = super().create(validated_data)
             update_program_service_results_count(current_program_service.pk)
+            update_composite_program_results_count(
+                current_program_service.program.pk
+            )
         return service_result
 
     def update(self, instance: ServiceResult, validated_data: dict):
@@ -252,7 +259,8 @@ class AssessmentServiceDocumentSerializer(BaseModelSerializer):
 
         with transaction.atomic():
             program_service = (
-                ProgramService.objects.filter(pk=program_service_identifier)
+                ProgramService.objects.select_related("program")
+                .filter(pk=program_service_identifier)
                 .first()
             )
             current_service_result = (
@@ -276,6 +284,9 @@ class AssessmentServiceDocumentSerializer(BaseModelSerializer):
             service_document = super().create(validated_data)
             update_result_documents_count(current_service_result.pk)
             update_program_service_document_counts(program_service.pk)
+            update_composite_program_document_counts(
+                program_service.program.pk
+            )
         return service_document
 
 
@@ -328,7 +339,7 @@ class ProgramServiceCancelSerializer(BaseModelSerializer):
             center_id=center.pk if center else None,
             cancelled_by=cancelled_by,
             cancellation_reason=validated_data.get("cancellation_reason"),
-            cancelled_date=validated_data.get("cancelled_date"),
+            cancelled_date=validated_data.get("cancelled_date", timezone.localdate()),
         )
         program_service.refresh_from_db(
             fields=[

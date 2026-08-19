@@ -26,9 +26,8 @@ from programs.composites.utils.db import (
     update_composite_template_services_count,
     update_prerequisite_related_service_count,
 )
-from programs.composites.utils.helper import get_composite_template_uid
 from programs.models import CompositeProgram, Program, ProgramService
-from programs.services.models import Service
+from programs.services.models import Service, ServiceDocument
 from programs.services.serializers import BaseServiceSerializer
 from programs.services.utils.constants import ServiceCategory
 from programs.utils.constants import ProgramType, ServiceAssignment
@@ -47,7 +46,7 @@ class CompositeTemplateServiceReferenceSerializer(BaseSerializer):
 
 class CompositeAddOnServiceReferenceSerializer(BaseSerializer):
     id = serializers.UUIDField(required=True, write_only=True)
-    quantity = serializers.IntegerField(min_value=1, required=False, write_only=True)
+    sessions_count = serializers.IntegerField(min_value=1, required=False, write_only=True)
 
 
 class CompositePrerequisiteServiceReferenceSerializer(BaseSerializer):
@@ -125,10 +124,10 @@ class CompositeProgramCenterSerializer(BaseSerializer):
     name = serializers.CharField(read_only=True)
 
 
-class CompositeTemplateReferenceSerializer(BaseModelSerializer):
+class BaseCompositeTemplateSerializer(BaseModelSerializer):
     class Meta:
         model = CompositeTemplate
-        fields = ["id", "name", "description", "is_active"]
+        fields = ["id", "code", "name", "is_active"]
         read_only_fields = fields
 
 
@@ -493,7 +492,6 @@ class CompositeTemplateSerializer(BaseModelSerializer):
         }
 
         with transaction.atomic():
-            validated_data['uid'] = get_composite_template_uid()
             composite_template = super().create(validated_data)
             CompositeTemplateService.objects.bulk_create(
                 [
@@ -637,7 +635,7 @@ class CompositeProgramSerializer(BaseModelSerializer):
     )
     profile_id = serializers.UUIDField(write_only=True, required=True)
     center = MinimumCenterSerializer(source="program.center", read_only=True)
-    composite_template = CompositeTemplateReferenceSerializer(read_only=True)
+    composite_template = BaseCompositeTemplateSerializer(read_only=True)
     composite_template_id = serializers.UUIDField(write_only=True, required=True)
     program_type = serializers.ChoiceField(
         source="program.program_type",
@@ -677,6 +675,10 @@ class CompositeProgramSerializer(BaseModelSerializer):
     assessment_services_count = serializers.IntegerField(read_only=True)
     therapy_services_count = serializers.IntegerField(read_only=True)
     consultation_services_count = serializers.IntegerField(read_only=True)
+    results_count = serializers.IntegerField(read_only=True)
+    documents_count = serializers.IntegerField(read_only=True)
+    reports_count = serializers.IntegerField(read_only=True)
+    raw_data_count = serializers.IntegerField(read_only=True)
     redeemable_centers_count = serializers.IntegerField(
         source="program.redeemable_centers_count",
         read_only=True,
@@ -732,6 +734,10 @@ class CompositeProgramSerializer(BaseModelSerializer):
             "assessment_services_count",
             "therapy_services_count",
             "consultation_services_count",
+            "results_count",
+            "documents_count",
+            "reports_count",
+            "raw_data_count",
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
@@ -1048,6 +1054,12 @@ class CompositeProgramCancelSerializer(BaseModelSerializer):
         program_data = validated_data.pop("program", {})
         if not composite_program.program.is_active:
             raise serializers.ValidationError("Composite program is already cancelled.")
+        if ServiceDocument.objects.filter(
+                result__program_service__program=composite_program.program,
+        ).exists():
+            raise serializers.ValidationError(
+                "Composite program cannot be cancelled since it has documents."
+            )
 
         with transaction.atomic():
             composite_program.is_active = False
@@ -1107,7 +1119,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
         read_only=True,
     )
     center = MinimumCenterSerializer(source="program.center", read_only=True)
-    composite_template = CompositeTemplateReferenceSerializer(read_only=True)
+    composite_template = BaseCompositeTemplateSerializer(read_only=True)
     program_type = serializers.ChoiceField(
         source="program.program_type",
         choices=ProgramType,
@@ -1142,6 +1154,10 @@ class CompositeAddOnSerializer(BaseModelSerializer):
     assessment_services_count = serializers.IntegerField(read_only=True)
     therapy_services_count = serializers.IntegerField(read_only=True)
     consultation_services_count = serializers.IntegerField(read_only=True)
+    results_count = serializers.IntegerField(read_only=True)
+    documents_count = serializers.IntegerField(read_only=True)
+    reports_count = serializers.IntegerField(read_only=True)
+    raw_data_count = serializers.IntegerField(read_only=True)
     redeemable_centers_count = serializers.IntegerField(
         source="program.redeemable_centers_count",
         read_only=True,
@@ -1214,6 +1230,10 @@ class CompositeAddOnSerializer(BaseModelSerializer):
             "assessment_services_count",
             "therapy_services_count",
             "consultation_services_count",
+            "results_count",
+            "documents_count",
+            "reports_count",
+            "raw_data_count",
             "cancellation_reason",
             "cancelled_by",
             "cancelled_at",
@@ -1315,7 +1335,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
                     services_by_primary_key[
                         service_entry["id"]
                     ].service_category == ServiceCategory.THERAPY
-                    and service_entry.get("quantity") is None
+                    and service_entry.get("sessions_count") is None
             )
         ]
         if missing_quantity_positions:
@@ -1336,7 +1356,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
                     services_by_primary_key[
                         service_entry["id"]
                     ].service_category == ServiceCategory.ASSESSMENT
-                    and service_entry.get("quantity") is not None
+                    and service_entry.get("sessions_count") is not None
             )
         ]
         if invalid_quantity_positions:
@@ -1350,7 +1370,7 @@ class CompositeAddOnSerializer(BaseModelSerializer):
                 }
             )
 
-        return [service_entry.get("quantity") for service_entry in service_data]
+        return [service_entry.get("sessions_count") for service_entry in service_data]
 
     def create(self, validated_data: dict):
         composite_program_identifier = validated_data.pop("composite_program_id")
