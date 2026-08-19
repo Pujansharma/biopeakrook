@@ -275,10 +275,16 @@ class CompositeTemplateServicesListView(
 
     def get_queryset(self):
         filter_kwargs = {}
+        search = Q()
         category = self.request.query_params.get('category', None)
+        search_params = self.request.query_params.get('search', "").strip()
         if category:
             filter_kwargs['service__service_category'] = category
+        if search_params:
+            search |= Q(service__name__istartswith=search_params)
+            search |= Q(service__name__icontains=search_params)
         qs = super().get_queryset().filter(
+            search,
             composite_template=self.get_composite_template(),
             **filter_kwargs
         )
@@ -343,27 +349,18 @@ class CompositeProgramDetailView(
     CompositeProgramViewMeta,
 ):
     serializer_class = CompositeProgramDetailSerializer
-    permission_classes = [IsAdminUser | PackagesPermission]
-
-    def get_permissions(self):
-        permission_classes_by_method = {
-            "GET": [IsAdminUser | BaseAssociateRBACPermission],
-        }
-        permission_classes = permission_classes_by_method.get(
-            self.request.method,
-            self.permission_classes,
-        )
-        return [permission_class() for permission_class in permission_classes]
+    permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
         filter_kwargs = {}
         center_identifier = getattr(self.request, 'center_id', None)
+        account_type = get_user_account_type(self.request.user)
         composite_programs = self.get_composite_program_queryset(center_identifier)
-        if get_user_account_type(self.request.user) == UserType.ASSOCIATE:
+        qs = composite_programs.filter(**filter_kwargs)
+        if account_type == UserType.ASSOCIATE:
             filter_kwargs["program__in"] = self.get_associate_program_queryset(
                 center_identifier
             )
-        qs = composite_programs.filter(**filter_kwargs)
         return qs
 
 

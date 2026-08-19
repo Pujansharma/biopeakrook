@@ -172,11 +172,11 @@ class CustomerCompositeProgramsView(
         service_category_query = self.request.query_params.get('category')
 
         if search_params:
+            search |= Q(composite_template__code__icontains=search_params)
             search |= Q(composite_template__name__icontains=search_params)
             search |= Q(composite_template__name__istartswith=search_params)
             search |= Q(program__uid__istartswith=search_params)
             search |= Q(program__uid__iexact=search_params)
-
 
         if active_query in {"0", "1"}:
             filter_kwargs["program__is_active"] = bool(int(active_query))
@@ -265,6 +265,7 @@ class CustomerCompositeProgramServicesView(
             .select_related(
                 "program",
                 "program__composite_program",
+                "program__composite_program__composite_template",
             )
             .filter(
                 Q(program__center=center)

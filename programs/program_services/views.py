@@ -1,5 +1,4 @@
 from rest_framework.mixins import UpdateModelMixin
-from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.centers.models import Center
@@ -329,7 +328,6 @@ class ServiceResultDetailView(
 class ServiceResultDocumentsView(BaseListCreateAPIView):
     serializer_class = AssessmentServiceDocumentSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
-    parser_classes = [MultiPartParser, FormParser]
 
     def get_service_result(self):
         service_results = ServiceResult.objects.filter(
