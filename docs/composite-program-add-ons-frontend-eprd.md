@@ -262,7 +262,13 @@ Invalid enum or UUID filter values return a validation error.
       "composite_program": {
         "id": "<composite_program_uuid>",
         "uid": "<program_uid|null>",
-        "name": "<string|null>"
+        "name": "<string|null>",
+        "template": {
+          "id": "<composite_template_uuid>",
+          "code": "<template_sku>",
+          "name": "<string>",
+          "is_active": "<boolean>"
+        }
       },
       "service": {
         "id": "<catalogue_service_uuid>",
@@ -367,6 +373,12 @@ interface CompositeProgramReference {
   id: string;
   uid: string | null;
   name: string | null;
+  template: {
+    id: string;
+    code: string;
+    name: string;
+    is_active: boolean;
+  };
 }
 
 interface CompositeProgramServiceListItem {
