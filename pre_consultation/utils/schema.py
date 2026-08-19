@@ -16,6 +16,16 @@ CUSTOMER_PROFILE_HEADER = OpenApiParameter(
     description="Target family profile UUID. Defaults to the customer's main profile.",
 )
 
+RESULT_LIST_CENTER_HEADER = OpenApiParameter(
+    name="X-Center-ID",
+    type=str,
+    location=OpenApiParameter.HEADER,
+    required=False,
+    description=(
+        "When provided, restricts results to converted customers assigned to this center."
+    ),
+)
+
 RESULT_LIST_SEARCH_PARAM = OpenApiParameter(
     name="search",
     type=str,

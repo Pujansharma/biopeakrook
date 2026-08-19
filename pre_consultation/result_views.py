@@ -36,6 +36,7 @@ from pre_consultation.result_session import get_result_session_context
 from pre_consultation.utils.api import pre_consultation_paginated_response, pre_consultation_response
 from pre_consultation.utils.schema import (
     PRE_CONSULTATION_RESULT_TAG,
+    RESULT_LIST_CENTER_HEADER,
     RESULT_LIST_LIMIT_PARAM,
     RESULT_LIST_PAGE_PARAM,
     RESULT_LIST_SEARCH_PARAM,
@@ -57,6 +58,7 @@ class PreConsultationResultBaseView(BaseGenericAPIView):
             "fields for staff result workflows."
         ),
         parameters=[
+            RESULT_LIST_CENTER_HEADER,
             RESULT_LIST_SEARCH_PARAM,
             RESULT_LIST_PAGE_PARAM,
             RESULT_LIST_LIMIT_PARAM,
@@ -69,7 +71,8 @@ class PreConsultationSessionListView(PreConsultationResultBaseView, GetMethodMix
 
     def get_queryset(self):
         search = self.request.query_params.get("search", "").strip()
-        return get_session_list_queryset(search)
+        center_id = self.request.center_id
+        return get_session_list_queryset(search, center_id=center_id)
 
     def get(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
