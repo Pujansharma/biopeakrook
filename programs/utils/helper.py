@@ -13,4 +13,4 @@ def generate_redeemable_code() -> str:
 def generate_program_unique_id():
     name = "programs"
     sequence_value = get_next_sequence(name, fill_length=4)
-    return f"P{sequence_value}"
+    return f"PID{sequence_value}"

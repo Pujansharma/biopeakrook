@@ -37,7 +37,10 @@ BIOPEAK_ALLOWED_DOCUMENTS = {
         ServiceDocumentType.USG_NECK,
     ],
     ProductCallbackFunction.PSYCHOPHYSIOLOGICAL: [
+        ServiceDocumentType.BREATHING_STRESS_PROFILE_REPORT,
+        ServiceDocumentType.BREATHING_STRESS_RESPIRATORY_REPORT,
         ServiceDocumentType.BREATHING_STRESS_COMMUNICATION_STYLE,
+        ServiceDocumentType.BREATHING_STRESS_COGNIFIT,
     ],
     ProductCallbackFunction.RESPIRATORY_FUNCTION: [
         ServiceDocumentType.BREATHING_STRESS_RESPIRATORY_REPORT,
