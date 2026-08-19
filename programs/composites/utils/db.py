@@ -20,8 +20,11 @@ from programs.models import (
     ProgramService,
     TherapyProgramService,
 )
-from programs.services.models import Service
-from programs.services.utils.constants import ServiceCategory
+from programs.services.models import Service, ServiceDocument, ServiceResult
+from programs.services.utils.constants import (
+    ServiceCategory,
+    ServiceDocumentCategory,
+)
 from programs.utils.constants import ServiceAssignment
 
 
@@ -133,6 +136,103 @@ def update_composite_program_service_counts(
         ),
         consultation_services_count=Coalesce(
             Subquery(consultation_services_count),
+            Value(0),
+        ),
+    )
+
+
+def _get_composite_program_results_count_subquery():
+    return (
+        ServiceResult.objects.filter(
+            program_service__program=OuterRef("program"),
+        )
+        .values("program_service__program")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+
+
+def update_composite_program_results_count(
+        program_identifier: UUID,
+):
+    results_count_subquery = _get_composite_program_results_count_subquery()
+    CompositeProgram.objects.filter(program__pk=program_identifier).update(
+        results_count=Coalesce(
+            Subquery(results_count_subquery),
+            Value(0),
+        )
+    )
+
+
+def _get_composite_program_documents_count_subquery(document_category=None):
+    filter_arguments = {
+        "result__program_service__program": OuterRef("program"),
+    }
+    if document_category:
+        filter_arguments["document_category"] = document_category
+    return (
+        ServiceDocument.objects.filter(**filter_arguments)
+        .values("result__program_service__program")
+        .annotate(count=Count("pk"))
+        .values("count")
+    )
+
+
+def update_composite_program_document_counts(
+        program_identifier: UUID,
+):
+    documents_count_subquery = _get_composite_program_documents_count_subquery()
+    reports_count_subquery = _get_composite_program_documents_count_subquery(
+        ServiceDocumentCategory.REPORT
+    )
+    raw_data_count_subquery = _get_composite_program_documents_count_subquery(
+        ServiceDocumentCategory.RAW
+    )
+    CompositeProgram.objects.filter(program__pk=program_identifier).update(
+        documents_count=Coalesce(
+            Subquery(documents_count_subquery),
+            Value(0),
+        ),
+        reports_count=Coalesce(
+            Subquery(reports_count_subquery),
+            Value(0),
+        ),
+        raw_data_count=Coalesce(
+            Subquery(raw_data_count_subquery),
+            Value(0),
+        ),
+    )
+
+
+def update_all_composite_program_results_count():
+    results_count_subquery = _get_composite_program_results_count_subquery()
+    return CompositeProgram.objects.update(
+        results_count=Coalesce(
+            Subquery(results_count_subquery),
+            Value(0),
+        )
+    )
+
+
+def update_all_composite_program_document_counts():
+    documents_count_subquery = _get_composite_program_documents_count_subquery()
+    reports_count_subquery = _get_composite_program_documents_count_subquery(
+        ServiceDocumentCategory.REPORT
+    )
+    raw_data_count_subquery = _get_composite_program_documents_count_subquery(
+        ServiceDocumentCategory.RAW
+    )
+    return CompositeProgram.objects.update(
+        documents_count=Coalesce(
+            Subquery(documents_count_subquery),
+            Value(0),
+        ),
+        reports_count=Coalesce(
+            Subquery(reports_count_subquery),
+            Value(0),
+        ),
+        raw_data_count=Coalesce(
+            Subquery(raw_data_count_subquery),
             Value(0),
         ),
     )
