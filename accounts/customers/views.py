@@ -17,6 +17,9 @@ from accounts.customers.models import (
     CustomerProfile,
     CustomerProfileAddress, CustomerProfileFeature,
 )
+from accounts.customers.programs.serializers import (
+    CustomerServiceDocumentSerializer,
+)
 from accounts.customers.serializers import (
     CustomerAccountSerializer,
     CustomerAssociateAssignmentSerializer,
@@ -47,6 +50,7 @@ from core.utils.views.main import (
     BaseListCreateAPIView, BaseGenericAPIView,
 )
 from leads.models import Lead
+from programs.services.models import ServiceDocument
 
 
 class CustomerProfileMeta(BaseGenericAPIView):
@@ -55,6 +59,69 @@ class CustomerProfileMeta(BaseGenericAPIView):
         qs = Customer.objects.select_related("user")
         return get_object_or_404(
             qs, detail="Invalid Customer profile", pk=self.request.user.pk
+        )
+
+    def get_customer_profile(self):
+        filter_kwargs = {}
+        if get_user_account_type(self.request.user) == UserType.CUSTOMER:
+            filter_kwargs["customer"] = self.request.user.customer
+        customer_profiles = CustomerProfile.objects.filter(**filter_kwargs)
+        return get_object_or_404(
+            customer_profiles,
+            "Customer profile with this ID not found.",
+            pk=self.kwargs["pk"],
+        )
+
+
+class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
+    serializer_class = CustomerServiceDocumentSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser | IsCustomerUser]
+
+    def get_queryset(self):
+        search = Q()
+        customer_profile = self.get_customer_profile()
+        filter_kwargs = {
+            "result__program_service__program__customer_profile": customer_profile,
+        }
+        search_query = self.request.query_params.get("search", "").strip()
+        active_query = self.request.query_params.get("active")
+        document_type = self.request.query_params.get("document_type")
+        document_category = self.request.query_params.get("document_category")
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+
+        if search_query:
+            search |= Q(filename__icontains=search_query)
+            search |= Q(result__provider_name__icontains=search_query)
+            search |= Q(result__product_name__icontains=search_query)
+            search |= Q(
+                result__program_service__service__name__icontains=search_query
+            )
+        if active_query in ["0", "1"]:
+            filter_kwargs["is_active"] = bool(int(active_query))
+        if document_type:
+            filter_kwargs["result__document_type"] = document_type
+        if document_category:
+            filter_kwargs["document_category"] = document_category
+        if date_from:
+            filter_kwargs["result__sample_collection_date__gte"] = date_from
+        if date_to:
+            filter_kwargs["result__sample_collection_date__lte"] = date_to
+        if date_from and date_to and date_from > date_to:
+            self.raise_bad_request("Date to must be on or after date from.")
+
+        return (
+            ServiceDocument.objects.select_related(
+                "result",
+                "result__product",
+                "result__program_service",
+                "result__program_service__program",
+                "result__program_service__program__composite_program",
+                "result__program_service__program__composite_program__composite_template",
+                "result__program_service__service",
+            )
+            .filter(search, **filter_kwargs)
+            .order_by("-created_at")
         )
 
 
@@ -244,11 +311,17 @@ class CustomerAssociateListView(BaseListAPIView):
         filter_kwargs = {}
         search = Q()
         user = self.request.user
-        center_ids = self.request.query_params.getlist("center_id", [])
-        header_center_id = getattr(self.request, 'center_id', None) or ""
+        center_ids = set(
+            filter(None, self.request.query_params.getlist("center_id", []))
+        )
+        header_center_id = getattr(self.request, "center_id", None)
+        role_id = self.request.query_params.get("role_id", None)
 
         if header_center_id:
-            center_ids.append(header_center_id)
+            center_ids = {header_center_id}
+
+        if role_id:
+            filter_kwargs["current_center_assignment__role"] = role_id
 
         search_param = self.request.query_params.get("search", "").strip()
         if search_param:
@@ -261,8 +334,7 @@ class CustomerAssociateListView(BaseListAPIView):
             filter_kwargs["center__associate_assignments__associate"] = associate
 
         if center_ids:
-            _ids = list(filter(None, center_ids))
-            filter_kwargs["center__in"] = _ids
+            filter_kwargs["center__in"] = center_ids
 
         qs = (
             CustomerAssociateAssignment.objects.annotate(
@@ -271,19 +343,17 @@ class CustomerAssociateListView(BaseListAPIView):
                     Value(" "),
                     F("associate__user__last_name"),
                 ),
+                current_center_assignment=FilteredRelation(
+                    "associate__center_assignments",
+                    condition=Q(
+                        associate__center_assignments__center=F("center")
+                    ),
+                ),
             )
             .filter(search, customer_profile_id=self.kwargs["pk"], **filter_kwargs)
-            .annotate(
-                role=FilteredRelation(
-                    "associate__center_assignments__role",
-                    condition=Q(
-                        associate__center_assignments__center_id=F("center_id")
-                    ),
-                )
-            )
             .select_related(
                 "associate__user",
-                "role",
+                "current_center_assignment__role",
             )
             .prefetch_related("center", "created_by")
             .order_by("-created_at")

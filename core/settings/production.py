@@ -47,13 +47,20 @@ AWS_S3_CUSTOM_DOMAIN = config("AWS_S3_CUSTOM_DOMAIN")
 
 # Email
 # https://docs.djangoproject.com/en/dev/ref/settings/#email
-
-EMAIL_USE_TLS = True
-EMAIL_HOST = config("PRD_EMAIL_HOST")
-EMAIL_HOST_USER = config("PRD_EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = config("PRD_EMAIL_HOST_PASSWORD")
-EMAIL_PORT = config("PRD_EMAIL_PORT")
 DEFAULT_FROM_EMAIL = config("PRD_DEFAULT_FROM_EMAIL")
+
+# https://docs.djangoproject.com/en/latest/howto/mailers-migration/#migrating-settings
+MAILERS = {
+    "default": {
+        "BACKEND":"django.core.mail.backends.smtp.EmailBackend",
+        "OPTIONS": {
+            "host": config("PRD_EMAIL_HOST"),
+            "use_tls": True,
+            "username":  config("PRD_EMAIL_HOST_USER"),
+            "password": config("PRD_EMAIL_HOST_PASSWORD"),
+        },
+    },
+}
 
 # Logging
 # https://docs.djangoproject.com/en/dev/ref/settings/#logging

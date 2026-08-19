@@ -165,9 +165,18 @@ class CustomerCompositeProgramsView(
 
     def get_queryset(self):
         filter_kwargs = {}
+        search = Q()
+        search_params = self.request.query_params.get('search', "").strip()
         active_query = self.request.query_params.get("active")
         expired_query = self.request.query_params.get("expired")
         service_category_query = self.request.query_params.get('category')
+
+        if search_params:
+            search |= Q(composite_template__code__icontains=search_params)
+            search |= Q(composite_template__name__icontains=search_params)
+            search |= Q(composite_template__name__istartswith=search_params)
+            search |= Q(program__uid__istartswith=search_params)
+            search |= Q(program__uid__iexact=search_params)
 
         if active_query in {"0", "1"}:
             filter_kwargs["program__is_active"] = bool(int(active_query))
@@ -189,7 +198,7 @@ class CustomerCompositeProgramsView(
         center = self.get_center()
         customer_profile = self.get_customer_profile(center)
         return self.get_composite_program_queryset(center.pk).filter(
-            program__customer_profile=customer_profile,
+            search, program__customer_profile=customer_profile,
             **filter_kwargs,
         ).distinct()
 
@@ -256,6 +265,7 @@ class CustomerCompositeProgramServicesView(
             .select_related(
                 "program",
                 "program__composite_program",
+                "program__composite_program__composite_template",
             )
             .filter(
                 Q(program__center=center)

@@ -8,3 +8,7 @@ class PrerequisiteCondition(models.TextChoices):
 
 class CompositeAssessmentType(models.TextChoices):
     BASELINE = "baseline", "Baseline"
+    ANNUAL = "annual", "Annual"
+    SIX_MONTH_REVIEW = "six_month_review", "6 Months Review"
+    RETEST = "retest", "Retest"
+    SPECIAL_INVESTIGATION = "special_investigation", "Special Investigation"

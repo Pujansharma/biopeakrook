@@ -154,8 +154,8 @@ null
     },
     "composite_template": {
       "id": "<composite_template_uuid>",
+      "code": "<template_sku>",
       "name": "<string>",
-      "description": "<string|null>",
       "is_active": "<boolean>"
     },
     "program_type": "composite",

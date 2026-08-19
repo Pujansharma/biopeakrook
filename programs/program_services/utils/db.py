@@ -6,6 +6,10 @@ from django.db import transaction
 from django.db.models import Count, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 
+from programs.composites.utils.db import (
+    update_composite_program_document_counts,
+    update_composite_program_results_count,
+)
 from programs.models import ProgramService
 from programs.services.models import ServiceDocument, ServiceResult
 from programs.services.utils.constants import ServiceDocumentCategory
@@ -152,6 +156,7 @@ def _delete_stored_file(storage: Storage, file_name: str):
 def delete_service_document(service_document: ServiceDocument):
     result_identifier = service_document.result.pk
     program_service_identifier = service_document.result.program_service.pk
+    program_identifier = service_document.result.program_service.program.pk
     file_storage = service_document.file.storage
     file_name = service_document.file.name
 
@@ -159,6 +164,7 @@ def delete_service_document(service_document: ServiceDocument):
         service_document.delete()
         update_result_documents_count(result_identifier)
         update_program_service_document_counts(program_service_identifier)
+        update_composite_program_document_counts(program_identifier)
         if file_name:
             transaction.on_commit(
                 partial(_delete_stored_file, file_storage, file_name)
@@ -167,6 +173,7 @@ def delete_service_document(service_document: ServiceDocument):
 
 def delete_service_result(service_result: ServiceResult):
     program_service_identifier = service_result.program_service.pk
+    program_identifier = service_result.program_service.program.pk
 
     with transaction.atomic():
         document_files = [
@@ -178,6 +185,8 @@ def delete_service_result(service_result: ServiceResult):
         service_result.delete()
         update_program_service_results_count(program_service_identifier)
         update_program_service_document_counts(program_service_identifier)
+        update_composite_program_results_count(program_identifier)
+        update_composite_program_document_counts(program_identifier)
         for file_storage, file_name in document_files:
             if file_name:
                 transaction.on_commit(

@@ -806,7 +806,10 @@ class CustomerAssociateSerializer(BaseModelSerializer):
     is_active = serializers.BooleanField(
         source="user.is_active", required=False, default=True
     )
-    role = BaseAssociateRoleSerializer(read_only=True)
+    role = BaseAssociateRoleSerializer(
+        source="current_center_assignment.role",
+        read_only=True,
+    )
     created_by = BaseUserSerializer(read_only=True)
 
     class Meta:

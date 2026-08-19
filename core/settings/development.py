@@ -42,13 +42,20 @@ STORAGES = {
 
 # Email
 # https://docs.djangoproject.com/en/dev/ref/settings/#email
-
-EMAIL_HOST = config("DEV_EMAIL_HOST", "")
-EMAIL_PORT = config("DEV_EMAIL_PORT", "")
-EMAIL_HOST_USER = config("DEV_EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = config("DEV_EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = config("DEV_DEFAULT_FROM_EMAIL", "Local <mail@localhost>")
 
+MAILERS = {
+    "default": {
+        "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+        "OPTIONS": {
+            "host": config("DEV_EMAIL_HOST", ""),
+            "use_tls": False,
+            "port": config("DEV_EMAIL_PORT", ""),
+            "username": config("DEV_EMAIL_HOST_USER", ""),
+            "password": config("DEV_EMAIL_HOST_PASSWORD", ""),
+        },
+    },
+}
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True

@@ -41,12 +41,9 @@ Content-Type: application/json
 
 ## 3. Data Semantics
 
-The response contains two different descriptions:
-
-- Top-level `description` is the editable program description stored on
-  `composite_program.program.description`.
-- `composite_template.description` is read-only template metadata and must never
-  be changed when the program description is edited.
+Top-level `description` is the editable program description stored on
+`composite_program.program.description`. The nested `composite_template`
+reference exposes only `id`, `code`, `name`, and `is_active`.
 
 The `services` field is a preview of assigned services. `services_count` is the
 authoritative total. The service-category counters include both template
@@ -69,6 +66,7 @@ GET /profiles/:profile_id/programs/composite-programs/
 |---|---|---|
 | `active` | `0`, `1` | Filters inactive or active programs |
 | `expired` | `0`, `1` | Filters expired or unexpired programs |
+| `search` | string | Case-insensitive template code/name or program UID search |
 | `page` | positive integer | Requested results page |
 | `limit` | `1`–`50` | Page size |
 
@@ -117,8 +115,8 @@ null
       },
       "composite_template": {
         "id": "<composite_template_uuid>",
+        "code": "<template_sku>",
         "name": "<string>",
-        "description": "<template_description|null>",
         "is_active": true
       },
       "name": "<string|null>",

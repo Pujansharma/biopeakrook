@@ -262,6 +262,11 @@ class CompositeProgram(BaseModel):
     therapy_services_count = models.PositiveBigIntegerField(default=0, editable=False)
     consultation_services_count = models.PositiveBigIntegerField(default=0, editable=False)
 
+    results_count = models.PositiveBigIntegerField(default=0, editable=False)
+    documents_count = models.PositiveBigIntegerField(default=0, editable=False)
+    reports_count = models.PositiveBigIntegerField(default=0, editable=False)
+    raw_data_count = models.PositiveBigIntegerField(default=0, editable=False)
+
     class Meta:
         ordering = ["-created_at"]
 

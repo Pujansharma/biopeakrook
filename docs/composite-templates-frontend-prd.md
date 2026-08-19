@@ -27,6 +27,7 @@ null
   "data": [
     {
       "id": "<uuid>",
+      "code": "<string>",
       "name": "<string|null>",
       "description": "<string|null>",
       "services": [
@@ -105,6 +106,7 @@ null
 
 ```json
 {
+  "code": "<string>",
   "name": "<string>",
   "description": "<string|null>",
   "add_services": [
@@ -124,6 +126,7 @@ null
   "detail": "Create success.",
   "data": {
     "id": "<uuid>",
+    "code": "<string>",
     "name": "<string>",
     "description": "<string|null>",
     "services": [
@@ -210,6 +213,7 @@ null
   "detail": "Details.",
   "data": {
     "id": "<uuid>",
+    "code": "<string>",
     "name": "<string>",
     "description": "<string|null>",
     "services": [
@@ -287,6 +291,7 @@ null
 
 ```json
 {
+  "code": "<string>",
   "name": "<string>",
   "description": "<string|null>",
   "is_active": "<boolean>"
@@ -300,6 +305,7 @@ null
   "detail": "<Modified successfully.|Updated successfully.>",
   "data": {
     "id": "<uuid>",
+    "code": "<string>",
     "name": "<string>",
     "description": "<string|null>",
     "services": [
@@ -499,8 +505,8 @@ null
       },
       "composite_template": {
         "id": "<uuid>",
+        "code": "<string>",
         "name": "<string>",
-        "description": "<string|null>",
         "is_active": "<boolean>"
       },
       "name": "<string>",
@@ -654,8 +660,8 @@ service, the field may be omitted, set to `null`, or set to `"baseline"`.
     },
     "composite_template": {
       "id": "<uuid>",
+      "code": "<string>",
       "name": "<string>",
-      "description": "<string|null>",
       "is_active": "<boolean>"
     },
     "name": "<string|null>",
@@ -764,8 +770,8 @@ null
     },
     "composite_template": {
       "id": "<uuid>",
+      "code": "<string>",
       "name": "<string>",
-      "description": "<string|null>",
       "is_active": "<boolean>"
     },
     "name": "<string|null>",
