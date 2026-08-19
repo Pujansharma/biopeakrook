@@ -6,7 +6,6 @@ from programs.composites.utils.constants import PrerequisiteCondition
 
 class CompositeTemplate(BaseUUIDModel):
     name = models.CharField(max_length=200)
-    uid = models.CharField(editable=False, null=True, blank=True, db_index=True)
     code = models.CharField(max_length=50, unique=True)
     description = models.TextField(null=True, blank=True)
     services_count = models.PositiveBigIntegerField(default=0, editable=False)
