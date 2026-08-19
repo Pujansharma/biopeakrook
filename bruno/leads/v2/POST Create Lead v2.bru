@@ -1,0 +1,38 @@
+meta {
+  name: POST Create Lead v2
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/leads/v2/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+}
+
+body:json {
+  {
+    "first_name": "Bhaskar",
+    "last_name": "Reddy",
+    "gender": "0",
+    "age": 35,
+    "phone": "{{phone}}",
+    "email": "reddybhaskar@biopeak.com",
+    "is_active": true,
+    "is_onboarding_sent": false,
+    "home_center_id": "{{home_center_id}}"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Creates lead plus shell User, Customer, and main CustomerProfile (is_converted=false). Rejects if a User already exists for the phone.
+}

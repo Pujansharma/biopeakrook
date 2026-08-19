@@ -1,0 +1,28 @@
+meta {
+  name: POST Create Test Kit Product
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/test_kit_inventory/products/add/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+}
+
+body:json {
+  {
+    "test_name": "Thyroid Panel",
+    "code": "THY-001",
+    "provider_id": "{{test_kit_provider_id}}"
+  }
+}
+
+settings {
+  encodeUrl: true
+}

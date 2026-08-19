@@ -1,0 +1,28 @@
+meta {
+  name: POST Convert Client
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseURL}}/leads/v2/{{lead_id}}/convert-client/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+}
+
+body:json {
+  {}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Unchanged. Finalizes lead conversion (is_converted=true, center assignment, etc.). Requires home_center on lead.
+}

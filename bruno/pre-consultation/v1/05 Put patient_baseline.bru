@@ -1,0 +1,51 @@
+meta {
+  name: 05 Put patient_baseline
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_baseline/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "first_name": "Vikram",
+    "last_name": "Rao",
+    "dob": "1974-01-20",
+    "gender": "male",
+    "email_address": "vikram.rao@example.com",
+    "emergency_contact_name": "Lakshmi Rao",
+    "emergency_contact_phone": "+919876543212",
+    "address": {
+      "line_1": "88 Connaught Place",
+      "line_2": "Block C",
+      "city": "New Delhi",
+      "state": "Delhi",
+      "pin_code": "110001",
+      "residency_type": "home"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_baseline/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Sets profile for medical_history + sexual_health gating. Gender: male, female, other.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

@@ -1,0 +1,19 @@
+meta {
+  name: GET All Items
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/test_kit_inventory/all
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+}

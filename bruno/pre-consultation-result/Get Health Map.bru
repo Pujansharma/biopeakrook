@@ -1,0 +1,27 @@
+meta {
+  name: Get Health Map
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/result/{{customer_user_id}}/health-map/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/result/<user_id>/health-map/
+  
+  Concern-level health map sorted by confidence desc.
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

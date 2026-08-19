@@ -1,0 +1,34 @@
+meta {
+  name: PATCH Checklist Item
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/pre-consultation/result/{{customer_user_id}}/checklist/{{checklist_item_id}}/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "done": true
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PATCH /pre-consultation/result/<user_id>/checklist/<item_id>/
+  
+  Toggle checklist item done state. Requires checklist_item_id (set by Get Overview).
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

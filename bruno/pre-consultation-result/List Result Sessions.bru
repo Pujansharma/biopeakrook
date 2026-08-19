@@ -1,0 +1,75 @@
+meta {
+  name: List Result Sessions
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/result/list/?search=&page=1&limit=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  @description('Name, phone, or email')
+  search: 
+  page: 1
+  limit: 10
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  test('status 200', () => expect(res.getStatus()).to.equal(200));
+  const json = res.getBody();
+  test('success true', () => expect(json.success).to.eql(true));
+  test('paginated envelope', () => {
+      expect(json).to.have.property('count');
+      expect(json).to.have.property('data');
+  });
+  const rows = json.data || [];
+  if (rows.length > 0) {
+      test('row has user_id and status', () => {
+          expect(rows[0]).to.have.property('user_id');
+          expect(['In Progress', 'Completed']).to.include(rows[0].status);
+      });
+      bru.setCollectionVar('customer_user_id', rows[0].user_id);
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/result/list/
+  
+  Paginated index of all pre-consultation sessions for staff result workflows.
+  
+  Query params:
+  - search — filter by customer name, phone, or contact email
+  - page (default 1)
+  - limit (default 10, max 50)
+  
+  search matches (same as other list APIs):
+  - full name prefix (main CustomerProfile, falls back to User)
+  - phone prefix (national segment)
+  - contact_email prefix and contains
+  
+  Response envelope:
+  { success, count, next, previous, data: [...] }
+  
+  Each data[] row:
+  - user_id — customer User.pk (use as customer_user_id for detail endpoints)
+  - id — PreConsultationSession.pk
+  - contact_email — Customer.contact_email
+  - phone — User.phone
+  - first_name, last_name, gender, date_of_birth — main CustomerProfile (falls back to User)
+  - status — In Progress | Completed (PreConsultationSession.status)
+  
+  Sets customer_user_id from first row when present.
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

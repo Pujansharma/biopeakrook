@@ -1,0 +1,31 @@
+meta {
+  name: PATCH Lead v2
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/leads/v2/{{lead_id}}/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+}
+
+body:json {
+  {
+    "first_name": "BhaskarTesterTwo",
+    "is_onboarding_sent": true
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Same as PATCH /leads/{id}/ plus full shell sync. Phone is read-only. If lead is converted (profile.is_converted=true), only is_onboarding_sent may be updated.
+}

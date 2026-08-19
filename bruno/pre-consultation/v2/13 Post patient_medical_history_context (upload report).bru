@@ -1,0 +1,55 @@
+meta {
+  name: 13 Post patient_medical_history_context (upload report)
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseURL}}/pre-consultation/session/patient_medical_history_context/
+  body: multipartForm
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+body:multipart-form {
+  file: @file(fixtures/sample-medical-report.pdf)
+}
+
+script:post-response {
+  const response = res.getBody();
+  const data = response.data || {};
+  
+  function saveMedicalReportId(reportId) {
+      bru.setCollectionVar("medical_report_id", reportId);
+      if (bru.getEnvName()) {
+          bru.setEnvVar("medical_report_id", reportId);
+      }
+  }
+  
+  if (data.id) {
+      saveMedicalReportId(data.id);
+      test("Stored medical_report_id", function () {
+          expect(data.id).to.be.a("string").and.not.empty;
+      });
+  } else {
+      test("Medical report id present", function () {
+          expect.fail("No medical report id in upload response");
+      });
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  POST /pre-consultation/session/patient_medical_history_context/
+  
+  multipart/form-data field `file` — upload one medical report before PUT.
+  Requires current_layer = patient_medical_history_context.
+  Stores response data.id in collection variable medical_report_id for PUT.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

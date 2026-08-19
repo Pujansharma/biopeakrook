@@ -1,0 +1,30 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Returns a simple OK response from HomePageView at the root URL.
+  
+  Method: GET
+  Path: /
+  Source: core.utils.defaults.HomePageView
+  Auth: No authentication required.
+  
+  Success responses use {"success": true, "detail": "...", "data": ...}.
+}

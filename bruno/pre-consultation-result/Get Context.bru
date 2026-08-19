@@ -1,0 +1,27 @@
+meta {
+  name: Get Context
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/result/{{customer_user_id}}/context/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/result/<user_id>/context/
+  
+  Quick clinical context: quick_summary, top_5_concerns, top_3_clusters, current_medications, know_diagnosis.
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

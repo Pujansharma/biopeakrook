@@ -1,0 +1,43 @@
+meta {
+  name: 07 Put patient_category
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_category/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "category_ids": [
+      "heart_bp",
+      "metabolism",
+      "sleep_stress_mood",
+      "gut_digestion",
+      "energy_brain_vitality"
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_category/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Deselected categories delete orphan concerns immediately (FK cascade).
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

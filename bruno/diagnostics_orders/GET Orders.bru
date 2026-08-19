@@ -1,0 +1,98 @@
+meta {
+  name: GET Orders
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseURL}}/diagnostics_orders/orders/?search=&page=1&limit=10&status=&collection_date=all
+  body: none
+  auth: inherit
+}
+
+params:query {
+  search: 
+  page: 1
+  limit: 10
+  status: 
+  @description('all|today|tomorrow|past_7_days|upcoming')
+  collection_date: all
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Paginated orders. Query: search, page, limit, status, collection_date. No cities filter. Items: request_id, customers[{name}], address, slot_datetime, status, eta (null when tat_in_hours null), amount.
+}
+
+example {
+  name: 200 Orders
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/orders/?search=&page=1&limit=10&status=&collection_date=all
+    method: GET
+    mode: none
+    params:query: {
+      search: 
+      page: 1
+      limit: 10
+      status: 
+      collection_date: all
+    }
+  
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+        {
+          "success": true,
+          "detail": "",
+          "data": [
+            {
+              "request_id": "BLR123456",
+              "customers": [
+                { "name": "Jane Doe" }
+              ],
+              "address": "12 MG Road, Bengaluru, Karnataka 560001",
+              "slot_datetime": "2026-08-15T06:00:00Z",
+              "status": "order.created",
+              "eta": null,
+              "amount": "499.00"
+            }
+          ],
+          "pagination": {
+            "count": 1,
+            "next": null,
+            "previous": null,
+            "page": 1,
+            "limit": 10
+          }
+        }
+      '''
+    }
+  }
+}

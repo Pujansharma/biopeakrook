@@ -1,0 +1,45 @@
+meta {
+  name: 16 Put patient_lifestyle_environment/v2
+  type: http
+  seq: 16
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_lifestyle_environment/v2/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "sleep_duration": "<5 hrs",
+    "eating_pattern": "eating_out",
+    "sugary_drinks": "daily",
+    "activity_level": "sedentary",
+    "desk_job": "yes",
+    "stress_level": "very_high",
+    "hydration": "lt_1L",
+    "alcohol": "frequent",
+    "tobacco": "smoked"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_lifestyle_environment/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Only layer PUT returning data: { next_layer }. Computes cluster scores.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

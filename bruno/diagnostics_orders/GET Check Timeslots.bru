@@ -1,0 +1,84 @@
+meta {
+  name: GET Check Timeslots
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/diagnostics_orders/check-timeslots/?address={{diagnostics_address}}&request_date={{diagnostics_request_date}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  address: {{diagnostics_address}}
+  request_date: {{diagnostics_request_date}}
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Orange Labs serviceability. Query: address, request_date (today+). Returns request_date_servicible_status, address_servicible_status, time_slots buckets.
+}
+
+example {
+  name: 200 Timeslots
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/check-timeslots/?address={{diagnostics_address}}&request_date={{diagnostics_request_date}}
+    method: GET
+    mode: none
+    params:query: {
+      address: {{diagnostics_address}}
+      request_date: {{diagnostics_request_date}}
+    }
+  
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+        {
+          "success": true,
+          "detail": "Timeslots fetched.",
+          "data": {
+            "request_date_servicible_status": true,
+            "address_servicible_status": true,
+            "time_slots": {
+              "morning_slot": [
+                { "datetime": "2026-08-15T06:00:00" }
+              ],
+              "afternoon_slot": [
+                { "datetime": "2026-08-15T13:00:00" }
+              ],
+              "evening_slot": []
+            }
+          }
+        }
+      '''
+    }
+  }
+}

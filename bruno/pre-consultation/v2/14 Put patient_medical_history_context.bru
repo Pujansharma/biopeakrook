@@ -1,0 +1,80 @@
+meta {
+  name: 14 Put patient_medical_history_context
+  type: http
+  seq: 14
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_medical_history_context/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "selected_diagnosis_ids": [
+      "diabetes",
+      "hypertension",
+      "fatty_liver"
+    ],
+    "reproductive_diagnosis_ids": [],
+    "allergies": [
+      "Penicillin"
+    ],
+    "medication_status": "medication_supplement",
+    "medications": [
+      {
+        "name": "Metformin",
+        "dosage": "1000mg",
+        "frequency": "Twice daily",
+        "duration": "5 years"
+      },
+      {
+        "name": "Amlodipine",
+        "dosage": "10mg",
+        "frequency": "Once daily",
+        "duration": "8 years"
+      },
+      {
+        "name": "Atorvastatin",
+        "dosage": "40mg",
+        "frequency": "Once daily",
+        "duration": "4 years"
+      }
+    ],
+    "surgeries": [
+      {
+        "name": "Appendectomy",
+        "performed_when": "2012",
+        "reason": "Acute appendicitis"
+      },
+      {
+        "name": "Cholecystectomy",
+        "performed_when": "2019",
+        "reason": "Gallstones"
+      }
+    ],
+    "sexual_health_question": [],
+    "medical_report_ids": []
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_medical_history_context/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Requires medication_status. POST upload before PUT for reports. surgeries[]: { name, performed_when, reason }.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

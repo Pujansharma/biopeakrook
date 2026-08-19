@@ -1,0 +1,23 @@
+meta {
+  name: GET Lead v2
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/leads/v2/{{lead_id}}/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Retrieve a lead by ID.
+}

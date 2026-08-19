@@ -1,0 +1,82 @@
+meta {
+  name: PATCH Reschedule Order
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseURL}}/diagnostics_orders/order/reschedule/{{diagnostics_request_id}}/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "updated_slot_datetime": "{{diagnostics_slot_datetime}}",
+    "reason": "customer_request",
+    "explanation": "Customer requested a later slot"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Reschedule via Orange Labs. Body: updated_slot_datetime, reason, explanation. Appends reschedule_history.
+}
+
+example {
+  name: 200 Rescheduled
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/order/reschedule/{{diagnostics_request_id}}/
+    method: PATCH
+    mode: json
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+      Content-Type: application/json
+    }
+  
+    body:json: {
+      {
+        "updated_slot_datetime": "{{diagnostics_slot_datetime}}",
+        "reason": "customer_request",
+        "explanation": "Customer requested a later slot"
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "success": true,
+          "detail": "Order rescheduled.",
+          "data": {
+            "status": "order.created"
+          }
+        }
+      '''
+    }
+  }
+}

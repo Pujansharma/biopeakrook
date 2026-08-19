@@ -1,0 +1,83 @@
+meta {
+  name: 20 Put patient_cluster_probe
+  type: http
+  seq: 18
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_cluster_probe/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "concerns": [
+      {
+        "id": "heart_bp_high_cholesterol",
+        "cluster_probe": [
+          {
+            "id": "metabolic_health_sleepy_after_meals",
+            "value": "yes"
+          },
+          {
+            "id": "metabolic_health_crave_sweets_often",
+            "value": "yes"
+          },
+          {
+            "id": "metabolic_health_energy_crashes_mid_day",
+            "value": "yes"
+          },
+          {
+            "id": "metabolic_health_hungry_soon_after_eating",
+            "value": "yes"
+          },
+          {
+            "id": "metabolic_health_waist_increased_recently",
+            "value": "yes"
+          },
+          {
+            "id": "cardiometabolic_risk_breathless_climbing_stairs",
+            "value": "no"
+          },
+          {
+            "id": "cardiometabolic_risk_bp_ever_found_high",
+            "value": "yes"
+          },
+          {
+            "id": "cardiometabolic_risk_salty_fried_food_often",
+            "value": "yes"
+          },
+          {
+            "id": "cardiometabolic_risk_swelling_in_feet",
+            "value": "no"
+          },
+          {
+            "id": "cardiometabolic_risk_get_tired_on_exertion",
+            "value": "no"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_cluster_probe/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Conditional — skip if lifestyle next_layer was patient_goals_priorities.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

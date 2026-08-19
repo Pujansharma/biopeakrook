@@ -12,7 +12,7 @@
 
 **Session wizard:** [api-pre-consultation-v1.md](./api-pre-consultation-v1.md) · [api-pre-consultation-v2.md](./api-pre-consultation-v2.md) · [simulation.md](./simulation.md)
 
-**Postman:** folder `pre-consultation-result` (staff `Bearer {{access_token}}`)
+**Bruno:** folder `bruno/pre-consultation-result/` (staff `Bearer {{access_token}}`)
 
 ---
 

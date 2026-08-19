@@ -1,0 +1,19 @@
+meta {
+  name: GET Eligible Customers
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/test_kit_inventory/customer
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,15 @@
+meta {
+  name: pre-consultation-result
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  Staff onboarding result API (/pre-consultation/result/). Auth: admin or associate bearer token (not customer). Workflow: List Result Sessions → pick customer_user_id → detail endpoints.
+}

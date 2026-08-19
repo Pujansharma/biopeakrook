@@ -1,0 +1,19 @@
+meta {
+  name: diagnostics_orders
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Orange Labs diagnostics orders. Base: {{baseURL}}/diagnostics_orders/
+  
+  National catalog: CatalogItem(test_id int, name, price). No city/pincode catalog gate.
+  
+  Auth (same requests):
+  - Admin or Associate JWT: Bearer {{access_token}}
+  - X-Center-ID {{center_id}} optional (no role feature gate).
+  
+  Webhook: {{baseURL}}/webhooks/orange-labs/ (no JWT; HMAC X-OH-Signature)
+}
