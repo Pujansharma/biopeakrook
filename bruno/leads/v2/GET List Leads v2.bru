@@ -1,0 +1,26 @@
+meta {
+  name: GET List Leads v2
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseURL}}/leads/v2
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+}
+
+body:json {
+  {
+    "is_onboarding_sent": true
+  }
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,19 @@
+meta {
+  name: DELETE Lead
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{baseURL}}/leads/{{lead_id}}/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,27 @@
+meta {
+  name: 24 Complete Session
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseURL}}/pre-consultation/session/complete/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  POST /pre-consultation/session/complete/
+  
+  Step 12 — marks session completed. Requires current_layer = patient_health_map (after goals PUT advances layer).
+  Sets customer profile is_onboarding_complete = true.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

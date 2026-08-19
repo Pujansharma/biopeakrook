@@ -1,0 +1,36 @@
+meta {
+  name: 03 Start Session
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/pre-consultation/session/start/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "interface": "web",
+    "app_version": "1.0.0",
+    "locale": "en-IN",
+    "device": "Chrome / macOS"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  POST /pre-consultation/session/start/
+  
+  Creates or resumes session. Run first in the flow.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

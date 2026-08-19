@@ -1,0 +1,26 @@
+meta {
+  name: 04 Get patient_baseline
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/session/patient_baseline/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/session/patient_baseline/
+  
+  Returns saved layer data. Works even when session status is completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

@@ -1,0 +1,46 @@
+meta {
+  name: 09 Put patient_concern
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_concern/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "concern_ids": [
+      "heart_bp_high_bp",
+      "heart_bp_high_cholesterol",
+      "metabolism_blood_sugar",
+      "metabolism_fatty_liver",
+      "sleep_stress_mood_snoring_sleep_apnea",
+      "sleep_stress_mood_burnout",
+      "gut_digestion_acidity",
+      "energy_brain_vitality_low_energy"
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_concern/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Removed concern_ids delete symptoms, impact, probes via FK cascade.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

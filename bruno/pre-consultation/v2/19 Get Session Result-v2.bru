@@ -1,0 +1,28 @@
+meta {
+  name: 19 Get Session Result/v2
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/session/result/v2/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/session/result/
+  
+  Step 11 health-map summary: explored health systems, concern/cluster counts, lifestyle context, ranked goals.
+  Available when current_layer = patient_health_map (after goals PUT). Works in-progress or completed.
+  Run before Complete Session.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

@@ -16,8 +16,8 @@ modules/utils/pdf_engine/build
 *.bak
 *.json
 !pre_consultation/data/pre_consultation_directive.json
-!docs/postman/
-!docs/postman/*.json
+!bruno/
+!bruno/bruno.json
 sim.html
 
 # If you are using PyCharm #
@@ -159,9 +159,7 @@ GitHub.sublime-settings
 .aider
 .windsurf
 .continue
-postman
 
 
 # MacOS #
 .DS_Store
-/postman

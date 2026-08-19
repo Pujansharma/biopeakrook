@@ -1,0 +1,39 @@
+meta {
+  name: Get Overview
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/result/{{customer_user_id}}/overview/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  const response = res.getBody();
+  const data = response.data || {};
+  const checklist = data.checklist || [];
+  if (checklist.length > 0 && checklist[0].id) {
+      bru.setCollectionVar("checklist_item_id", checklist[0].id);
+      if (bru.getEnvName()) {
+          bru.setEnvVar("checklist_item_id", checklist[0].id);
+      }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/result/<user_id>/overview/
+  
+  Session summary: artifacts summary, checklist, patient goals. Sets checklist_item_id from first checklist row when present.
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

@@ -1,0 +1,35 @@
+meta {
+  name: POST Consignment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/test_kit_inventory/consignment
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+}
+
+body:json {
+  {
+    "provider": "{{provider_id}}",
+    "received_on": "2026-08-06",
+    "products": [
+      {
+        "id": "{{product_id}}",
+        "quantity": 10,
+        "qc_ack_packaging": true,
+        "qc_ack_all_components": true
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,26 @@
+meta {
+  name: 12 Get patient_medical_history_context
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/session/patient_medical_history_context/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/session/patient_medical_history_context/
+  
+  Returns saved layer data including medication_status. Works even when session status is completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

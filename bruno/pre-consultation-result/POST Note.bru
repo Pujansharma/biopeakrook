@@ -1,0 +1,35 @@
+meta {
+  name: POST Note
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseURL}}/pre-consultation/result/{{customer_user_id}}/notes/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "note": "Follow up on lipid panel.",
+    "category": "investigation"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  POST /pre-consultation/result/<user_id>/notes/
+  
+  Create session note. category: general, investigation, treatment, follow_up, question.
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

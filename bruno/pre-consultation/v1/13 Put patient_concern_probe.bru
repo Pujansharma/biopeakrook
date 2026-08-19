@@ -1,0 +1,86 @@
+meta {
+  name: 13 Put patient_concern_probe
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_concern_probe/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "concerns": [
+      {
+        "id": "heart_bp_high_bp",
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "rapidly_worsening"
+      },
+      {
+        "id": "heart_bp_high_cholesterol",
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "metabolism_blood_sugar",
+        "selected_functional_impact_id": "regularly",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "metabolism_fatty_liver",
+        "selected_functional_impact_id": "occasionally",
+        "selected_duration_impact_id": "1_3yr",
+        "selected_progression_impact_id": "stable"
+      },
+      {
+        "id": "sleep_stress_mood_snoring_sleep_apnea",
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "sleep_stress_mood_burnout",
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "1_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "gut_digestion_acidity",
+        "selected_functional_impact_id": "regularly",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "stable"
+      },
+      {
+        "id": "energy_brain_vitality_low_energy",
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_concern_probe/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Runs ConcernConfidenceEngine; advances to medical_history.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

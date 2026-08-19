@@ -1,0 +1,119 @@
+meta {
+  name: POST Orange Labs Webhook (status)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseURL}}/webhooks/orange-labs/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  @description('Auto-set in pre-request from orange_webhook_secret + raw body')
+  X-OH-Signature: 
+  @description('Idempotency UUID; auto-refreshed in pre-request')
+  X-OH-Event-Id: {{$guid}}
+}
+
+body:json {
+  {
+    "event": "task.assigned",
+    "contains": ["order", "request", "tasks"],
+    "payload": {
+      "request": {
+        "city_request_id": "{{diagnostics_request_id}}",
+        "id": 5383272,
+        "status_string": "scheduled"
+      },
+      "order": {
+        "city_request_id": "{{diagnostics_request_id}}",
+        "id": 6139141,
+        "status_string": "requested"
+      },
+      "tasks": []
+    }
+  }
+}
+
+script:pre-request {
+  const crypto = require('crypto');
+  const secret = bru.getEnvVar('orange_webhook_secret') || bru.getCollectionVar('orange_webhook_secret') || '';
+  const body = req.getBody();
+  const raw = typeof body === 'string' ? body : JSON.stringify(body ?? '');
+  const signature = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+  req.setHeader('X-OH-Signature', signature);
+  const existingEventId = req.getHeader('X-OH-Event-Id');
+  if (!existingEventId || String(existingEventId).includes('{{')) {
+    req.setHeader('X-OH-Event-Id', bru.interpolate('{{$guid}}'));
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Orange status webhook. No JWT. HMAC via X-OH-Signature (raw body + orange_webhook_secret). Lookup order by payload.request.city_request_id.
+}
+
+example {
+  name: 200 Received
+  
+  request: {
+    url: {{baseURL}}/webhooks/orange-labs/
+    method: POST
+    mode: json
+    headers: {
+      Content-Type: application/json
+      X-OH-Signature: 
+      X-OH-Event-Id: {{$guid}}
+    }
+  
+    body:json: {
+      {
+        "event": "task.assigned",
+        "contains": ["order", "request", "tasks"],
+        "payload": {
+          "request": {
+            "city_request_id": "{{diagnostics_request_id}}",
+            "id": 5383272,
+            "status_string": "scheduled"
+          },
+          "order": {
+            "city_request_id": "{{diagnostics_request_id}}",
+            "id": 6139141,
+            "status_string": "requested"
+          },
+          "tasks": []
+        }
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+      X-OH-Signature: hex-hmac
+      X-OH-Event-Id: 11111111-1111-1111-1111-111111111111
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "success": true,
+          "detail": "Webhook received successfully",
+          "data": {}
+        }
+      '''
+    }
+  }
+}

@@ -1,0 +1,155 @@
+meta {
+  name: 11 Put patient_concern_probe/v2
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_concern_probe/v2/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "concerns": [
+      {
+        "id": "heart_bp_high_bp",
+        "selected_symptom_ids": [
+          "heart_bp_high_bp:high_bp_reading"
+        ],
+        "selected_concern_source_ids": [
+          "lab_result",
+          "symptoms",
+          "family"
+        ],
+        "selected_family_relations": [
+          {
+            "id": "father",
+            "age_band_id": "over_60"
+          }
+        ],
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "rapidly_worsening"
+      },
+      {
+        "id": "heart_bp_high_cholesterol",
+        "selected_symptom_ids": [
+          "heart_bp_high_cholesterol:ldl"
+        ],
+        "selected_concern_source_ids": [
+          "lab_result",
+          "family"
+        ],
+        "selected_family_relations": [
+          {
+            "id": "father",
+            "age_band_id": "over_60"
+          }
+        ],
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "metabolism_blood_sugar",
+        "selected_symptom_ids": [
+          "metabolism_blood_sugar:hba1c"
+        ],
+        "selected_concern_source_ids": [
+          "lab_result",
+          "symptoms"
+        ],
+        "selected_family_relations": [],
+        "selected_functional_impact_id": "regularly",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "metabolism_fatty_liver",
+        "selected_symptom_ids": [
+          "metabolism_fatty_liver:ultrasound"
+        ],
+        "selected_concern_source_ids": [
+          "lab_result"
+        ],
+        "selected_family_relations": [],
+        "selected_functional_impact_id": "occasionally",
+        "selected_duration_impact_id": "1_3yr",
+        "selected_progression_impact_id": "stable"
+      },
+      {
+        "id": "sleep_stress_mood_snoring_sleep_apnea",
+        "selected_symptom_ids": [
+          "sleep_stress_mood_snoring_sleep_apnea:sleep_study"
+        ],
+        "selected_concern_source_ids": [
+          "symptoms",
+          "lab_result"
+        ],
+        "selected_family_relations": [],
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "sleep_stress_mood_burnout",
+        "selected_symptom_ids": [],
+        "selected_concern_source_ids": [
+          "symptoms"
+        ],
+        "selected_family_relations": [],
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "1_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      },
+      {
+        "id": "gut_digestion_acidity",
+        "selected_symptom_ids": [
+          "gut_digestion_acidity:h_pylori_test"
+        ],
+        "selected_concern_source_ids": [
+          "lab_result"
+        ],
+        "selected_family_relations": [],
+        "selected_functional_impact_id": "regularly",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "stable"
+      },
+      {
+        "id": "energy_brain_vitality_low_energy",
+        "selected_symptom_ids": [
+          "energy_brain_vitality_low_energy:vitamin_d"
+        ],
+        "selected_concern_source_ids": [
+          "lab_result"
+        ],
+        "selected_family_relations": [],
+        "selected_functional_impact_id": "significant",
+        "selected_duration_impact_id": "gt_3yr",
+        "selected_progression_impact_id": "gradually_worsening"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_concern_probe/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Runs ConcernConfidenceEngine; advances to medical_history.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

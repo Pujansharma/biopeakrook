@@ -1,0 +1,19 @@
+meta {
+  name: GET Batches
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseURL}}/test_kit_inventory/batches
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+}

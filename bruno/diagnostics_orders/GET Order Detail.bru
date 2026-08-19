@@ -1,0 +1,153 @@
+meta {
+  name: GET Order Detail
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseURL}}/diagnostics_orders/order/{{diagnostics_request_id}}/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Order detail. customers[].tests = [{test_id, name, price}]. No packages. Nested reschedule_history (newest first).
+}
+
+example {
+  name: 200 Order Detail
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/order/{{diagnostics_request_id}}/
+    method: GET
+    mode: none
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+        {
+          "success": true,
+          "detail": "Order detail.",
+          "data": {
+            "address": "12 MG Road, Bengaluru, Karnataka 560001",
+            "request_id": "BLR123456",
+            "total_price": "499.00",
+            "tat_in_hours": null,
+            "slot_datetime": "2026-08-15T06:00:00Z",
+            "notes": "",
+            "status": "order.created",
+            "reports": [],
+            "customers": [
+              {
+                "name": "Jane Doe",
+                "customer_total": "499.00",
+                "tests": [
+                  {
+                    "test_id": 12345,
+                    "name": "CBC",
+                    "price": "499.00"
+                  }
+                ]
+              }
+            ],
+            "reschedule_history": []
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 200 With Reschedule History
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/order/{{diagnostics_request_id}}/
+    method: GET
+    mode: none
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+        {
+          "success": true,
+          "detail": "Order detail.",
+          "data": {
+            "address": "12 MG Road, Bengaluru, Karnataka 560001",
+            "request_id": "BLR123456",
+            "total_price": "499.00",
+            "tat_in_hours": null,
+            "slot_datetime": "2026-08-15T13:00:00Z",
+            "notes": "",
+            "status": "order.created",
+            "reports": [],
+            "customers": [
+              {
+                "name": "Jane Doe",
+                "customer_total": "499.00",
+                "tests": [
+                  {
+                    "test_id": 12345,
+                    "name": "CBC",
+                    "price": "499.00"
+                  }
+                ]
+              }
+            ],
+            "reschedule_history": [
+              {
+                "previous_slot_datetime": "2026-08-15T06:00:00Z",
+                "new_slot_datetime": "2026-08-15T13:00:00Z",
+                "reason": "customer_request",
+                "explanation": "Customer requested a later slot",
+                "rescheduled_by": "01900000-0000-7000-8000-0000000000bb",
+                "created_at": "2026-08-15T07:00:00Z"
+              }
+            ]
+          }
+        }
+      '''
+    }
+  }
+}

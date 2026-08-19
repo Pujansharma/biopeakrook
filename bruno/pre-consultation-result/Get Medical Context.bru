@@ -1,0 +1,27 @@
+meta {
+  name: Get Medical Context
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseURL}}/pre-consultation/result/{{customer_user_id}}/medical-context/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  GET /pre-consultation/result/<user_id>/medical-context/
+  
+  Diagnosis, medications, suppliments, surgeries. medication_status gates medications vs suppliments.
+  
+  Reference: docs/pre_consultation/api-pre-consultation-result.md
+}

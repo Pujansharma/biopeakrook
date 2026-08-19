@@ -1,0 +1,105 @@
+meta {
+  name: POST Create Order
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseURL}}/diagnostics_orders/create-order/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "address": "{{diagnostics_address}}",
+    "notes": "",
+    "slot_datetime": "{{diagnostics_slot_datetime}}",
+    "idempotency_key": "{{diagnostics_idempotency_key}}",
+    "customers": [
+      {
+        "user_id": "{{customer_user_id}}",
+        "name": "Jane Doe",
+        "gender": "1",
+        "age": 30,
+        "phone": "{{phone}}",
+        "diagnostic_tests": [{{diagnostics_test_id}}]
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  diagnostic_tests = int[] of catalog test_id. age is int in API (Orange gets age as string). National price. Optional denorm pincode from address. No city gate.
+}
+
+example {
+  name: 201 Created
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/create-order/
+    method: POST
+    mode: json
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+      Content-Type: application/json
+    }
+  
+    body:json: {
+      {
+        "address": "{{diagnostics_address}}",
+        "notes": "",
+        "slot_datetime": "{{diagnostics_slot_datetime}}",
+        "idempotency_key": "{{diagnostics_idempotency_key}}",
+        "customers": [
+          {
+            "user_id": "{{customer_user_id}}",
+            "name": "Jane Doe",
+            "gender": "1",
+            "age": 30,
+            "phone": "{{phone}}",
+            "diagnostic_tests": [{{diagnostics_test_id}}]
+          }
+        ]
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "success": true,
+          "detail": "Order created.",
+          "data": {
+            "request_id": "BLR123456"
+          }
+        }
+      '''
+    }
+  }
+}

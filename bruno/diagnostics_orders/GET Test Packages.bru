@@ -1,0 +1,79 @@
+meta {
+  name: GET Test Packages
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/diagnostics_orders/test-packages/?search=
+  body: none
+  auth: inherit
+}
+
+params:query {
+  @description('Optional. Case-insensitive name filter.')
+  search: 
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  National catalog. Query: `search` optional. Returns `{tests:[{test_id,name,price}]}`. No pincode.
+}
+
+example {
+  name: 200 Catalog
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/test-packages/?search=
+    method: GET
+    mode: none
+    params:query: {
+      search: 
+    }
+  
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+        {
+          "success": true,
+          "detail": "Catalog fetched.",
+          "data": {
+            "tests": [
+              {
+                "test_id": 12345,
+                "name": "CBC",
+                "price": "499.00"
+              }
+            ]
+          }
+        }
+      '''
+    }
+  }
+}

@@ -1,0 +1,48 @@
+meta {
+  name: 22 Put patient_goals_priorities
+  type: http
+  seq: 20
+}
+
+put {
+  url: {{baseURL}}/pre-consultation/session/patient_goals_priorities/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  [
+    {
+      "id": "manage_known_condition",
+      "priority": 1
+    },
+    {
+      "id": "weight_loss",
+      "priority": 2
+    },
+    {
+      "id": "improve_sleep",
+      "priority": 3
+    }
+  ]
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  PUT /pre-consultation/session/patient_goals_priorities/
+  
+  Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
+  
+  Top-level JSON array. Advances to patient_health_map.
+  
+  Returns 409 when session completed.
+  Reference: docs/pre_consultation/api-pre-consultation.md
+}

@@ -1,0 +1,155 @@
+meta {
+  name: POST Orange Labs Webhook (reports)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseURL}}/webhooks/orange-labs/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  @description('Auto-set in pre-request from orange_webhook_secret + raw body')
+  X-OH-Signature: 
+  @description('Idempotency UUID; auto-refreshed in pre-request')
+  X-OH-Event-Id: {{$guid}}
+}
+
+body:json {
+  {
+    "event": "order.completed",
+    "contains": ["order", "request", "reports"],
+    "payload": {
+      "request": {
+        "city_request_id": "{{diagnostics_request_id}}",
+        "id": 5383345,
+        "status_string": "completed"
+      },
+      "order": {
+        "city_request_id": "{{diagnostics_request_id}}",
+        "id": 6139220,
+        "status_string": "completed",
+        "partner_reference_id": "{{customer_user_id}}"
+      },
+      "reports": [
+        {
+          "id": 160366700,
+          "file_type": "merged_report_co_bran",
+          "file_name": "patient_merged_report_co_bran.pdf",
+          "tokenize_public_file_url": "https://files.orangehealth.in/api/media-url?fileId=160366700&token=example",
+          "city_request_id": "{{diagnostics_request_id}}",
+          "order_id": 6139220
+        },
+        {
+          "id": 160366701,
+          "file_type": "merged_report",
+          "file_name": "patient_merged_report.pdf",
+          "tokenize_public_file_url": "https://files.orangehealth.in/api/media-url?fileId=160366701&token=example",
+          "city_request_id": "{{diagnostics_request_id}}",
+          "order_id": 6139220
+        }
+      ]
+    }
+  }
+}
+
+script:pre-request {
+  const crypto = require('crypto');
+  const secret = bru.getEnvVar('orange_webhook_secret') || bru.getCollectionVar('orange_webhook_secret') || '';
+  const body = req.getBody();
+  const raw = typeof body === 'string' ? body : JSON.stringify(body ?? '');
+  const signature = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+  req.setHeader('X-OH-Signature', signature);
+  const existingEventId = req.getHeader('X-OH-Event-Id');
+  if (!existingEventId || String(existingEventId).includes('{{')) {
+    req.setHeader('X-OH-Event-Id', bru.interpolate('{{$guid}}'));
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  order.completed / test.completed_sent: merges slim reports into DiagnosticOrder.reports by report id.
+}
+
+example {
+  name: 200 Received
+  
+  request: {
+    url: {{baseURL}}/webhooks/orange-labs/
+    method: POST
+    mode: json
+    headers: {
+      Content-Type: application/json
+      X-OH-Signature: 
+      X-OH-Event-Id: {{$guid}}
+    }
+  
+    body:json: {
+      {
+        "event": "order.completed",
+        "contains": ["order", "request", "reports"],
+        "payload": {
+          "request": {
+            "city_request_id": "{{diagnostics_request_id}}",
+            "id": 5383345,
+            "status_string": "completed"
+          },
+          "order": {
+            "city_request_id": "{{diagnostics_request_id}}",
+            "id": 6139220,
+            "status_string": "completed",
+            "partner_reference_id": "{{customer_user_id}}"
+          },
+          "reports": [
+            {
+              "id": 160366700,
+              "file_type": "merged_report_co_bran",
+              "file_name": "patient_merged_report_co_bran.pdf",
+              "tokenize_public_file_url": "https://files.orangehealth.in/api/media-url?fileId=160366700&token=example",
+              "city_request_id": "{{diagnostics_request_id}}",
+              "order_id": 6139220
+            },
+            {
+              "id": 160366701,
+              "file_type": "merged_report",
+              "file_name": "patient_merged_report.pdf",
+              "tokenize_public_file_url": "https://files.orangehealth.in/api/media-url?fileId=160366701&token=example",
+              "city_request_id": "{{diagnostics_request_id}}",
+              "order_id": 6139220
+            }
+          ]
+        }
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+      X-OH-Signature: hex-hmac
+      X-OH-Event-Id: 22222222-2222-2222-2222-222222222222
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "success": true,
+          "detail": "Webhook received successfully",
+          "data": {}
+        }
+      '''
+    }
+  }
+}

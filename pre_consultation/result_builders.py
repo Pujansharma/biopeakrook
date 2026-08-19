@@ -1032,7 +1032,7 @@ def serialize_session_list_item(session: PreConsultationSession) -> dict:
     }
 
 
-def get_session_list_queryset(search: str = ""):
+def get_session_list_queryset(search: str = "", center_id: str | None = None):
     main_profile_first_name = CustomerProfile.objects.filter(
         customer_id=OuterRef("user_id"),
         is_main=True,
@@ -1069,6 +1069,14 @@ def get_session_list_queryset(search: str = ""):
         )
         .order_by("-created_at")
     )
+
+    if center_id:
+        queryset = queryset.filter(
+            user__customer__profiles__center_assignments__center_id=center_id,
+            user__customer__profiles__is_converted=True,
+            user__customer__profiles__is_main=True,
+        )
+
     if not search:
         return queryset
 

@@ -1,0 +1,94 @@
+meta {
+  name: GET Eligible Customers
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/diagnostics_orders/eligible-customers/?search=&page=1&limit=10&center=
+  body: none
+  auth: inherit
+}
+
+params:query {
+  search: 
+  page: 1
+  limit: 10
+  @description('optional center UUID filter')
+  center: 
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  @description('Optional')
+  X-Center-ID: {{center_id}}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Eligible customers for diagnostics order. Query: search, page, limit, center (optional UUID). Returns name, phone, user_id, age, gender, address, pincode.
+}
+
+example {
+  name: 200 Eligible Customers
+  
+  request: {
+    url: {{baseURL}}/diagnostics_orders/eligible-customers/?search=&page=1&limit=10&center=
+    method: GET
+    mode: none
+    params:query: {
+      search: 
+      page: 1
+      limit: 10
+      center: 
+    }
+  
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  }
+  
+  response: {
+    headers: {
+      Authorization: Bearer {{access_token}}
+      X-Center-ID: {{center_id}}
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+        {
+          "success": true,
+          "detail": "",
+          "data": [
+            {
+              "name": "Jane Doe",
+              "phone": "+919876543210",
+              "user_id": "019f5160-5a69-7403-9cc7-dde80cdff39a",
+              "age": 30,
+              "gender": "Female",
+              "address": "12 MG Road, Bengaluru, Karnataka, 560001",
+              "pincode": "560001"
+            }
+          ],
+          "pagination": {
+            "count": 1,
+            "next": null,
+            "previous": null,
+            "page": 1,
+            "limit": 10
+          }
+        }
+      '''
+    }
+  }
+}
