@@ -30,6 +30,20 @@ def update_associate_centers_count(associate_id: UUID):
     )
 
 
+def update_center_associate_centers_count(center_id: UUID):
+    centers_count_subquery = Subquery(
+        AssociateCenterAssignment.objects.filter(associate=OuterRef("pk"))
+        .exclude(center__pk=center_id)
+        .order_by()
+        .values("associate")
+        .annotate(count=Count("center", distinct=True))
+        .values("count")
+    )
+    return Associate.objects.filter(
+        center_assignments__center__pk=center_id
+    ).update(centers_count=Coalesce(centers_count_subquery, Value(0)))
+
+
 def get_associate_roles(associate, center_id, request=None):
     cache_key = "_center_assignment"
 
