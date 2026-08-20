@@ -6,7 +6,7 @@ from django.db.models import (
     RestrictedError,
     ProtectedError,
     Subquery,
-    Value,
+    Value, Prefetch,
 )
 from django.db.models.functions import Coalesce, Concat
 
@@ -84,6 +84,12 @@ class AssociateView(BaseListCreateAPIView):
                     F("user__first_name"), Value(" "), F("user__last_name")
                 ),
             )
+            .prefetch_related(
+                Prefetch(
+                    "center_assignments",
+                    queryset=AssociateCenterAssignment.objects.select_related("center"),
+                )
+            )
             .filter(search_query, **filter_kwargs)
             .order_by("-created_at")
             .distinct()
@@ -146,7 +152,7 @@ class AssociateAvailableCenterView(BaseListAPIView):
         return Center.objects.annotate(
             exists=Exists(associated_centers_subquery),
             is_admin=Coalesce(Subquery(is_admin_subquery), Value(False)),
-        ).filter(search_query)
+        ).filter(search_query).order_by('-exists', '-created_at')
 
 
 class AssociateCenterLinkView(BaseCreateAPIView):

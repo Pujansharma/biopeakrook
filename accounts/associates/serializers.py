@@ -7,9 +7,12 @@ from accounts.associates.models import (
     AssociateRole,
 )
 from accounts.associates.utils.constants import AssociateTitle
-from accounts.associates.utils.db import create_associate_user_account
+from accounts.associates.utils.db import (
+    create_associate_user_account,
+    update_associate_centers_count,
+)
 from accounts.centers.models import Center
-from accounts.centers.serializers import CenterSerializer
+from accounts.centers.serializers import CenterSerializer, MinimumCenterSerializer
 from accounts.centers.utils.db import (
     increment_staff_count,
     increment_inactive_staff_count,
@@ -209,6 +212,8 @@ class AdminAssociateSerializer(
     BaseAssociateSerializer, BasePasswordCheckOptionalSerializer
 ):
     """Serializers for admins to update or create associates"""
+    centers_count = serializers.IntegerField(default=0, read_only=True)
+    centers = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Associate
@@ -234,8 +239,18 @@ class AdminAssociateSerializer(
             "professions",
             "password1",
             "password2",
+            "centers_count",
+            "centers",
         ]
         extra_kwargs = {"email": {"required": True}}
+
+    def get_centers(self, instance):
+        center_assignments = getattr(instance, 'center_assignments', None)
+        if not center_assignments:
+            return None
+        assignments = center_assignments.all()[:3]
+        centers = [assignment.center for assignment in assignments]
+        return MinimumCenterSerializer(centers, many=True, context=self.context).data
 
     def create(self, validated_data):
         """Admins will create via this serializer"""
@@ -465,6 +480,7 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
 
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         associate = validated_data.pop("associate", None)
 
@@ -502,6 +518,7 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
 
         affected_center_ids = [c["id"] for c in add_centers] + list(remove_center_ids)
         refresh_staff_counts(affected_center_ids)
+        update_associate_centers_count(associate.pk)
 
         return associate
 
@@ -725,6 +742,7 @@ class CenterAssociateSerializer(
             )
 
             increment_staff_count(assignment.center.pk)
+            update_associate_centers_count(associate.pk)
             increment_organization_admins_count()
             if send_password_link:
                 send_registration_code(user)
@@ -844,7 +862,7 @@ class CenterAssociateDetailSerializer(
                     {"role_id": "Roles cannot be assigned to admin associates."}
                 )
             if not AssociateRole.objects.filter(
-                pk=role_id, center=instance.center
+                    pk=role_id, center=instance.center
             ).exists():
                 raise serializers.ValidationError(
                     {"role_id": "Invalid role for this center."}
