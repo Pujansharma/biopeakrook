@@ -5,8 +5,6 @@ from diagnostics_orders.models import (
     DiagnosticsOrdersSummary,
 )
 from diagnostics_orders.utils.constants import TERMINAL_ORDER_STATUSES
-from pre_consultation.models import PreConsultationSession
-from pre_consultation.utils.constants import PreConsultationSessionStatus
 
 
 def get_or_create_summary():
@@ -40,13 +38,6 @@ def bump_summary_completed():
     DiagnosticsOrdersSummary.objects.filter(id=1).update(
         total_completed=F("total_completed") + 1
     )
-
-
-def customer_profile_has_completed_pre_consultation(customer_profile):
-    return PreConsultationSession.objects.filter(
-        user_id=customer_profile.customer.user_id,
-        status=PreConsultationSessionStatus.COMPLETED,
-    ).exists()
 
 
 def customer_profile_has_active_diagnostic_order(customer_profile):

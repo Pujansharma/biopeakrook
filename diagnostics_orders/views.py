@@ -32,7 +32,6 @@ from diagnostics_orders.utils.constants import (
     CollectionDateFilter,
     TERMINAL_ORDER_STATUSES,
 )
-from pre_consultation.utils.constants import PreConsultationSessionStatus
 
 
 class EligibleCustomersViewMeta(BaseGenericAPIView):
@@ -52,11 +51,7 @@ class EligibleCustomersViewMeta(BaseGenericAPIView):
         queryset = (
             CustomerProfile.objects.filter(
                 is_active=True,
-                customer__user__pre_consultation_session__status=(
-                    PreConsultationSessionStatus.COMPLETED
-                ),
-                programs__is_active=True,
-                programs__cancelled_at__isnull=True,
+                is_onboarding_completed=True,
                 center_assignments__is_active=True,
                 **filter_kwargs,
             )

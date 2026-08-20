@@ -24,7 +24,6 @@ from diagnostics_orders.utils.db import (
     bump_summary_orders,
     bump_summary_rescheduled,
     customer_profile_has_active_diagnostic_order,
-    customer_profile_has_completed_pre_consultation,
     get_default_address,
     get_default_address_text,
     get_or_create_summary,
@@ -189,13 +188,13 @@ class CreateOrderSerializer(BaseSerializer):
                 raise serializers.ValidationError(
                     {"customers": f"No customer profile for user_id {customer_data['user_id']}"}
                 )
-            if not customer_profile_has_completed_pre_consultation(profile):
+            if not profile.is_onboarding_completed:
                 raise serializers.ValidationError(
-                    {"customers": f"Pre-consultation incomplete for {customer_data['user_id']}"}
-                )
-            if not profile.programs.filter(is_active=True, cancelled_at__isnull=True).exists():
-                raise serializers.ValidationError(
-                    {"customers": f"No active program for {customer_data['user_id']}"}
+                    {
+                        "customers": (
+                            f"Onboarding incomplete for {customer_data['user_id']}"
+                        )
+                    }
                 )
             if not profile.center_assignments.filter(is_active=True).exists():
                 raise serializers.ValidationError(
