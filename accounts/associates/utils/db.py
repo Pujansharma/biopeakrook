@@ -1,4 +1,9 @@
-from accounts.associates.models import AssociateCenterAssignment
+from uuid import UUID
+
+from django.db.models import Count, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
+
+from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.models import UserAccount
 from accounts.utils.constants import UserType
 
@@ -10,6 +15,19 @@ def create_associate_user_account(associate):
         user=user, account_type=UserType.ASSOCIATE
     )
     return user_account
+
+
+def update_associate_centers_count(associate_id: UUID):
+    centers_count_subquery = Subquery(
+        AssociateCenterAssignment.objects.filter(associate=OuterRef("pk"))
+        .order_by()
+        .values("associate")
+        .annotate(count=Count("center", distinct=True))
+        .values("count")
+    )
+    return Associate.objects.filter(pk=associate_id).update(
+        centers_count=Coalesce(centers_count_subquery, Value(0))
+    )
 
 
 def get_associate_roles(associate, center_id, request=None):
