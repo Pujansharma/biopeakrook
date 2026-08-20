@@ -1,6 +1,6 @@
 import requests
 from django.conf import settings
-from urllib.parse import urlencode
+from urllib.parse import quote
 
 from core.utils.log import logger
 
@@ -27,9 +27,7 @@ def _require_base_url():
 
 def check_serviceability(address, request_date):
     base_url = _require_base_url()
-    url_encoded_params = urlencode({"address": address, "request_date": request_date})
-    url = f"{base_url}/v1/partner/serviceability?{url_encoded_params}"
-
+    url = f"{base_url}/v1/partner/serviceability?address={quote(address)}&request_date={request_date}"
     session = OrangeLabsSession()
     response = session.get(url)
     try:
