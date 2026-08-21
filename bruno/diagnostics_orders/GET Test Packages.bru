@@ -26,7 +26,7 @@ settings {
 }
 
 docs {
-  National catalog. Query: `search` optional. Returns `{tests:[{test_id,name,price}]}`. No pincode.
+  National catalog. Query: `search` optional. Returns `{tests:[{test_id,name,price,is_custom_package,description}]}`. No pincode.
 }
 
 example {
@@ -68,7 +68,9 @@ example {
               {
                 "test_id": 12345,
                 "name": "CBC",
-                "price": "499.00"
+                "price": "499.00",
+                "is_custom_package": false,
+                "description": ""
               }
             ]
           }
