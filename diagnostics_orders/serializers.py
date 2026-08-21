@@ -88,7 +88,7 @@ class CheckTimeslotsQuerySerializer(BaseSerializer):
 class CatalogItemResponseSerializer(BaseModelSerializer):
     class Meta:
         model = CatalogItem
-        fields = ("test_id", "name", "price")
+        fields = ("test_id", "name", "price", "is_custom_package", "description")
 
 
 class AddTestPackageSerializer(BaseSerializer):

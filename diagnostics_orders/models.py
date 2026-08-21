@@ -12,6 +12,8 @@ class CatalogItem(BaseUUIDModel):
     test_id = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_custom_package = models.BooleanField(default=False)
+    description = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "diagnostics_orders_catalog_item"
