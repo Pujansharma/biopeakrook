@@ -20,24 +20,30 @@ body:json {
 }
 
 script:post-response {
-  test('Stores tokens when present', function () {
-      const response = res.getBody();
-      const data = response.data || {};
-      const hasEnvironment = Boolean(pm.environment && bru.getEnvName());
-      if (data.access) {
-          bru.setCollectionVar('access_token', data.access);
-          bru.setCollectionVar('customer_access_token', data.access);
-          if (hasEnvironment) {
-              bru.setEnvVar('access_token', data.access);
-              bru.setEnvVar('customer_access_token', data.access);
-          }
-      }
-      if (data.refresh) {
-          bru.setCollectionVar('refresh_token', data.refresh);
-          if (hasEnvironment) {
-              bru.setEnvVar('refresh_token', data.refresh);
-          }
-      }
+  const body = res.getBody() || {};
+  const data = body.data || {};
+  const access = data.access;
+  const refresh = data.refresh;
+
+  if (access) {
+    bru.setVar('access_token', access);
+    bru.setCollectionVar('access_token', access);
+    bru.setCollectionVar('customer_access_token', access);
+    if (bru.getEnvName()) {
+      bru.setEnvVar('access_token', access);
+      bru.setEnvVar('customer_access_token', access);
+    }
+  }
+  if (refresh) {
+    bru.setVar('refresh_token', refresh);
+    bru.setCollectionVar('refresh_token', refresh);
+    if (bru.getEnvName()) {
+      bru.setEnvVar('refresh_token', refresh);
+    }
+  }
+
+  pm.test('Stores tokens when present', function () {
+    pm.expect(access, 'data.access missing — login failed or unexpected envelope').to.be.ok;
   });
 }
 
@@ -46,5 +52,5 @@ settings {
 }
 
 docs {
-  Phone-only login without OTP. Looks up existing active User by phone. Create lead via leads/v2 first.
+  Phone-only login without OTP. Looks up existing active User by phone. Create lead via leads/v2 first. Post-response stores JWT on env + collection as access_token.
 }

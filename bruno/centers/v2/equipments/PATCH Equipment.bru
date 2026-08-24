@@ -1,0 +1,40 @@
+meta {
+  name: PATCH Equipment
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/{{equipment_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "DEXA-001",
+    "room_id": null,
+    "operational_status": "maintenance",
+    "is_active": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Update equipment. room_id null clears room. is_active false = soft deactivate.
+  operational_status: operational | maintenance | downtime (mutually exclusive).
+  Read-only is_in_maintenance / is_downtime derived on GET responses.
+}

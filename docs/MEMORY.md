@@ -98,6 +98,8 @@
 
 ## Known Issues / In-Progress Work
 
+**Center inventory + service resources v2 (2026-08-25)** — Spec `docs/superpowers/specs/2026-08-25-center-inventory-service-resources-design.md`; plan `docs/superpowers/plans/2026-08-25-center-inventory-service-resources.md`. Code: `accounts/centers/v2/` under `/centers/<uuid>/v2/`. Phase A dual-field (CharField enums kept + `Room.room_type_ref` / `Equipment.equipment_type` FKs). `RoomType`/`EquipmentType` per-center. Assignment fields + `CenterServiceRoleRequirement` on `CenterServiceAssignment`. No DELETE; PATCH `is_active`. Associates: `X-Center-ID` must match URL. Bruno: `bruno/centers/v2/`. **User owns migrations** — run makemigrations for inventory + programs.services.
+
 **CenterServiceAssignment bridge (2026-05-11)** — ✅ code (services/, external/); task `docs/tasks/center-services-bridge-model.md`. Pending: migrate + run.
 
 **External centers count (2026-05-11)** — ✅ `CustomerProfile.external_centers_count`; inc/dec `accounts/customers/utils/db.py`; `recompute_external_centers_count`.

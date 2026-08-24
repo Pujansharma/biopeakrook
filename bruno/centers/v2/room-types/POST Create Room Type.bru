@@ -1,0 +1,35 @@
+meta {
+  name: POST Create Room Type
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/v2/room-types/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "Consultation"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create room type for center. Unique name per center.
+}

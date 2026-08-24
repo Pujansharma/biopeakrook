@@ -1,0 +1,51 @@
+meta {
+  name: PATCH Center Service Assignment V2
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/v2/services/{{service_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "duration": 30,
+    "buffer_before": 5,
+    "buffer_after": 10,
+    "modality": "in_person",
+    "required_room_type_id": null,
+    "required_equipment_type_id": null,
+    "required_role_ids": []
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Update per-center assignment config. modality: in_person | virtual | both.
+
+  Set env service_id first (from list). Empty → 404.
+
+  All resource fields optional:
+  - required_room_type_id — omit to leave; null to clear; UUID for active same-center type
+  - required_equipment_type_id — same
+  - required_role_ids — omit to leave; [] clears; array replaces full set
+
+  Duration/buffers/modality also optional on PATCH.
+  Response: full service + assignment payload.
+}

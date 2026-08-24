@@ -1,0 +1,18 @@
+meta {
+  name: centers
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  Center-scoped APIs. Set env center_id. Auth: Bearer {{access_token}}.
+
+  v2/ subfolders: room-types, rooms, equipment-types, equipments, services.
+  No DELETE on v2 — PATCH is_active=false.
+}

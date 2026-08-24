@@ -1,6 +1,9 @@
 vars {
   baseURL: http://localhost:8000
-  phone: +91-9999999990
+  phone: +91-7338766426
+  access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzg3NjgyMTkxLCJpYXQiOjE3ODc1OTU3OTEsImp0aSI6IjY1ZmFjN2FmMDFlNTQ0Mjg5MTQxMDVhYWZmZjJmZDg5IiwiaWQiOiJiNzdjMGIwMS1hMjZjLTQxZjUtOWI1ZS04OWNiZjk2YzMxMjIiLCJlbWFpbCI6ImFkbWluLmRldkBiaW9wZWFrLmxvY2FsIiwicGhvbmUiOiIrOTEtNzMzODc2NjQyNiIsInVzZXJfdHlwZSI6ImFkbWluIn0.Rl8cCbR1v3M5UG-_mWqmkrcIlBqQPmNLY4AavjEnXG0
+  refresh_token: 
+  customer_access_token: 
   customer_user_id: 
   checklist_item_id: 
   provider_id: 
@@ -9,7 +12,12 @@ vars {
   customer_profile_id: 
   lead_id: 
   home_center_id: 
-  center_id: 
+  center_id: 019e1543-e779-7356-9426-170a4f829615
+  room_type_id: 01a03557-d4ae-72a3-87d7-86f0ed623f75
+  equipment_type_id: 01a035af-2065-735c-b28d-9d54ce1d533d
+  room_id: 
+  equipment_id: 
+  service_id: 019f5162-bbde-7459-bdbc-0f948369b512
   diagnostics_address: 12 MG Road, Bengaluru, Karnataka 560001
   diagnostics_request_date: 2026-08-15
   diagnostics_slot_datetime: 2026-08-15T06:00:00
@@ -18,9 +26,6 @@ vars {
   diagnostics_idempotency_key: 
 }
 vars:secret [
-  access_token,
-  refresh_token,
-  customer_access_token,
   otp,
   orange_webhook_secret
 ]

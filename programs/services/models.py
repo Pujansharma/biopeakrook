@@ -1,5 +1,6 @@
 from django.db import models
 
+from appointments.utils.constants import ScheduleModes
 from core.utils.models import BaseUUIDModel
 from products.models import Product
 from programs.services.utils.constants import (
@@ -39,6 +40,32 @@ class CenterServiceAssignment(BaseUUIDModel):
     center = models.ForeignKey(
         "centers.Center", on_delete=models.CASCADE, related_name="service_assignments"
     )
+    duration = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Appointment duration in minutes for this center",
+    )
+    buffer_before = models.PositiveSmallIntegerField(
+        default=0, help_text="Buffer minutes before the appointment"
+    )
+    buffer_after = models.PositiveSmallIntegerField(
+        default=0, help_text="Buffer minutes after the appointment"
+    )
+    modality = models.CharField(choices=ScheduleModes, default=ScheduleModes.BOTH)
+    required_room_type = models.ForeignKey(
+        "inventory.RoomType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_assignments",
+    )
+    required_equipment_type = models.ForeignKey(
+        "inventory.EquipmentType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_assignments",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -49,6 +76,30 @@ class CenterServiceAssignment(BaseUUIDModel):
         ]
         indexes = [
             models.Index(fields=["service", "center"], name="service_center_idx")
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CenterServiceRoleRequirement(BaseUUIDModel):
+    assignment = models.ForeignKey(
+        CenterServiceAssignment,
+        on_delete=models.CASCADE,
+        related_name="role_requirements",
+    )
+    role = models.ForeignKey(
+        "associates.AssociateRole",
+        on_delete=models.PROTECT,
+        related_name="service_role_requirements",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "role"], name="uniq_assignment_role_requirement"
+            )
         ]
 
     def __str__(self):

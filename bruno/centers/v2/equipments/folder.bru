@@ -1,0 +1,14 @@
+meta {
+  name: equipments
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Center equipment instances.
+  room_id optional on create/update.
+  Create: operational_status defaults to operational (not accepted in body).
+  PATCH: operational_status operational | maintenance | downtime.
+}

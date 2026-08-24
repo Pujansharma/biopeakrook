@@ -1,0 +1,40 @@
+meta {
+  name: GET List Equipments
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10&is_active=1&search=&equipment_type_id=&room_id=&operational_status=
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  is_active: 1
+  search: 
+  equipment_type_id: 
+  room_id: 
+  operational_status: 
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List equipments. Nested equipment_type + room.
+  operational_status filter: operational | maintenance | downtime.
+  Response includes operational_status + read-only is_in_maintenance, is_downtime booleans.
+}

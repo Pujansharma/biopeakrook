@@ -1,0 +1,36 @@
+meta {
+  name: GET List Rooms
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/v2/rooms/?page=1&limit=10&is_active=1&search=&room_type_id=
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  is_active: 1
+  search: 
+  room_type_id: 
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List rooms. Nested room_type. Filter room_type_id.
+}

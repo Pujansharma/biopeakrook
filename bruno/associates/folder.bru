@@ -1,0 +1,16 @@
+meta {
+  name: associates
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  Associates (staff). Admin JWT: Bearer {{access_token}}.
+  Global list: GET /associates/ (no role). Center associates: GET /centers/{{center_id}}/associates/ (nested role). Center roles: GET /centers/{{center_id}}/associate-roles/.
+}

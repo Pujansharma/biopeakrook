@@ -1,0 +1,43 @@
+meta {
+  name: POST Create Equipment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "DEXA-001",
+    "equipment_type_id": "{{equipment_type_id}}",
+    "serial_number": "SN-001",
+    "setup_time": 5,
+    "cooldown_time": 5,
+    "requires_technician": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create equipment. equipment_type_id required.
+  room_id optional — omit or null.
+  operational_status defaults to operational — do not pass on create; use PATCH to change.
+}
+​
