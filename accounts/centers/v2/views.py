@@ -308,6 +308,11 @@ class CenterServiceV2DetailView(CenterV2Mixin, BaseRetrieveUpdateAPIView):
         return assignment
 
     def partial_update(self, request, *args, **kwargs):
+        if not isinstance(request.data, dict):
+            self.raise_bad_request(
+                "Invalid Request"
+                'Check the request body and try again.'
+            )
         assignment = self.get_assignment()
         serializer = CenterServiceAssignmentV2Serializer(
             assignment,

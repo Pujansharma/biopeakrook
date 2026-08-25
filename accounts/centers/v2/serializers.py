@@ -392,20 +392,13 @@ class EquipmentV2Serializer(BaseModelSerializer):
 
 
 class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
-    required_room_type = RoomTypeNestedSerializer(read_only=True)
-    required_equipment_type = EquipmentTypeNestedSerializer(read_only=True)
     required_roles = AssociateRoleNestedSerializer(many=True, read_only=True)
-    required_room_type_id = serializers.UUIDField(
-        write_only=True, required=False, allow_null=True
-    )
-    required_equipment_type_id = serializers.UUIDField(
-        write_only=True, required=False, allow_null=True
-    )
     required_role_ids = serializers.ListField(
         child=serializers.UUIDField(),
         write_only=True,
         required=False,
         allow_empty=True,
+        allow_null=True,
     )
     modality = serializers.ChoiceField(
         choices=ScheduleModes.choices, required=False, default=ScheduleModes.BOTH
@@ -437,49 +430,61 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {
+            "required_room_type": {"read_only": True},
+            "required_equipment_type": {"read_only": True},
+        }
+
+    def get_fields(self):
+        fields = super().get_fields()
+        center = self.context.get("center")
+        room_type_queryset = RoomType.objects.none()
+        equipment_type_queryset = EquipmentType.objects.none()
+        if center is not None:
+            room_type_queryset = RoomType.objects.filter(center=center, is_active=True)
+            equipment_type_queryset = EquipmentType.objects.filter(
+                center=center, is_active=True
+            )
+
+        fields["required_room_type"] = RoomTypeNestedSerializer(read_only=True)
+        fields["required_equipment_type"] = EquipmentTypeNestedSerializer(read_only=True)
+        fields["required_room_type_id"] = serializers.PrimaryKeyRelatedField(
+            source="required_room_type",
+            queryset=room_type_queryset,
+            write_only=True,
+            required=False,
+            allow_null=True,
+            error_messages={
+                "does_not_exist": "Invalid or inactive room type for this center."
+            },
+        )
+        fields["required_equipment_type_id"] = serializers.PrimaryKeyRelatedField(
+            source="required_equipment_type",
+            queryset=equipment_type_queryset,
+            write_only=True,
+            required=False,
+            allow_null=True,
+            error_messages={
+                "does_not_exist": (
+                    "Invalid or inactive equipment type for this center."
+                )
+            },
+        )
+        return fields
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation["modality"] = instance.modality
-        role_requirements = instance.role_requirements.filter(is_active=True).select_related(
-            "role"
+        role_requirements = list(
+            instance.role_requirements.filter(is_active=True).select_related("role")
         )
+        representation["required_role_ids"] = [
+            requirement.role_id for requirement in role_requirements
+        ]
         representation["required_roles"] = AssociateRoleNestedSerializer(
             [requirement.role for requirement in role_requirements], many=True
         ).data
         return representation
-
-    def _resolve_required_room_type(self, center, room_type_id):
-        if room_type_id is None:
-            return None
-        room_type = RoomType.objects.filter(
-            pk=room_type_id, center=center, is_active=True
-        ).first()
-        if not room_type:
-            raise serializers.ValidationError(
-                {
-                    "required_room_type_id": (
-                        "Invalid or inactive room type for this center."
-                    )
-                }
-            )
-        return room_type
-
-    def _resolve_required_equipment_type(self, center, equipment_type_id):
-        if equipment_type_id is None:
-            return None
-        equipment_type = EquipmentType.objects.filter(
-            pk=equipment_type_id, center=center, is_active=True
-        ).first()
-        if not equipment_type:
-            raise serializers.ValidationError(
-                {
-                    "required_equipment_type_id": (
-                        "Invalid or inactive equipment type for this center."
-                    )
-                }
-            )
-        return equipment_type
 
     def _resolve_roles(self, center, role_ids):
         if not role_ids:
@@ -506,21 +511,14 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
 
     def update(self, instance, validated_data):
         center = self.context["center"]
+        role_ids_provided = "required_role_ids" in validated_data
         role_ids = validated_data.pop("required_role_ids", None)
-        if "required_room_type_id" in validated_data:
-            room_type_id = validated_data.pop("required_room_type_id")
-            instance.required_room_type = self._resolve_required_room_type(
-                center, room_type_id
-            )
-        if "required_equipment_type_id" in validated_data:
-            equipment_type_id = validated_data.pop("required_equipment_type_id")
-            instance.required_equipment_type = self._resolve_required_equipment_type(
-                center, equipment_type_id
-            )
+        if role_ids_provided and role_ids is None:
+            role_ids = []
 
         with transaction.atomic():
             instance = super().update(instance, validated_data)
-            if role_ids is not None:
+            if role_ids_provided:
                 roles = self._resolve_roles(center, role_ids)
                 CenterServiceRoleRequirement.objects.filter(assignment=instance).delete()
                 CenterServiceRoleRequirement.objects.bulk_create(
