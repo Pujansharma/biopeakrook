@@ -36,8 +36,8 @@ settings {
 }
 
 docs {
-  Create equipment. equipment_type_id required.
-  room_id optional — omit or null.
-  operational_status defaults to operational — do not pass on create; use PATCH to change.
+  Create equipment. Set env equipment_type_id first.
+  Optional: serial_number, setup_time, cooldown_time, requires_technician.
+  room_id optional; omit. Map equipment to room via room POST/PATCH.
+  Do not send operational_status on create; default is operational. Use PATCH to change.
 }
-​
