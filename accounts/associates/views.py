@@ -59,6 +59,7 @@ class AssociateView(BaseListCreateAPIView):
         search_params = self.request.query_params.get("search", "").strip()
         active_param = self.request.query_params.get("active", None)
         admin_query = self.request.query_params.get("admin", None)
+        care_staff_query = self.request.query_params.get("care_staff", None)
         if active_param and active_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_param))
 
@@ -68,6 +69,13 @@ class AssociateView(BaseListCreateAPIView):
                 "1": {"center_assignments__is_admin": True},
             }
             filter_kwargs.update(admin_mapping[admin_query])
+        if care_staff_query and care_staff_query in ["0", "1"]:
+            care_staff_mapping = {
+                "0": {"center_assignments__is_care_staff": False},
+                "1": {"center_assignments__is_care_staff": True},
+            }
+            filter_kwargs.update(care_staff_mapping[care_staff_query])
+
         if search_params:
             search_query |= Q(user__email__istartswith=search_params)
             search_query |= Q(national_phone__istartswith=search_params)
