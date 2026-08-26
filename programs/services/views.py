@@ -175,6 +175,12 @@ class ServiceAvailableProducts(BaseListAPIView):
 
 
 class ServiceCentersView(ServiceViewMeta, BaseListAPIView):
+    """List center assignments for a service without X-Center-ID scoping.
+
+    This read-only catalogue endpoint is intentionally available to admins and
+    associates.
+    """
+
     serializer_class = MinimalServiceCenterSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
@@ -199,6 +205,12 @@ class ServiceCentersView(ServiceViewMeta, BaseListAPIView):
 
 
 class ServiceProductsView(ServiceViewMeta, BaseListAPIView):
+    """List product assignments for a service without X-Center-ID scoping.
+
+    This read-only catalogue endpoint is intentionally available to admins and
+    associates.
+    """
+
     serializer_class = MinimalServiceProductSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
@@ -216,7 +228,7 @@ class ServiceProductsView(ServiceViewMeta, BaseListAPIView):
             filter_kwargs["product__provider__pk__in"] = provider_ids
 
         if search_query:
-            # Support prefix matches and broader substring discovery for instant search.
+            # Prefix and substring lookups are intentional for instant search.
             search |= Q(product__name__istartswith=search_query)
             search |= Q(product__name__icontains=search_query)
 
