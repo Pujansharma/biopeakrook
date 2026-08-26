@@ -25,6 +25,8 @@ Nothing is pre-stored as bookable slots. The API **computes** free windows on de
 available = base_windows − blocks − leaves/downtimes − closures
 ```
 
+Collectors load only rows that can affect the requested `start`/`granularity` window (one-offs by date/datetime overlap; recurring by `effective_from` / `effective_until`). Response shape unchanged.
+
 All datetimes are stored in **UTC** but day boundaries use the project timezone (`Asia/Kolkata` until centers get their own timezone field).
 
 ---

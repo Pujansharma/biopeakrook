@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from accounts.associates.models import AssociateCenterAssignment
 from accounts.centers.models import CenterClosure, CenterOperatingHour
 from appointments.models import (
     AssociateAvailabilityBlock,
@@ -35,6 +36,44 @@ def get_center_timezone_name(center):
     return settings.TIME_ZONE
 
 
+def recurring_block_in_query_range(query_start, query_end):
+    """Recurring rows that can expand into [query_start, query_end]."""
+    started = models.Q(effective_from__isnull=True) | models.Q(
+        effective_from__lte=query_end
+    )
+    not_ended = models.Q(effective_until__isnull=True) | models.Q(
+        effective_until__gte=query_start
+    )
+    return models.Q(is_recurring=True) & started & not_ended
+
+
+def one_off_datetime_overlap(range_start, range_end):
+    """Overlap: start < range_end and end > range_start."""
+    return models.Q(
+        is_recurring=False,
+        start_datetime__isnull=False,
+        end_datetime__isnull=False,
+        start_datetime__lt=range_end,
+        end_datetime__gt=range_start,
+    )
+
+
+def one_off_local_date_in_range(query_start, query_end):
+    return models.Q(
+        is_recurring=False,
+        date__isnull=False,
+        date__gte=query_start,
+        date__lte=query_end,
+    )
+
+
+def datetime_window_overlap(range_start, range_end):
+    return models.Q(
+        start_datetime__lt=range_end,
+        end_datetime__gt=range_start,
+    )
+
+
 def serialize_interval(interval):
     interval_start, interval_end = interval
     return {
@@ -64,12 +103,10 @@ def iter_dates_in_range(query_start, query_end):
 
 def expand_center_operating_hours(center, query_start, query_end, timezone_name):
     operating_hours = CenterOperatingHour.objects.filter(
-        center=center, is_active=True
+        center=center, is_active=True, is_open=True
     )
     intervals = []
     for operating_hour in operating_hours:
-        if not operating_hour.is_open:
-            continue
         if operating_hour.open_time is None or operating_hour.close_time is None:
             continue
         intervals.extend(
@@ -127,6 +164,9 @@ def collect_associate_block_events(center, associate, query_start, query_end, ti
         center=center,
         associate=associate,
         is_active=True,
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_datetime_overlap(range_start, range_end)
     )
     intervals = []
     events = []
@@ -165,12 +205,16 @@ def collect_associate_leave_events(center, associate, query_start, query_end, ti
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
-    leaves = AssociateLeave.objects.filter(
-        associate=associate,
-        is_active=True,
-    ).filter(
-        models.Q(scope=LeaveScope.ALL_CENTERS)
-        | models.Q(scope=LeaveScope.CENTER, center=center)
+    leaves = (
+        AssociateLeave.objects.filter(
+            associate=associate,
+            is_active=True,
+        )
+        .filter(
+            models.Q(scope=LeaveScope.ALL_CENTERS)
+            | models.Q(scope=LeaveScope.CENTER, center=center)
+        )
+        .filter(datetime_window_overlap(range_start, range_end))
     )
     intervals = []
     events = []
@@ -198,7 +242,10 @@ def collect_room_block_events(room, query_start, query_end, timezone_name):
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
-    blocks = RoomAvailabilityBlock.objects.filter(room=room, is_active=True)
+    blocks = RoomAvailabilityBlock.objects.filter(room=room, is_active=True).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_local_date_in_range(query_start, query_end)
+    )
     intervals = []
     events = []
     for block in blocks:
@@ -238,7 +285,12 @@ def collect_room_downtime_events(room, query_start, query_end, timezone_name):
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
-    downtimes = RoomDowntime.objects.filter(room=room, is_active=True)
+    downtimes = RoomDowntime.objects.filter(
+        room=room,
+        is_active=True,
+        date__gte=query_start,
+        date__lte=query_end,
+    )
     intervals = []
     events = []
     for downtime in downtimes:
@@ -265,6 +317,9 @@ def collect_equipment_block_events(equipment, query_start, query_end, timezone_n
     )
     blocks = EquipmentAvailabilityBlock.objects.filter(
         equipment=equipment, is_active=True
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_local_date_in_range(query_start, query_end)
     )
     intervals = []
     events = []
@@ -305,7 +360,12 @@ def collect_equipment_downtime_events(equipment, query_start, query_end, timezon
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
-    downtimes = EquipmentDowntime.objects.filter(equipment=equipment, is_active=True)
+    downtimes = EquipmentDowntime.objects.filter(
+        equipment=equipment,
+        is_active=True,
+        date__gte=query_start,
+        date__lte=query_end,
+    )
     intervals = []
     events = []
     for downtime in downtimes:
@@ -389,7 +449,9 @@ def build_day_payload(
     }
 
 
-def build_calendar_days(query_start, query_end, base_intervals, busy_intervals, events, timezone_name):
+def build_calendar_days(
+    query_start, query_end, base_intervals, busy_intervals, events, timezone_name
+):
     available_intervals = subtract_intervals(base_intervals, busy_intervals)
     days = []
     for day_value in iter_dates_in_range(query_start, query_end):
@@ -555,8 +617,6 @@ def compute_equipment_calendar(center, equipment, start_date, granularity):
 
 
 def compute_associate_aggregate_calendar(associate, start_date, granularity):
-    from accounts.associates.models import AssociateCenterAssignment
-
     assignments = AssociateCenterAssignment.objects.filter(
         associate=associate,
         is_active=True,
