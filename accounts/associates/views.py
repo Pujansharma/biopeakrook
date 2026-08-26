@@ -146,12 +146,17 @@ class AssociateAvailableCenterView(BaseListAPIView):
         associated_centers_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate, center=OuterRef("pk")
         )
-        is_admin_subquery = AssociateCenterAssignment.objects.filter(
+        associate_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate, center=OuterRef("pk")
-        ).values("is_admin")
+        )
         return Center.objects.annotate(
             exists=Exists(associated_centers_subquery),
-            is_admin=Coalesce(Subquery(is_admin_subquery), Value(False)),
+            is_admin=Coalesce(
+                Subquery(associate_subquery.values("is_admin")), Value(False)
+            ),
+            is_care_staff=Coalesce(
+                Subquery(associate_subquery.values("is_care_staff")), Value(False)
+            ),
         ).filter(search_query).order_by('-exists', '-created_at')
 
 
