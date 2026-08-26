@@ -21,9 +21,9 @@ auth:bearer {
 
 body:json {
   {
-    "date": "2026-08-15",
+    "date": "2026-09-07",
     "type": "holiday",
-    "reason": "Independence Day"
+    "reason": "Sample center holiday"
   }
 }
 
@@ -35,5 +35,6 @@ settings {
 docs {
   Close a date. type: holiday | manual. reason always required (name the holiday or why closed).
   Rejects duplicate active (center, date). Inactive same date reactivated with new type/reason.
-  Set closure_id from response for PATCH.
+  Sample date in GET Center Availability week of 2026-09-01.
+  Set closure_id from response data.id for PATCH.
 }

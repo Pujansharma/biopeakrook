@@ -18,6 +18,13 @@ docs {
   5. rooms — blocks / downtimes
   6. equipment — blocks / downtimes
 
+  Aggregate associate calendar lives under bruno/associates/ (not center-scoped).
+
+  Block POSTs (assoc/room/equip) return a bare JSON array on 201 — use [0].id / [n].id for env ids.
+  Other writes use standard {success, detail, data} envelope.
+
+  Sample fixtures clustered early Sep 2026 so calendar GETs see CRUD seed data.
+
   Center calendar GET defaults granularity=week; other calendars default day.
   Associates: X-Center-ID must match center_id.
   Env: center_id, associate_id, room_id, equipment_id, closure_id,

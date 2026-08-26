@@ -36,6 +36,7 @@ settings {
 }
 
 docs {
-  Recurring associate block. Associate from URL. days_of_week ("0"=Mon … "6"=Sun) → one row per day; response list.
-  No effective_until — open-ended until PATCH is_active=false. Rejects overlap. Set associate_block_id from data[n].id for PATCH.
+  Recurring associate block. Associate from URL. days_of_week ("0"=Mon … "6"=Sun) → one row per day.
+  POST 201 body = JSON array (not {data:...}). Set associate_block_id from [n].id for PATCH.
+  No effective_until — open-ended until PATCH is_active=false. Rejects overlap.
 }

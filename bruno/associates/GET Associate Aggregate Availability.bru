@@ -5,13 +5,13 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/associates/{{associate_id}}/availability/?start=2026-08-25&granularity=week
+  url: {{baseURL}}/associates/{{associate_id}}/availability/?start=2026-09-01&granularity=week
   body: none
   auth: bearer
 }
 
 params:query {
-  start: 2026-08-25
+  start: 2026-09-01
   granularity: week
 }
 
@@ -26,5 +26,6 @@ settings {
 
 docs {
   Associate calendar across all assigned centers. Any admin/associate may view any colleague.
+  No X-Center-ID required. Sample week aligned with associate block/leave fixtures.
   Omit start → today. Each day includes day_of_week ("0"=Mon … "6"=Sun) and day_of_week_name.
 }
