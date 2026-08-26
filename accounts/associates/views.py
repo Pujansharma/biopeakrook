@@ -1,12 +1,13 @@
 from django.db.models import (
-    F,
-    Q,
-    OuterRef,
     Exists,
-    RestrictedError,
+    F,
+    OuterRef,
+    Prefetch,
     ProtectedError,
+    Q,
+    RestrictedError,
     Subquery,
-    Value, Prefetch,
+    Value,
 )
 from django.db.models.functions import Coalesce, Concat
 
@@ -84,12 +85,13 @@ class AssociateView(BaseListCreateAPIView):
                     F("user__first_name"), Value(" "), F("user__last_name")
                 ),
             )
+            # Intentionally unsliced; the serializer limits the preview to three.
             .prefetch_related(
                 Prefetch(
                     "center_assignments",
                     queryset=AssociateCenterAssignment.objects.select_related(
                         "center"
-                    ).order_by("-created_at")[:3],
+                    ).order_by("-created_at"),
                 )
             )
             .filter(search_query, **filter_kwargs)
@@ -139,12 +141,14 @@ class AssociateAvailableCenterView(BaseListAPIView):
         search_query = Q()
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
+            # Prefix and substring lookups are intentional for instant search.
             search_query |= Q(name__istartswith=search_params)
             search_query |= Q(code__istartswith=search_params)
             search_query |= Q(code__icontains=search_params)
             search_query |= Q(name__icontains=search_params)
 
         associate = self.get_associate()
+        # Separate querysets intentionally distinguish existence from flag values.
         associated_centers_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate, center=OuterRef("pk")
         )
@@ -176,7 +180,7 @@ class AssociateCenterLinkView(BaseCreateAPIView):
 
     def perform_create(self, serializer):
         associate = self.get_associate()
-        serializer.save(associate=associate)
+        serializer.save(associate=associate, created_by=self.request.user)
 
 
 class AssociateAssignedCenters(BaseListAPIView):
@@ -196,24 +200,18 @@ class AssociateAssignedCenters(BaseListAPIView):
         search_query = Q()
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
+            # Prefix and substring lookups are intentional for instant search.
             search_query |= Q(name__istartswith=search_params)
             search_query |= Q(code__istartswith=search_params)
             search_query |= Q(code__icontains=search_params)
             search_query |= Q(name__icontains=search_params)
 
-        associate_subquery = AssociateCenterAssignment.objects.filter(
-            associate=associate, center=OuterRef("pk")
-        )
         return (
             Center.objects.select_related()
             .filter(search_query, associate_assignments__associate=associate)
             .annotate(
-                is_admin=Coalesce(
-                    Subquery(associate_subquery.values("is_admin")), Value(False)
-                ),
-                is_care_staff=Coalesce(
-                    Subquery(associate_subquery.values("is_care_staff")), Value(False)
-                ),
+                is_admin=F("associate_assignments__is_admin"),
+                is_care_staff=F("associate_assignments__is_care_staff"),
             )
         )
 
