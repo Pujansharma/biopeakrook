@@ -216,6 +216,7 @@ class ServiceProductsView(ServiceViewMeta, BaseListAPIView):
             filter_kwargs["product__provider__pk__in"] = provider_ids
 
         if search_query:
+            # Support prefix matches and broader substring discovery for instant search.
             search |= Q(product__name__istartswith=search_query)
             search |= Q(product__name__icontains=search_query)
 
