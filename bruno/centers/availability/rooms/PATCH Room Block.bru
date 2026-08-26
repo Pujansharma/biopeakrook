@@ -1,0 +1,35 @@
+meta {
+  name: PATCH Room Block
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/room-blocks/{{room_id}}/{{room_block_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_active": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Soft-deactivate room block. Room from URL. Set room_block_id from POST response list (data[n].id).
+}

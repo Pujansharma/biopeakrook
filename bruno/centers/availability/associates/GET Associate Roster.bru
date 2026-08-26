@@ -1,0 +1,33 @@
+meta {
+  name: GET Associate Roster
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associate-roster/?associate={{associate_id}}&is_active=1
+  body: none
+  auth: bearer
+}
+
+params:query {
+  associate: {{associate_id}}
+  is_active: 1
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List roster rows for this center. Optional associate=<uuid>, is_active=0|1 (default active only).
+}

@@ -40,4 +40,5 @@ docs {
   Optional: serial_number, setup_time, cooldown_time, requires_technician.
   room_id optional; omit. Map equipment to room via room POST/PATCH.
   Do not send operational_status on create; default is operational. Use PATCH to change.
+  Do not send code; server generates EQ-{center_code}-{seq} (e.g. EQ-CT-0001-0001).
 }

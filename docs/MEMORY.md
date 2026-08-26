@@ -24,6 +24,7 @@
 - Don't repeat explicit `read_only=True` fields in `Meta.read_only_fields`.
 - "update collection" / "update bruno" → update `bruno/` (requests, folders, envs).
 - API collection source of truth is Bruno at `bruno/`. Envs: `bruno/environments/{Development,Production}.bru`. Folder vars omitted so they cannot shadow env tokens.
+- **Always add or update Bruno** (2026-08-26): when adding or changing any API, update the Bruno collection at `bruno/` in the same change — never ship API changes without Bruno. Never miss.
 
 ---
 
@@ -31,9 +32,11 @@
 
 | Decision | Reason |
 |---|---|
-| On-demand slot generation (no pre-stored slots) | Avoids DB bloat; computed at query time via `appointments/utils/intervals.py` |
+| On-demand slot generation (no pre-stored slots) | Avoids DB bloat; computed at query time. *(Legacy `appointments/utils/intervals.py` removed 2026-08-25 — rebuild later.)* |
+| Appointments app emptied (2026-08-25) | Unused booking models (`Schedule`, `BlockedPeriod`, `Appointment`, `AppointmentHistory`), slot engine, and helpers removed. Shared `AppointmentModes` + `AppointmentDays` live in `core/utils/constants.py`. `EquipmentBooking.appointment` FK dropped. App stays in `INSTALLED_APPS` as empty shell for rebuild. User owns drop migrations. |
 | UUID7 primary keys on all models | Better DB performance + sortable by time |
 | Bruno collection at `bruno/` (2026-08-18) | Sole API collection. Open `bruno/` in Bruno. Envs: `bruno/environments/Development.bru`, `Production.bru`. No folder vars (folder > env, would blank tokens). |
+| Center operating hours + closures write APIs (2026-08-26) | Canonical under `/centers/<uuid>/availability/operating-hours/` (GET/PATCH bulk upsert) and `/closures/` (GET/POST + PATCH soft reopen). Model `CenterClosure` with required `type` (`holiday`\|`manual`) + `reason`. Center calendar default granularity `week`. Availability URL include uses `center_id` so resource detail `pk` does not collide. |
 | Center-scoped data isolation via `X-Center-ID` header | Multi-tenant design requirement |
 | Customer associate list center precedence (2026-08-19) | `CustomerAssociateListView` keeps both optional `X-Center-ID` and `center_id` query filtering. When the header is present it is the exclusive center filter; query center IDs are used only when the header is absent. |
 | Customer associate list role join (2026-08-19) | The list filters the intermediate associate-center assignment against each returned customer-assignment center before selecting its role. The response retains the existing nested `role` field and avoids multi-center join fan-out. |
@@ -73,7 +76,8 @@
 | Lead/profile onboarding flags (2026-08-06) | `Lead.is_onboarding_completed` dropped. Completion only on `CustomerProfile.is_onboarding_completed`. Both `Lead` + `CustomerProfile` `is_onboarding_sent` default `False`. Lead POST/PATCH writable: `is_onboarding_sent`. Center create + profile PATCH: writable `is_onboarding_sent`; `is_onboarding_completed` read-only on center home/detail responses. Login shell profile copies `lead.is_onboarding_sent`. Lead PATCH flipping `is_onboarding_sent` syncs linked profile. `is_invited` independent (filter/API), no longer drives profile sent. Ready for session: lead `sent=True` and (no profile or profile not completed). |
 | Leads API v2 (2026-08-10) | Admin writes on `/leads/v2/` (POST create + shell, PATCH update + shell sync). v1 GET list/detail, POST, PATCH return 400. v1 DELETE still on `/leads/{id}/`. Bruno: `bruno/leads/`. Bypass login (`/auth/login-phone-direct/`) = User lookup only, no shell provision. No backfill for legacy leads — v2 shell provisioning applies to new creates only. |
 | Emergency contact dropped (2026-08-07) | `CustomerProfile.emergency_contact_name` / `emergency_contact_phone` removed. Pre-consultation patient baseline layer no longer reads/writes those fields. |
-| On-demand slot generation (no pre-stored slots) | No DB bloat; `appointments/utils/intervals.py` at query time |
+| On-demand slot generation (no pre-stored slots) | No DB bloat; rebuild later in empty `appointments` app |
+| Appointments app emptied (2026-08-25) | Booking models + engine removed. `AppointmentModes`/`AppointmentDays` → `core/utils/constants.py`. Dropped `EquipmentBooking.appointment`. User owns migrations. |
 | UUID7 PKs all models | Better DB perf + time-sortable |
 | Center isolation via `X-Center-ID` | Multi-tenant |
 | `uv` sole package manager | Faster, reproducible; replaces pip |
@@ -98,7 +102,11 @@
 
 ## Known Issues / In-Progress Work
 
+**Availability system (2026-08-26)** — `appointments/`: roster, associate/room/equipment **blocks** (one-off + recurring), associate leaves (`center`|`all_centers`), room/equipment **downtimes** (one-off only). Calendars: `/centers/<uuid>/availability/` (+ resource paths) + `/associates/<uuid>/availability/`. CRUD under center availability; PATCH `is_active=false`; no DELETE. **Hours/closures:** `GET/PATCH .../operating-hours/` bulk upsert; `GET/POST .../closures/` + `PATCH .../closures/<uuid:pk>/` soft reopen. `CenterClosure.type`=`holiday`|`manual` + `reason`. Calendar event `closure`. Center calendar default `granularity=week`. URL `<uuid:center_id>` avoid pk collide. **Roster bulk:** `POST/PATCH .../associates/<id>/roster/` upsert-by-`day_of_week` (`entries`, int 0–6); GET `.../associate-roster/?associate=`. **Blocks (assoc/room/equip):** resource in URL. Recurring POST `days_of_week` `"0"`…`"6"` → 1 row/day, list res; no `effective_until` → deactivate `is_active=false`. Assoc one-off = datetimes; room/equip one-off + downtime = `date`+`start_time`+`end_time` (same day, `settings.TIME_ZONE`). Leaves: `associate-leaves/` body `associate`. **Overlap:** `appointments/utils/overlap.py` (blocks↔leaves/downtimes). Perms v1: `IsAdminUser|IsAssociateUser` + center/`X-Center-ID`. Engine: `intervals.py`+`calendar.py`. Docs `docs/availability.md`. Bruno `bruno/centers/availability/`. ponytail: TZ=`settings.TIME_ZONE`; room/equip base=center hours. **User owns migrations.**
+
 **Center inventory + service resources v2 (2026-08-25)** — Spec `docs/superpowers/specs/2026-08-25-center-inventory-service-resources-design.md`; plan `docs/superpowers/plans/2026-08-25-center-inventory-service-resources.md`. Code: `accounts/centers/v2/` under `/centers/<uuid>/v2/`. Phase A dual-field (CharField enums kept + `Room.room_type_ref` / `Equipment.equipment_type` FKs). `RoomType`/`EquipmentType` per-center. Assignment fields + `CenterServiceRoleRequirement` on `CenterServiceAssignment`. No DELETE; PATCH `is_active`. Associates: `X-Center-ID` must match URL. Bruno: `bruno/centers/v2/`. **User owns migrations** — run makemigrations for inventory + programs.services.
+
+**Room/equipment codes (2026-08-27)** — `Equipment.code` / `Room.code` are globally unique. Per-center sequences used to emit `EQ-0005` / `RM-0005`, so the Nth resource at two centers (or a reset sequence vs leftover rows) hit `inventory_equipment_code_key`. Generators now emit `{EQ|RM}-{center.code}-{seq}` (e.g. `EQ-CT-0001-0001`). Sequence names stay `equipments_{center_id}` / `rooms_{center_id}`. Existing `EQ-0005` rows keep the old format; new rows do not collide with them. No migration.
 
 **CenterServiceAssignment bridge (2026-05-11)** — ✅ code (services/, external/); task `docs/tasks/center-services-bridge-model.md`. Pending: migrate + run.
 

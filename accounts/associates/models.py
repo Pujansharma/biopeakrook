@@ -9,7 +9,7 @@ from accounts.associates.utils.constants import (
     AssociateTitle,
 )
 from accounts.utils import get_user_model
-from appointments.utils.constants import ScheduleModes
+from core.utils.constants import AppointmentModes
 from core.utils.fields import PhoneNumberField
 from core.utils.models import BaseModel, BaseUUIDModel
 
@@ -170,9 +170,9 @@ class AssociateCenterAssignment(BaseUUIDModel):
 
     # Center-specific configuration
     mode = models.CharField(
-        choices=ScheduleModes,
+        choices=AppointmentModes,
         help_text="How this associate works at THIS center (virtual/in-person/both)",
-        default=ScheduleModes.BOTH,
+        default=AppointmentModes.BOTH,
     )
 
     # Is this their primary center?

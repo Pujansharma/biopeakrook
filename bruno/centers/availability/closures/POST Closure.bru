@@ -1,0 +1,39 @@
+meta {
+  name: POST Closure
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/closures/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "date": "2026-08-15",
+    "type": "holiday",
+    "reason": "Independence Day"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Close a date. type: holiday | manual. reason always required (name the holiday or why closed).
+  Rejects duplicate active (center, date). Inactive same date reactivated with new type/reason.
+  Set closure_id from response for PATCH.
+}

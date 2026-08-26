@@ -14,16 +14,20 @@ def generate_center_code():
     return f"{name}-{sequence}"
 
 
+def build_center_resource_code(prefix, sequence_name, center_id):
+    center_code = (
+        Center.objects.filter(pk=center_id).values_list("code", flat=True).first()
+    )
+    sequence = get_next_sequence(name=sequence_name, fill_length=4)
+    return f"{prefix}-{center_code}-{sequence}"
+
+
 def generate_room_code(center_id):
-    name = "RM"
-    sequence = get_next_sequence(name=f"rooms_{center_id}", fill_length=4)
-    return f"{name}-{sequence}"
+    return build_center_resource_code("RM", f"rooms_{center_id}", center_id)
 
 
 def generate_equipment_code(center_id):
-    name = "EQ"
-    sequence = get_next_sequence(name=f"equipments_{center_id}", fill_length=4)
-    return f"{name}-{sequence}"
+    return build_center_resource_code("EQ", f"equipments_{center_id}", center_id)
 
 
 def check_overlap(center, day_of_week, start_time, end_time, exclude_id=None):

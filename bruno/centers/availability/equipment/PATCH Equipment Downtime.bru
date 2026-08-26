@@ -1,0 +1,35 @@
+meta {
+  name: PATCH Equipment Downtime
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/equipment-downtimes/{{equipment_id}}/{{equipment_downtime_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_active": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Soft-deactivate equipment downtime. Equipment from URL. Set equipment_downtime_id from POST response.
+}

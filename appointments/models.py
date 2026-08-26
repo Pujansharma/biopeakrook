@@ -1,161 +1,42 @@
-from datetime import time
-
-from django.core import validators
 from django.db import models
-from django.utils.translation import gettext_lazy as _
 
+from accounts.associates.models import Associate
+from accounts.centers.models import Center
 from accounts.utils import get_user_model
-from appointments.utils.constants import (
-    AppointmentStatus,
-    AppointmentDays,
-    ScheduleModes,
-    AppointmentModes,
-)
+from appointments.utils.constants import LeaveScope
+from core.utils.constants import AppointmentDays
 from core.utils.models import BaseUUIDModel
+from inventory.models import Equipment, Room
 
 User = get_user_model()
 
 
-class Schedule(BaseUUIDModel):
-    associate = models.ForeignKey(
-        "associates.Associate", on_delete=models.CASCADE, related_name="schedules"
-    )
+class AssociateRosterEntry(BaseUUIDModel):
+    """Weekly recurring associate work hours at a center."""
 
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name="associate_roster_entries"
+    )
+    associate = models.ForeignKey(
+        Associate, on_delete=models.CASCADE, related_name="roster_entries"
+    )
     day_of_week = models.CharField(choices=AppointmentDays)
-
-    start_time = models.TimeField(
-        validators=[
-            validators.MinValueValidator(time(0, 0, 0)),
-            validators.MaxValueValidator(time(23, 59, 59)),
-        ]
-    )
-    end_time = models.TimeField(
-        validators=[
-            validators.MinValueValidator(time(0, 0, 0)),
-            validators.MaxValueValidator(time(23, 59, 59)),
-        ]
-    )
-    duration = models.PositiveSmallIntegerField(
-        _("Duration (in minutes)"),
-        help_text=_("Enter duration of the slots in minutes"),
-        validators=[
-            validators.MinValueValidator(10),
-            validators.MaxValueValidator(180),
-        ],
-    )
-    center = models.ForeignKey(
-        "centers.Center", on_delete=models.RESTRICT, related_name="schedules"
-    )
-
-    mode = models.CharField(choices=ScheduleModes)
-
-    buffer_time = models.PositiveSmallIntegerField(
-        default=0, help_text="Buffer time in minutes between appointments"
-    )
-
-    valid_from = models.DateField(
-        null=True, blank=True, help_text="Schedule becomes active from this date"
-    )
-    valid_until = models.DateField(
-        null=True,
-        blank=True,
-        help_text="Schedule is valid until this date (e.g., Dec 12, 2025)",
-    )
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.pk}"
-
-
-class BlockedPeriod(BaseUUIDModel):
-    associate = models.ForeignKey(
-        "associates.Associate", on_delete=models.CASCADE, related_name="blocked_periods"
-    )
-
-    start_datetime = models.DateTimeField()  # UTC
-    end_datetime = models.DateTimeField()  # UTC
-
-    reason = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="e.g., 'Vacation', 'Conference', 'Emergency'",
-    )
-
-    class Meta:
-        ordering = ["start_datetime"]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(end_datetime__gt=models.F("start_datetime")),
-                name="blocked_period_end_after_start",
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.pk}"
-
-
-class Appointment(BaseUUIDModel):
-    associate = models.ForeignKey(
-        "associates.Associate", on_delete=models.CASCADE, related_name="appointments"
-    )
-    customer = models.ForeignKey(
-        "customers.Customer", on_delete=models.CASCADE, related_name="appointments"
-    )
-    center = models.ForeignKey(
-        "centers.Center", on_delete=models.PROTECT, related_name="appointments"
-    )
-
-    mode = models.CharField(choices=AppointmentModes.CHOICES)
-
-    start_datetime = models.DateTimeField()  # UTC
-    end_datetime = models.DateTimeField()  # UTC
-
-    status = models.CharField(
-        max_length=20, choices=AppointmentStatus, default=AppointmentStatus.PENDING
-    )
-
-    notes = models.TextField(blank=True)
-    cancellation_reason = models.TextField(blank=True)
-
-    confirmed_at = models.DateTimeField(null=True, blank=True, editable=False)
-    cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
-    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
-
+    start_time = models.TimeField()
+    end_time = models.TimeField()
     created_by = models.ForeignKey(
         User,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="created_appointments",
-        on_delete=models.SET_NULL,
-    )
-    confirmed_by = models.ForeignKey(
-        User,
-        null=True,
-        blank=True,
-        related_name="confirmed_appointments",
-        on_delete=models.SET_NULL,
-    )
-    cancelled_by = models.ForeignKey(
-        User,
-        null=True,
-        blank=True,
-        related_name="cancelled_appointments",
-        on_delete=models.SET_NULL,
+        related_name="created_associate_roster_entries",
     )
 
     class Meta:
-        ordering = ["start_datetime"]
-        indexes = [
-            models.Index(fields=["associate", "start_datetime"]),
-            models.Index(fields=["customer", "start_datetime"]),
-            models.Index(fields=["status", "start_datetime"]),
-        ]
+        ordering = ["-created_at", "day_of_week"]
         constraints = [
-            models.CheckConstraint(
-                condition=models.Q(end_datetime__gt=models.F("start_datetime")),
-                name="appointment_end_after_start",
+            models.UniqueConstraint(
+                fields=["center", "associate", "day_of_week", "start_time", "end_time"],
+                name="uniq_associate_roster_slot",
             )
         ]
 
@@ -163,19 +44,172 @@ class Appointment(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class AppointmentHistory(BaseUUIDModel):
-    appointment = models.ForeignKey(
-        Appointment, on_delete=models.CASCADE, related_name="history"
-    )
-    start_datetime = models.DateTimeField()  # UTC
-    end_datetime = models.DateTimeField()  # UTC
+class AssociateAvailabilityBlock(BaseUUIDModel):
+    """One-off or weekly recurring associate unavailability at a center."""
 
-    reason = models.TextField(blank=True)
-    rescheduled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name="associate_availability_blocks"
+    )
+    associate = models.ForeignKey(
+        Associate, on_delete=models.CASCADE, related_name="availability_blocks"
+    )
+    is_recurring = models.BooleanField(default=False)
+    start_datetime = models.DateTimeField(null=True, blank=True)
+    end_datetime = models.DateTimeField(null=True, blank=True)
+    day_of_week = models.CharField(choices=AppointmentDays, null=True, blank=True)
+    recurring_start_time = models.TimeField(null=True, blank=True)
+    recurring_end_time = models.TimeField(null=True, blank=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_until = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_associate_availability_blocks",
+    )
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name_plural = "Appointment Histories"
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AssociateLeave(BaseUUIDModel):
+    """Associate leave — center-scoped or across all centers."""
+
+    associate = models.ForeignKey(
+        Associate, on_delete=models.CASCADE, related_name="leaves"
+    )
+    scope = models.CharField(
+        choices=LeaveScope, default=LeaveScope.CENTER
+    )
+    center = models.ForeignKey(
+        Center,
+        on_delete=models.CASCADE,
+        related_name="associate_leaves",
+        null=True,
+        blank=True,
+    )
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_associate_leaves",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class RoomAvailabilityBlock(BaseUUIDModel):
+    room = models.ForeignKey(
+        Room, on_delete=models.CASCADE, related_name="availability_blocks"
+    )
+    is_recurring = models.BooleanField(default=False)
+    date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    day_of_week = models.CharField(choices=AppointmentDays, null=True, blank=True)
+    recurring_start_time = models.TimeField(null=True, blank=True)
+    recurring_end_time = models.TimeField(null=True, blank=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_until = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_room_availability_blocks",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class RoomDowntime(BaseUUIDModel):
+    room = models.ForeignKey(
+        Room, on_delete=models.CASCADE, related_name="downtimes"
+    )
+    date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    reason = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_room_downtimes",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class EquipmentAvailabilityBlock(BaseUUIDModel):
+    equipment = models.ForeignKey(
+        Equipment, on_delete=models.CASCADE, related_name="availability_blocks"
+    )
+    is_recurring = models.BooleanField(default=False)
+    date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    day_of_week = models.CharField(choices=AppointmentDays, null=True, blank=True)
+    recurring_start_time = models.TimeField(null=True, blank=True)
+    recurring_end_time = models.TimeField(null=True, blank=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_until = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_equipment_availability_blocks",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class EquipmentDowntime(BaseUUIDModel):
+    equipment = models.ForeignKey(
+        Equipment, on_delete=models.CASCADE, related_name="downtimes"
+    )
+    date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    reason = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_equipment_downtimes",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.pk}"

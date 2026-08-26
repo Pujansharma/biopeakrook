@@ -1,15 +1,579 @@
-from accounts.utils.permissions import IsAssociateUser
-from appointments.serializers import ScheduleSerializer
-from core.utils.views.main import BaseListCreateAPIView
+from django.db import models
+from rest_framework.response import Response
+
+from accounts.associates.models import Associate
+from accounts.centers.models import CenterClosure, CenterOperatingHour
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from appointments.mixins import CenterAvailabilityMixin
+from appointments.models import (
+    AssociateAvailabilityBlock,
+    AssociateLeave,
+    AssociateRosterEntry,
+    EquipmentAvailabilityBlock,
+    EquipmentDowntime,
+    RoomAvailabilityBlock,
+    RoomDowntime,
+)
+from appointments.serializers import (
+    AssociateAvailabilityBlockCreateSerializer,
+    AssociateAvailabilityBlockSerializer,
+    AssociateLeaveSerializer,
+    AssociateLeaveWriteSerializer,
+    AssociateRosterBulkUpsertSerializer,
+    AssociateRosterEntrySerializer,
+    CenterClosureSerializer,
+    CenterClosureWriteSerializer,
+    CenterOperatingHourSerializer,
+    CenterOperatingHoursBulkUpsertSerializer,
+    EquipmentAvailabilityBlockCreateSerializer,
+    EquipmentAvailabilityBlockSerializer,
+    EquipmentDowntimeSerializer,
+    RoomAvailabilityBlockCreateSerializer,
+    RoomAvailabilityBlockSerializer,
+    RoomDowntimeSerializer,
+)
+from appointments.utils.calendar import (
+    compute_associate_aggregate_calendar,
+    compute_associate_center_calendar,
+    compute_center_calendar,
+    compute_equipment_calendar,
+    compute_room_calendar,
+    parse_calendar_query_params,
+)
+from appointments.utils.constants import AvailabilityGranularity, LeaveScope
+from core.utils.exceptions import get_object_or_404
+from core.utils.views.main import (
+    BaseGenericAPIView,
+    BaseListAPIView,
+    BaseListCreateAPIView,
+    BaseRetrieveUpdateAPIView,
+)
+from inventory.models import Equipment, Room
 
 
-class AssociateScheduleView(BaseListCreateAPIView):
-    permission_classes = [IsAssociateUser]
-    serializer_class = ScheduleSerializer
+class CenterAvailabilityCalendarView(CenterAvailabilityMixin, BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        center = self.get_center()
+        start_date, granularity = parse_calendar_query_params(
+            request, default_granularity=AvailabilityGranularity.WEEK
+        )
+        if granularity not in AvailabilityGranularity.values:
+            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
+        data = compute_center_calendar(center, start_date, granularity)
+        return self.send_response("Center availability retrieved.", data)
+
+
+class AssociateCenterAvailabilityCalendarView(
+    CenterAvailabilityMixin, BaseGenericAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        center = self.get_center()
+        associate = get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
+        start_date, granularity = parse_calendar_query_params(request)
+        if granularity not in AvailabilityGranularity.values:
+            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
+        data = compute_associate_center_calendar(
+            center, associate, start_date, granularity
+        )
+        return self.send_response("Associate availability retrieved.", data)
+
+
+class RoomAvailabilityCalendarView(CenterAvailabilityMixin, BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        center = self.get_center()
+        room = get_object_or_404(
+            Room.objects.filter(center=center, is_active=True),
+            "Room not found.",
+            pk=self.kwargs["room_id"],
+        )
+        start_date, granularity = parse_calendar_query_params(request)
+        if granularity not in AvailabilityGranularity.values:
+            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
+        data = compute_room_calendar(center, room, start_date, granularity)
+        return self.send_response("Room availability retrieved.", data)
+
+
+class EquipmentAvailabilityCalendarView(CenterAvailabilityMixin, BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        center = self.get_center()
+        equipment = get_object_or_404(
+            Equipment.objects.filter(center=center, is_active=True),
+            "Equipment not found.",
+            pk=self.kwargs["equipment_id"],
+        )
+        start_date, granularity = parse_calendar_query_params(request)
+        if granularity not in AvailabilityGranularity.values:
+            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
+        data = compute_equipment_calendar(center, equipment, start_date, granularity)
+        return self.send_response("Equipment availability retrieved.", data)
+
+
+class AssociateAggregateAvailabilityCalendarView(BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        associate = get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["pk"],
+        )
+        start_date, granularity = parse_calendar_query_params(request)
+        if granularity not in AvailabilityGranularity.values:
+            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
+        data = compute_associate_aggregate_calendar(associate, start_date, granularity)
+        return self.send_response("Associate aggregate availability retrieved.", data)
+
+
+class AssociateRosterEntryListView(CenterAvailabilityMixin, BaseListAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = AssociateRosterEntrySerializer
+    list_success_message = "Associate roster entries retrieved."
 
     def get_queryset(self):
-        pass
+        center = self.get_center()
+        filter_kwargs = self.get_active_query_filter()
+        associate_id = self.request.query_params.get("associate")
+        if associate_id is not None:
+            filter_kwargs["associate_id"] = associate_id
+        return (
+            AssociateRosterEntry.objects.filter(center=center, **filter_kwargs)
+            .select_related("associate", "created_by", "center")
+            .order_by("day_of_week", "-created_at")
+        )
+
+
+class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    create_success_message = "Associate roster entries upserted."
+    update_success_message = "Associate roster entries updated."
+
+    def get_associate(self):
+        return get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
+
+    def post(self, request, *args, **kwargs):
+        return self.upsert_roster(request)
+
+    def patch(self, request, *args, **kwargs):
+        return self.upsert_roster(request)
+
+    def upsert_roster(self, request):
+        center = self.get_center()
+        associate = self.get_associate()
+        serializer = AssociateRosterBulkUpsertSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = serializer.save(
+            center=center,
+            associate=associate,
+            created_by=request.user,
+        )
+        data = AssociateRosterEntrySerializer(results, many=True).data
+        if request.method == "POST":
+            return self.send_response(self.create_success_message, data)
+        return self.send_response(self.update_success_message, data)
+
+
+class AssociateAvailabilityBlockListCreateView(
+    CenterAvailabilityMixin, BaseListCreateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    create_success_message = "Associate availability blocks created."
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return AssociateAvailabilityBlockCreateSerializer
+        return AssociateAvailabilityBlockSerializer
+
+    def get_associate(self):
+        return get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
+
+    def get_queryset(self):
+        center = self.get_center()
+        associate = self.get_associate()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            AssociateAvailabilityBlock.objects.filter(
+                center=center, associate=associate, **filter_kwargs
+            )
+            .select_related("associate", "created_by", "center")
+            .order_by("-created_at")
+        )
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = serializer.save(
+            center=self.get_center(),
+            associate=self.get_associate(),
+            created_by=request.user,
+        )
+        data = AssociateAvailabilityBlockSerializer(results, many=True).data
+        return Response(data, status=201)
+
+
+class AssociateAvailabilityBlockDetailView(
+    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = AssociateAvailabilityBlockSerializer
+
+    def get_associate(self):
+        return get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
+
+    def get_queryset(self):
+        center = self.get_center()
+        associate = self.get_associate()
+        return AssociateAvailabilityBlock.objects.filter(
+            center=center, associate=associate
+        ).select_related("associate", "created_by", "center")
+
+
+class AssociateLeaveListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return AssociateLeaveWriteSerializer
+        return AssociateLeaveSerializer
+
+    def get_queryset(self):
+        center = self.get_center()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            AssociateLeave.objects.filter(**filter_kwargs)
+            .filter(
+                models.Q(scope=LeaveScope.ALL_CENTERS)
+                | models.Q(center=center)
+            )
+            .select_related("associate", "created_by", "center")
+            .order_by("-created_at")
+        )
 
     def perform_create(self, serializer):
-        specialist = None
-        serializer.save(specialist=specialist)
+        serializer.save(created_by=self.request.user)
+
+
+class AssociateLeaveDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = AssociateLeaveSerializer
+
+    def get_queryset(self):
+        center = self.get_center()
+        return AssociateLeave.objects.filter(
+            models.Q(scope=LeaveScope.ALL_CENTERS) | models.Q(center=center)
+        ).select_related("associate", "created_by", "center")
+
+
+class RoomAvailabilityBlockListCreateView(
+    CenterAvailabilityMixin, BaseListCreateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    create_success_message = "Room availability blocks created."
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return RoomAvailabilityBlockCreateSerializer
+        return RoomAvailabilityBlockSerializer
+
+    def get_room(self):
+        return get_object_or_404(
+            Room.objects.filter(center=self.get_center(), is_active=True),
+            "Room not found.",
+            pk=self.kwargs["room_id"],
+        )
+
+    def get_queryset(self):
+        room = self.get_room()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            RoomAvailabilityBlock.objects.filter(room=room, **filter_kwargs)
+            .select_related("room", "created_by")
+            .order_by("-created_at")
+        )
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = serializer.save(
+            room=self.get_room(),
+            created_by=request.user,
+        )
+        data = RoomAvailabilityBlockSerializer(results, many=True).data
+        return Response(data, status=201)
+
+
+class RoomAvailabilityBlockDetailView(
+    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = RoomAvailabilityBlockSerializer
+
+    def get_room(self):
+        return get_object_or_404(
+            Room.objects.filter(center=self.get_center(), is_active=True),
+            "Room not found.",
+            pk=self.kwargs["room_id"],
+        )
+
+    def get_queryset(self):
+        room = self.get_room()
+        return RoomAvailabilityBlock.objects.filter(room=room).select_related(
+            "room", "created_by"
+        )
+
+
+class RoomDowntimeListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = RoomDowntimeSerializer
+
+    def get_room(self):
+        return get_object_or_404(
+            Room.objects.filter(center=self.get_center(), is_active=True),
+            "Room not found.",
+            pk=self.kwargs["room_id"],
+        )
+
+    def get_queryset(self):
+        room = self.get_room()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            RoomDowntime.objects.filter(room=room, **filter_kwargs)
+            .select_related("room", "created_by")
+            .order_by("-created_at")
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["room"] = self.get_room()
+        return context
+
+    def perform_create(self, serializer):
+        serializer.save(room=self.get_room(), created_by=self.request.user)
+
+
+class RoomDowntimeDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = RoomDowntimeSerializer
+
+    def get_room(self):
+        return get_object_or_404(
+            Room.objects.filter(center=self.get_center(), is_active=True),
+            "Room not found.",
+            pk=self.kwargs["room_id"],
+        )
+
+    def get_queryset(self):
+        room = self.get_room()
+        return RoomDowntime.objects.filter(room=room).select_related(
+            "room", "created_by"
+        )
+
+
+class EquipmentAvailabilityBlockListCreateView(
+    CenterAvailabilityMixin, BaseListCreateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    create_success_message = "Equipment availability blocks created."
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return EquipmentAvailabilityBlockCreateSerializer
+        return EquipmentAvailabilityBlockSerializer
+
+    def get_equipment(self):
+        return get_object_or_404(
+            Equipment.objects.filter(center=self.get_center(), is_active=True),
+            "Equipment not found.",
+            pk=self.kwargs["equipment_id"],
+        )
+
+    def get_queryset(self):
+        equipment = self.get_equipment()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            EquipmentAvailabilityBlock.objects.filter(
+                equipment=equipment, **filter_kwargs
+            )
+            .select_related("equipment", "created_by")
+            .order_by("-created_at")
+        )
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = serializer.save(
+            equipment=self.get_equipment(),
+            created_by=request.user,
+        )
+        data = EquipmentAvailabilityBlockSerializer(results, many=True).data
+        return Response(data, status=201)
+
+
+class EquipmentAvailabilityBlockDetailView(
+    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = EquipmentAvailabilityBlockSerializer
+
+    def get_equipment(self):
+        return get_object_or_404(
+            Equipment.objects.filter(center=self.get_center(), is_active=True),
+            "Equipment not found.",
+            pk=self.kwargs["equipment_id"],
+        )
+
+    def get_queryset(self):
+        equipment = self.get_equipment()
+        return EquipmentAvailabilityBlock.objects.filter(
+            equipment=equipment
+        ).select_related("equipment", "created_by")
+
+
+class EquipmentDowntimeListCreateView(
+    CenterAvailabilityMixin, BaseListCreateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = EquipmentDowntimeSerializer
+
+    def get_equipment(self):
+        return get_object_or_404(
+            Equipment.objects.filter(center=self.get_center(), is_active=True),
+            "Equipment not found.",
+            pk=self.kwargs["equipment_id"],
+        )
+
+    def get_queryset(self):
+        equipment = self.get_equipment()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            EquipmentDowntime.objects.filter(equipment=equipment, **filter_kwargs)
+            .select_related("equipment", "created_by")
+            .order_by("-created_at")
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["equipment"] = self.get_equipment()
+        return context
+
+    def perform_create(self, serializer):
+        serializer.save(
+            equipment=self.get_equipment(), created_by=self.request.user
+        )
+
+
+class EquipmentDowntimeDetailView(
+    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = EquipmentDowntimeSerializer
+
+    def get_equipment(self):
+        return get_object_or_404(
+            Equipment.objects.filter(center=self.get_center(), is_active=True),
+            "Equipment not found.",
+            pk=self.kwargs["equipment_id"],
+        )
+
+    def get_queryset(self):
+        equipment = self.get_equipment()
+        return EquipmentDowntime.objects.filter(equipment=equipment).select_related(
+            "equipment", "created_by"
+        )
+
+class CenterAvailabilityOperatingHoursView(CenterAvailabilityMixin, BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    list_success_message = "Center operating hours retrieved."
+    update_success_message = "Center operating hours updated."
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return CenterOperatingHoursBulkUpsertSerializer
+        return CenterOperatingHourSerializer
+
+    def get_queryset(self):
+        center = self.get_center()
+        filter_kwargs = self.get_active_query_filter()
+        return CenterOperatingHour.objects.filter(
+            center=center, **filter_kwargs
+        ).order_by("day_of_week", "-created_at")
+
+    def get(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = CenterOperatingHourSerializer(queryset, many=True)
+        return self.send_response(self.list_success_message, serializer.data)
+
+    def patch(self, request, *args, **kwargs):
+        center = self.get_center()
+        serializer = CenterOperatingHoursBulkUpsertSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = serializer.save(center=center)
+        data = CenterOperatingHourSerializer(results, many=True).data
+        return self.send_response(self.update_success_message, data)
+
+
+class CenterClosureListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    list_success_message = "Center closures retrieved."
+    create_success_message = "Center closure created."
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return CenterClosureWriteSerializer
+        return CenterClosureSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["center"] = self.get_center()
+        return context
+
+    def get_queryset(self):
+        center = self.get_center()
+        filter_kwargs = self.get_active_query_filter()
+        start_date = self.request.query_params.get("start")
+        end_date = self.request.query_params.get("end")
+        if start_date:
+            filter_kwargs["date__gte"] = start_date
+        if end_date:
+            filter_kwargs["date__lte"] = end_date
+        return CenterClosure.objects.filter(
+            center=center, **filter_kwargs
+        ).order_by("-date", "-created_at")
+
+    def perform_create(self, serializer):
+        center = self.get_center()
+        serializer.save(center=center)
+
+
+class CenterClosureDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = CenterClosureSerializer
+    retrieve_success_message = "Center closure details."
+    update_success_message = "Center closure updated."
+
+    def get_queryset(self):
+        center = self.get_center()
+        return CenterClosure.objects.filter(center=center)

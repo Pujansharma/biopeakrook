@@ -33,12 +33,12 @@ settings {
 
 docs {
   Update center associate assignment. pk = associate UUID (same as list id). Center from X-Center-ID, not URL.
-
+  
   Care role: role_id (UUID from GET List Center Roles). Rejected if associate is_admin. Must belong to this center.
   Care-staff flag: is_care_staff.
   Status: is_active (user active flag).
-
+  
   PATCH partial — send only fields to change. PUT needs email, first_name, role_id.
-
+  
   Auth: bearer {{access_token}}. Set env center_id, associate_id, role_id.
 }

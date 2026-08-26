@@ -18,7 +18,7 @@ appointments/utils/
 ├── intervals.py    # Pure interval arithmetic (no Django dependency)
 ├── scheduling.py   # DB-aware functions that compose intervals
 ├── db.py           # Appointment CRUD helpers
-└── constants.py    # Enums (AppointmentDays, ScheduleModes, etc.)
+└── constants.py    # Enums (AppointmentDays, AppointmentModes, etc.)
 ```
 
 ### intervals.py — Pure Functions
@@ -57,7 +57,7 @@ Queries Django models, expands them into intervals using `intervals.py`, and com
 | `Schedule` | Associate working hours at a center | Recurring (day-of-week) |
 | `RoomSchedule` | Room operational/maintenance windows | Recurring (day-of-week) |
 | `EquipmentSchedule` | Equipment operational/maintenance windows | Recurring (day-of-week) |
-| `CenterHoliday` | Center closed on a specific date | One-off (date) |
+| `CenterClosure` | Center closed on a specific date | One-off (date) |
 | `BlockedPeriod` | Associate unavailable (leave, etc.) | One-off (datetime range) |
 | `Appointment` | Booked appointment | One-off (datetime range) |
 | `EquipmentBooking` | Equipment reserved for an appointment | One-off (datetime range) |

@@ -2,7 +2,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 from accounts.utils import get_user_model
-from appointments.utils.constants import AppointmentDays
+from core.utils.constants import AppointmentDays
 from core.utils.models import BaseUUIDModel
 from inventory.utils.constants import (
     DeviceType,
@@ -51,6 +51,7 @@ class EquipmentType(BaseUUIDModel):
         "centers.Center", on_delete=models.CASCADE, related_name="equipment_types"
     )
     name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default="")
     portability = models.CharField(
         choices=EquipmentPortability, default=EquipmentPortability.FIXED
     )
@@ -248,13 +249,6 @@ class EquipmentBooking(BaseUUIDModel):
 
     equipment = models.ForeignKey(
         Equipment, on_delete=models.PROTECT, related_name="bookings"
-    )
-    appointment = models.ForeignKey(
-        "appointments.Appointment",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="devices",
     )
 
     start_datetime = models.DateTimeField()

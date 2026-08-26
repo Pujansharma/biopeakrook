@@ -1,0 +1,39 @@
+meta {
+  name: POST Room Downtime
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/room-downtimes/{{room_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "date": "2026-09-03",
+    "start_time": "08:00:00",
+    "end_time": "18:00:00",
+    "reason": "Renovation"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Room downtime. Room from URL. Same-day only: date + start_time + end_time. One POST per day. Required reason. Rejects overlap with blocks/downtimes.
+  Set room_downtime_id from response for PATCH.
+}

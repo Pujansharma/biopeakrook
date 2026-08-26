@@ -1,0 +1,40 @@
+meta {
+  name: POST Room Block One-off
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/room-blocks/{{room_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_recurring": false,
+    "date": "2026-09-02",
+    "start_time": "14:00:00",
+    "end_time": "16:00:00",
+    "reason": "Reserved for training"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  One-off room block. Room from URL. Same-day only: date + start_time + end_time. No days_of_week. Response is a one-item list.
+  Rejects overlap. Set room_block_id from data[0].id for PATCH.
+}

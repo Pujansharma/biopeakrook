@@ -1,0 +1,40 @@
+meta {
+  name: PATCH Operating Hours
+  type: http
+  seq: 1
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/operating-hours/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "open_time": "09:00:00",
+    "close_time": "18:00:00",
+    "days": ["0", "1", "2", "3", "4", "5"],
+    "closed_days": ["6"]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Bulk upsert weekly hours. Open days share open_time/close_time; closed_days get is_open=false and null times.
+  days / closed_days: string codes "0"=Mon … "6"=Sun.
+}
+​

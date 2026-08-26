@@ -22,6 +22,7 @@ auth:bearer {
 body:json {
   {
     "name": "DEXA",
+    "description": "Whole-body composition scanner",
     "portability": "fixed"
   }
 }
@@ -33,5 +34,6 @@ settings {
 
 docs {
   Create equipment type. Unique name per center.
+  description optional (string, default empty).
   portability: fixed or portable (default fixed).
 }

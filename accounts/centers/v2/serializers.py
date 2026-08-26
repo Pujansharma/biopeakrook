@@ -5,7 +5,7 @@ from rest_framework import serializers
 from accounts.associates.models import AssociateRole
 from accounts.centers.utils.db import generate_equipment_code, generate_room_code
 from accounts.users.serializers import BaseUserSerializer
-from appointments.utils.constants import ScheduleModes
+from core.utils.constants import AppointmentModes
 from core.utils.serializers import BaseModelSerializer
 from inventory.models import Equipment, EquipmentType, Room, RoomType
 from inventory.utils.constants import EquipmentPortability, EquipmentOperationalStatus
@@ -27,7 +27,14 @@ class EquipmentTypeNestedSerializer(BaseModelSerializer):
 
     class Meta:
         model = EquipmentType
-        fields = ["id", "name", "portability", "portability_code", "is_active"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "portability",
+            "portability_code",
+            "is_active",
+        ]
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -88,6 +95,7 @@ class EquipmentTypeV2Serializer(BaseModelSerializer):
         fields = [
             "id",
             "name",
+            "description",
             "portability",
             "portability_code",
             "is_active",
@@ -401,7 +409,7 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
         allow_null=True,
     )
     modality = serializers.ChoiceField(
-        choices=ScheduleModes.choices, required=False, default=ScheduleModes.BOTH
+        choices=AppointmentModes.choices, required=False, default=AppointmentModes.BOTH
     )
     modality_code = serializers.CharField(source="modality", read_only=True)
     duration = serializers.IntegerField(

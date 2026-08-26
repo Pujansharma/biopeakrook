@@ -1,8 +1,8 @@
 from django.db import models
 
-from accounts.centers.utils.constants import CenterStatus
+from accounts.centers.utils.constants import CenterStatus, CenterClosureType
 from accounts.utils import get_user_model
-from appointments.utils.constants import ScheduleModes, AppointmentDays
+from core.utils.constants import AppointmentDays, AppointmentModes
 from core.utils.models import BaseUUIDModel
 
 User = get_user_model()
@@ -29,7 +29,7 @@ class Center(BaseUUIDModel):
     contact_person = models.CharField(max_length=100, blank=True)
 
     # Operating Configuration
-    modes = models.CharField(choices=ScheduleModes, default=ScheduleModes.IN_PERSON)
+    modes = models.CharField(choices=AppointmentModes, default=AppointmentModes.IN_PERSON)
     status = models.CharField(
         choices=CenterStatus.CHOICES,
         default=CenterStatus.SETUP,  # New centers start as 'setup'
@@ -90,16 +90,26 @@ class CenterOperatingHour(BaseUUIDModel):
         return f"{self.pk}"
 
 
-class CenterHoliday(BaseUUIDModel):
+class CenterClosure(BaseUUIDModel):
+    """Full-day center closure (holiday or manual closed day)."""
+
     center = models.ForeignKey(
-        Center, on_delete=models.CASCADE, related_name="holidays"
+        Center, on_delete=models.CASCADE, related_name="closures"
     )
     date = models.DateField()
+    type = models.CharField(
+        choices=CenterClosureType,
+        default=CenterClosureType.MANUAL,
+    )
+    reason = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["center", "date"], name="uniq_center_holiday"
+                fields=["center", "date"], name="uniq_center_closure"
             )
         ]
+
+    def __str__(self):
+        return f"{self.pk}"

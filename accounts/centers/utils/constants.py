@@ -1,3 +1,6 @@
+from django.db import models
+
+
 class CenterStatus:
     SETUP = "setup"  # New center, not yet operational
     ACTIVE = "active"  # Fully operational
@@ -12,3 +15,8 @@ class CenterStatus:
         (MAINTENANCE, "Under Maintenance"),
         (PERMANENTLY_CLOSED, "Permanently Closed"),
     )
+
+
+class CenterClosureType(models.TextChoices):
+    HOLIDAY = "holiday", "Holiday"
+    MANUAL = "manual", "Manual"

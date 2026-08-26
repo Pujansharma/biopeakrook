@@ -1,6 +1,6 @@
 from django.db import models
 
-from appointments.utils.constants import ScheduleModes
+from core.utils.constants import AppointmentModes
 from core.utils.models import BaseUUIDModel
 from products.models import Product
 from programs.services.utils.constants import (
@@ -51,7 +51,7 @@ class CenterServiceAssignment(BaseUUIDModel):
     buffer_after = models.PositiveSmallIntegerField(
         default=0, help_text="Buffer minutes after the appointment"
     )
-    modality = models.CharField(choices=ScheduleModes, default=ScheduleModes.BOTH)
+    modality = models.CharField(choices=AppointmentModes, default=AppointmentModes.BOTH)
     required_room_type = models.ForeignKey(
         "inventory.RoomType",
         on_delete=models.SET_NULL,

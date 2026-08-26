@@ -1,0 +1,30 @@
+meta {
+  name: GET Associate Aggregate Availability
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/associates/{{associate_id}}/availability/?start=2026-08-25&granularity=week
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2026-08-25
+  granularity: week
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Associate calendar across all assigned centers. Any admin/associate may view any colleague.
+  Omit start → today. Each day includes day_of_week ("0"=Mon … "6"=Sun) and day_of_week_name.
+}

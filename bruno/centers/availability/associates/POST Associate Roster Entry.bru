@@ -1,0 +1,71 @@
+meta {
+  name: POST Associate Roster Entry
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/roster/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "entries": [
+      {
+        "day_of_week": 0,
+        "start_time": "09:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 1,
+        "start_time": "10:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 2,
+        "start_time": "10:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 3,
+        "start_time": "10:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 4,
+        "start_time": "10:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 5,
+        "start_time": "10:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 6,
+        "start_time": "10:00:00",
+        "end_time": "17:00:00"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Bulk upsert weekly associate roster at center. Associate from URL. day_of_week int 0=Mon … 6=Sun. Upserts by day_of_week (create or update start/end, reactivate if soft-inactive). Omitted days are left untouched.
+}

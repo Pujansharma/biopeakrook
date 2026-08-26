@@ -1,5 +1,7 @@
 from django.urls import path
 
+from appointments.views import AssociateAggregateAvailabilityCalendarView
+
 from . import views
 
 urlpatterns = [
@@ -17,4 +19,5 @@ urlpatterns = [
         "<uuid:pk>/available-profiles/", views.AssociateAvailableProfilesView.as_view()
     ),
     path("<uuid:pk>/link-profiles/", views.AssociateLinkProfileView.as_view()),
+    path("<uuid:pk>/availability/", AssociateAggregateAvailabilityCalendarView.as_view()),
 ]

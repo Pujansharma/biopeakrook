@@ -1,0 +1,36 @@
+meta {
+  name: PATCH Associate Block
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/blocks/{{associate_block_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_active": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Soft-deactivate associate block (is_active=false). No effective_until — this is how recurring blocks end.
+  Associate + block id from URL. Set associate_block_id from POST response.
+}
