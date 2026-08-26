@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.db import transaction
 from rest_framework import serializers
 
@@ -208,12 +210,22 @@ class BaseAssociateSerializer(AssociateValidationMixin, BaseModelSerializer):
         return rep
 
 
+class CenterIDSerializer(BaseSerializer):
+    id = serializers.UUIDField(required=True, write_only=True)
+    is_admin = serializers.BooleanField(default=False, required=False)
+    is_care_staff = serializers.BooleanField(default=False, required=False)
+
+
 class AdminAssociateSerializer(
     BaseAssociateSerializer, BasePasswordCheckOptionalSerializer
 ):
     """Serializers for admins to update or create associates"""
     centers_count = serializers.IntegerField(default=0, read_only=True)
     centers = serializers.SerializerMethodField(read_only=True)
+
+    add_centers = CenterIDSerializer(
+        many=True, write_only=True, required=True, allow_empty=False
+    )
 
     class Meta:
         model = Associate
@@ -239,6 +251,7 @@ class AdminAssociateSerializer(
             "professions",
             "password1",
             "password2",
+            "add_centers",
             "centers_count",
             "centers",
         ]
@@ -252,11 +265,61 @@ class AdminAssociateSerializer(
         centers = [assignment.center for assignment in assignments]
         return MinimumCenterSerializer(centers, many=True, context=self.context).data
 
+    @classmethod
+    def retrieve_invalid_center_ids(cls, input_center_ids):
+        existing_center_ids = set(
+            Center.objects.filter(
+                id__in=set(input_center_ids)
+            ).values_list(
+                "id", flat=True
+            )
+        )
+        invalid_ids = set(input_center_ids) - existing_center_ids
+        return invalid_ids
+
+    def validate(self, attrs: Any) -> Any:
+        add_centers_by_id = {
+            center_data["id"]: center_data
+            for center_data in attrs.get("add_centers", [])
+        }
+        add_centers = list(add_centers_by_id.values())
+        add_center_ids = list(add_centers_by_id)
+
+        invalid_ids = self.retrieve_invalid_center_ids(add_center_ids)
+        if invalid_ids:
+            raise serializers.ValidationError(
+                {
+                    "add_centers": (
+                        f"Centers not found: "
+                        f"{[str(center_id) for center_id in invalid_ids]}"
+                    )
+                }
+            )
+
+        invalid_flag_center_ids = [
+            center_data["id"]
+            for center_data in add_centers
+            if not center_data["is_admin"] and not center_data["is_care_staff"]
+        ]
+        if invalid_flag_center_ids:
+            raise serializers.ValidationError(
+                {
+                    "add_centers": (
+                        "At least one of 'is_admin' or 'is_care_staff' must be "
+                        f"true for centers: "
+                        f"{[str(center_id) for center_id in invalid_flag_center_ids]}"
+                    )
+                }
+            )
+
+        attrs["add_centers"] = add_centers
+        return attrs
+
     def create(self, validated_data):
-        """Admins will create via this serializer"""
+        """Admins will create associates via this serializer"""
+        add_centers = validated_data.pop("add_centers")
         user_data = validated_data.pop("user", {})
         email = user_data.get("email")
-
         password = self.get_validated_password(validated_data)
 
         errors = check_admin_associate_user_exists(email)
@@ -268,11 +331,26 @@ class AdminAssociateSerializer(
             validated_data["user"] = user
             associate = super().create(validated_data)
             create_associate_user_account(associate)
+            assignments = [
+                AssociateCenterAssignment(
+                    associate=associate,
+                    center_id=center_data["id"],
+                    is_admin=center_data["is_admin"],
+                    is_care_staff=center_data["is_care_staff"],
+                )
+                for center_data in add_centers
+            ]
+            AssociateCenterAssignment.objects.bulk_create(assignments)
+
+            center_ids = [center_data["id"] for center_data in add_centers]
+            refresh_staff_counts(center_ids)
+            update_associate_centers_count(associate.pk)
             increment_organization_admins_count()
             return associate
 
     def update(self, instance: Associate, validated_data):
         """Only Admins will be able to update associates"""
+        validated_data.pop('add_centers', None)
         user_data = validated_data.pop("user", {})
         user_data.pop("phone", None)
         is_active = user_data.get("is_active", False)
@@ -422,12 +500,6 @@ class CenterAssignmentAssociateProfileSerializer(
             return super().update(instance, validated_data)
 
 
-class CenterIDSerializer(BaseSerializer):
-    id = serializers.UUIDField()
-    is_admin = serializers.BooleanField(default=False, required=False)
-    is_care_staff = serializers.BooleanField(default=False, required=False)
-
-
 class AdminAssociateCenterLinkSerializer(BaseSerializer):
     """Serializer to link/delink associates to a center by admin"""
 
@@ -435,7 +507,7 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
     remove = CenterIDSerializer(many=True, required=False, write_only=True)
 
     @classmethod
-    def retrieve_invalid_ids(cls, input_center_ids):
+    def retrieve_invalid_center_ids(cls, input_center_ids):
         existing_center_ids = set(
             Center.objects.filter(id__in=set(input_center_ids)).values_list(
                 "id", flat=True
@@ -445,36 +517,62 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
         return invalid_ids
 
     def validate(self, attrs):
-        add_centers = attrs.get("add", [])
-        remove_centers = attrs.get("remove", [])
-
-        add_center_ids = [c["id"] for c in add_centers]
-        remove_center_ids = [c["id"] for c in remove_centers]
+        add_centers_by_id = {
+            center_data["id"]: center_data for center_data in attrs.get("add", [])
+        }
+        add_centers = list(add_centers_by_id.values())
+        add_center_ids = list(add_centers_by_id)
+        remove_center_ids = list(
+            dict.fromkeys(
+                center_data["id"] for center_data in attrs.get("remove", [])
+            )
+        )
 
         if not add_center_ids and not remove_center_ids:
             raise serializers.ValidationError(
                 "At least one of 'add' or 'remove' must be provided."
             )
 
-        # Validate center UUIDs in 'add' exist
         if add_center_ids:
-            invalid_ids = self.retrieve_invalid_ids(add_center_ids)
-            if invalid_ids:
-                raise serializers.ValidationError(
-                    {"add": f"Centers not found: {[str(uid) for uid in invalid_ids]}"}
-                )
-
-        # Validate center UUIDs in 'remove' exist
-        if remove_center_ids:
-            invalid_ids = self.retrieve_invalid_ids(remove_center_ids)
+            invalid_ids = self.retrieve_invalid_center_ids(add_center_ids)
             if invalid_ids:
                 raise serializers.ValidationError(
                     {
-                        "remove": f"Centers not found: {[str(uid) for uid in invalid_ids]}"
+                        "add": (
+                            f"Centers not found: "
+                            f"{[str(center_id) for center_id in invalid_ids]}"
+                        )
                     }
                 )
 
-        # Replace with flat UUID lists for downstream use
+        invalid_flag_center_ids = [
+            center_data["id"]
+            for center_data in add_centers
+            if not center_data["is_admin"] and not center_data["is_care_staff"]
+        ]
+        if invalid_flag_center_ids:
+            raise serializers.ValidationError(
+                {
+                    "add": (
+                        "At least one of 'is_admin' or 'is_care_staff' must be "
+                        f"true for centers: "
+                        f"{[str(center_id) for center_id in invalid_flag_center_ids]}"
+                    )
+                }
+            )
+
+        if remove_center_ids:
+            invalid_ids = self.retrieve_invalid_center_ids(remove_center_ids)
+            if invalid_ids:
+                raise serializers.ValidationError(
+                    {
+                        "remove": (
+                            f"Centers not found: "
+                            f"{[str(center_id) for center_id in invalid_ids]}"
+                        )
+                    }
+                )
+
         attrs["add"] = add_centers
         attrs["remove"] = remove_center_ids
 
@@ -503,11 +601,11 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
             assignments = [
                 AssociateCenterAssignment(
                     associate=associate,
-                    center_id=c["id"],
-                    is_admin=c.get("is_admin", False),
-                    is_care_staff=c.get("is_care_staff", False),
+                    center_id=center_data["id"],
+                    is_admin=center_data["is_admin"],
+                    is_care_staff=center_data["is_care_staff"],
                 )
-                for c in add_centers
+                for center_data in add_centers
             ]
             AssociateCenterAssignment.objects.bulk_create(
                 assignments,
@@ -516,7 +614,9 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
                 unique_fields=["associate", "center"],
             )
 
-        affected_center_ids = [c["id"] for c in add_centers] + list(remove_center_ids)
+        affected_center_ids = [
+            center_data["id"] for center_data in add_centers
+        ] + list(remove_center_ids)
         refresh_staff_counts(affected_center_ids)
         update_associate_centers_count(associate.pk)
 
