@@ -21,7 +21,10 @@ from programs.program_services.utils.db import (
 )
 from programs.program_services.utils.helper import generate_uploaded_file_hash
 from programs.services.models import ServiceDocument, ServiceResult
-from programs.services.serializers import BaseServiceSerializer
+from programs.services.serializers import (
+    BaseServiceDocumentModuleCategorySerializer,
+    BaseServiceSerializer,
+)
 from programs.services.utils.constants import (
     ServiceCategory,
     ServiceDocumentType,
@@ -64,8 +67,13 @@ class BaseServiceResultSerializer(BaseModelSerializer):
         ]
 
 
-class BaseAssessmentServiceDocumentSerializer(BaseModelSerializer):
-    document_category_code = serializers.CharField(source='document_category', read_only=True)
+class BaseAssessmentServiceDocumentSerializer(
+    BaseServiceDocumentModuleCategorySerializer
+):
+    document_category_code = serializers.CharField(
+        source="document_category",
+        read_only=True,
+    )
 
     class Meta:
         model = ServiceDocument
@@ -76,6 +84,8 @@ class BaseAssessmentServiceDocumentSerializer(BaseModelSerializer):
             "content_type",
             "document_category",
             "document_category_code",
+            "module_category",
+            "module_category_code",
         ]
 
 
@@ -224,7 +234,9 @@ class AssessmentServiceResultSerializer(BaseModelSerializer):
         return super().update(instance, validated_data)
 
 
-class AssessmentServiceDocumentSerializer(BaseModelSerializer):
+class AssessmentServiceDocumentSerializer(
+    BaseServiceDocumentModuleCategorySerializer
+):
     document_category_code = serializers.CharField(
         source="document_category",
         read_only=True,
@@ -239,6 +251,8 @@ class AssessmentServiceDocumentSerializer(BaseModelSerializer):
             "content_type",
             "document_category",
             "document_category_code",
+            "module_category",
+            "module_category_code",
             "is_active",
             "created_at",
             "updated_at",
