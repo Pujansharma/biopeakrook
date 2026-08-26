@@ -215,6 +215,13 @@ class AssociateAvailableCenterSerializer(BaseModelSerializer):
             "is_active",
             "is_admin",
             "is_care_staff",
+            "address",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "country",
+            "pincode",
         ]
 
 
