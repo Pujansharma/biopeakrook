@@ -344,6 +344,7 @@ class AdminAssociateSerializer(
                     center_id=center_data["id"],
                     is_admin=center_data["is_admin"],
                     is_care_staff=center_data["is_care_staff"],
+                    created_by=associate.created_by,
                 )
                 for center_data in add_centers
             ]
@@ -592,6 +593,7 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
     @transaction.atomic
     def create(self, validated_data):
         associate = validated_data.pop("associate", None)
+        created_by = validated_data.pop("created_by", None)
 
         if not associate:
             raise serializers.ValidationError(
@@ -615,6 +617,7 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
                     center_id=center_data["id"],
                     is_admin=center_data["is_admin"],
                     is_care_staff=center_data["is_care_staff"],
+                    created_by=created_by,
                 )
                 for center_data in add_centers
             ]
@@ -798,6 +801,15 @@ class CenterAssociateSerializer(
             "has_verified_badge",
             "created_by",
         ]
+
+    def validate(self, attrs):
+        if not attrs.get("is_admin", False) and not attrs.get(
+            "is_care_staff", False
+        ):
+            raise serializers.ValidationError(
+                "At least one of 'is_admin' or 'is_care_staff' must be true."
+            )
+        return attrs
 
     def create(self, validated_data):
         """Allows center admins or Associates with FULL feature to add associates"""
