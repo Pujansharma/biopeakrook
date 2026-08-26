@@ -180,7 +180,7 @@ class AssociateCenterLinkView(BaseCreateAPIView):
 
 
 class AssociateAssignedCenters(BaseListAPIView):
-    """View to list the centers assigned to an associate"""
+    """List an associate's complete center assignments with pagination."""
 
     permission_classes = [IsAdminUser]
     serializer_class = AssociateCenterSerializer

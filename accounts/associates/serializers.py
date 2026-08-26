@@ -219,7 +219,7 @@ class CenterIDSerializer(BaseSerializer):
 class AdminAssociateSerializer(
     BaseAssociateSerializer, BasePasswordCheckOptionalSerializer
 ):
-    """Serializers for admins to update or create associates"""
+    """Serialize admin associate list and create operations with a center preview."""
     centers_count = serializers.IntegerField(default=0, read_only=True)
     centers = serializers.SerializerMethodField(read_only=True)
 
@@ -318,9 +318,10 @@ class AdminAssociateSerializer(
     def create(self, validated_data):
         """Create an associate and its center assignments.
 
-        The centers count is updated in the database with a single query, but
-        the returned instance is intentionally not refreshed because the frontend
-        immediately retrieves it through the detail endpoint.
+        The persisted centers count is updated with a single query. The returned
+        instance is intentionally not refreshed because clients retrieve complete
+        center information and its authoritative pagination count from
+        GET /associates/<associate_id>/centers/.
         """
         add_centers = validated_data.pop("add_centers")
         user_data = validated_data.pop("user", {})
@@ -371,7 +372,11 @@ class AdminAssociateSerializer(
 
 
 class AdminAssociateDetailSerializer(BaseAssociateSerializer):
-    """Serializers for admins to update or create associates"""
+    """Serialize admin associate detail data without center assignments.
+
+    Complete center information and its authoritative pagination count are
+    available from GET /associates/<associate_id>/centers/.
+    """
 
     class Meta:
         model = Associate
