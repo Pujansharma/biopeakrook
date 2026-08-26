@@ -14,7 +14,7 @@ from accounts.associates.utils.db import (
     update_associate_centers_count,
 )
 from accounts.centers.models import Center
-from accounts.centers.serializers import CenterSerializer, MinimumCenterSerializer
+from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.centers.utils.db import (
     increment_staff_count,
     increment_inactive_staff_count,
@@ -637,12 +637,41 @@ class AdminAssociateCenterLinkSerializer(BaseSerializer):
         return associate
 
 
-class AssociateCenterSerializer(CenterSerializer):
-    is_admin = serializers.BooleanField(default=False, read_only=True)
-    is_care_staff = serializers.BooleanField(default=False, read_only=True)
+class AssociateCenterSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="center.id", read_only=True)
+    code = serializers.CharField(source="center.code", read_only=True)
+    name = serializers.CharField(source="center.name", read_only=True)
+    image = serializers.ImageField(source="center.image", read_only=True)
+    address = serializers.CharField(source="center.address", read_only=True)
+    address_line_1 = serializers.CharField(
+        source="center.address_line_1", read_only=True
+    )
+    address_line_2 = serializers.CharField(
+        source="center.address_line_2", read_only=True
+    )
+    city = serializers.CharField(source="center.city", read_only=True)
+    state = serializers.CharField(source="center.state", read_only=True)
+    country = serializers.CharField(source="center.country", read_only=True)
+    pincode = serializers.CharField(source="center.pincode", read_only=True)
+    phone = serializers.CharField(source="center.phone", read_only=True)
+    email = serializers.EmailField(source="center.email", read_only=True)
+    contact_person = serializers.CharField(
+        source="center.contact_person", read_only=True
+    )
+    modes = serializers.CharField(source="center.modes", read_only=True)
+    status = serializers.CharField(source="center.status", read_only=True)
+    created_at = serializers.DateTimeField(
+        source="center.created_at", read_only=True
+    )
+    updated_at = serializers.DateTimeField(
+        source="center.updated_at", read_only=True
+    )
+    is_active = serializers.BooleanField(source="center.is_active", read_only=True)
+    is_admin = serializers.BooleanField(read_only=True)
+    is_care_staff = serializers.BooleanField(read_only=True)
 
     class Meta:
-        model = Center
+        model = AssociateCenterAssignment
         fields = [
             "id",
             "code",
@@ -654,7 +683,6 @@ class AssociateCenterSerializer(CenterSerializer):
             "city",
             "state",
             "country",
-            "state",
             "pincode",
             "phone",
             "email",
