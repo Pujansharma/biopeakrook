@@ -201,14 +201,20 @@ class AssociateAssignedCenters(BaseListAPIView):
             search_query |= Q(code__icontains=search_params)
             search_query |= Q(name__icontains=search_params)
 
-        is_admin_subquery = AssociateCenterAssignment.objects.filter(
+        associate_subquery = AssociateCenterAssignment.objects.filter(
             associate=associate, center=OuterRef("pk")
-        ).values("is_admin")
-
+        )
         return (
             Center.objects.select_related()
             .filter(search_query, associate_assignments__associate=associate)
-            .annotate(is_admin=Subquery(is_admin_subquery))
+            .annotate(
+                is_admin=Coalesce(
+                    Subquery(associate_subquery.values("is_admin")), Value(False)
+                ),
+                is_care_staff=Coalesce(
+                    Subquery(associate_subquery.values("is_care_staff")), Value(False)
+                ),
+            )
         )
 
 
