@@ -87,7 +87,9 @@ class AssociateView(BaseListCreateAPIView):
             .prefetch_related(
                 Prefetch(
                     "center_assignments",
-                    queryset=AssociateCenterAssignment.objects.select_related("center"),
+                    queryset=AssociateCenterAssignment.objects.select_related(
+                        "center"
+                    ).order_by("-created_at")[:3],
                 )
             )
             .filter(search_query, **filter_kwargs)
