@@ -60,6 +60,8 @@ class AssociateView(BaseListCreateAPIView):
         active_param = self.request.query_params.get("active", None)
         admin_query = self.request.query_params.get("admin", None)
         care_staff_query = self.request.query_params.get("care_staff", None)
+        center_code_query = self.request.query_params.getlist('center_code', [])
+        center_codes = list(filter(None, center_code_query))
         if active_param and active_param in ["0", "1"]:
             filter_kwargs["is_active"] = bool(int(active_param))
 
@@ -75,6 +77,8 @@ class AssociateView(BaseListCreateAPIView):
                 "1": {"center_assignments__is_care_staff": True},
             }
             filter_kwargs.update(care_staff_mapping[care_staff_query])
+        if center_codes:
+            filter_kwargs['center_assignments__center__code__in'] = center_codes
 
         if search_params:
             search_query |= Q(user__email__istartswith=search_params)
@@ -209,18 +213,14 @@ class AssociateAssignedCenters(BaseListAPIView):
         search_params = self.request.query_params.get("search", "").strip()
         if search_params:
             # Prefix and substring lookups are intentional for instant search.
-            search_query |= Q(name__istartswith=search_params)
-            search_query |= Q(code__istartswith=search_params)
-            search_query |= Q(code__icontains=search_params)
-            search_query |= Q(name__icontains=search_params)
+            search_query |= Q(center__name__istartswith=search_params)
+            search_query |= Q(center__code__istartswith=search_params)
+            search_query |= Q(center__code__icontains=search_params)
+            search_query |= Q(center__name__icontains=search_params)
 
         return (
-            Center.objects.select_related()
-            .filter(search_query, associate_assignments__associate=associate)
-            .annotate(
-                is_admin=F("associate_assignments__is_admin"),
-                is_care_staff=F("associate_assignments__is_care_staff"),
-            )
+            AssociateCenterAssignment.objects.select_related("center")
+            .filter(search_query, associate=associate)
         )
 
 
