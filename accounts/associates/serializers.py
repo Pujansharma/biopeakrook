@@ -316,7 +316,12 @@ class AdminAssociateSerializer(
         return attrs
 
     def create(self, validated_data):
-        """Admins will create associates via this serializer"""
+        """Create an associate and its center assignments.
+
+        The centers count is updated in the database with a single query, but
+        the returned instance is intentionally not refreshed because the frontend
+        immediately retrieves it through the detail endpoint.
+        """
         add_centers = validated_data.pop("add_centers")
         user_data = validated_data.pop("user", {})
         email = user_data.get("email")
@@ -331,6 +336,7 @@ class AdminAssociateSerializer(
             validated_data["user"] = user
             associate = super().create(validated_data)
             create_associate_user_account(associate)
+            # center_id is intentional and avoids unnecessary Django ORM hydration.
             assignments = [
                 AssociateCenterAssignment(
                     associate=associate,
