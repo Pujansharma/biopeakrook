@@ -542,6 +542,18 @@ Program.objects.filter(pk=assignment.center_id)
 
 ---
 
+## Intentional Instant-Search Lookups
+
+Combining `istartswith` and `icontains` on the same field is permitted only when
+the product contract explicitly requires both prefix and broader substring
+discovery and an adjacent comment marks the behavior as intentional.
+
+Although `icontains` subsumes `istartswith` for result inclusion, do not simplify
+or flag an explicitly documented pair. This exception does not imply prefix
+ranking or conditional fallback.
+
+---
+
 ## 12. No Raw SQL
 
 ### ✅ DO: Use the Django ORM
