@@ -202,6 +202,7 @@ class CenterWorkingHourSerializer(BaseModelSerializer):
 class AssociateAvailableCenterSerializer(BaseModelSerializer):
     exists = serializers.BooleanField(default=False, read_only=True)
     is_admin = serializers.BooleanField(default=False, read_only=True)
+    is_care_staff = serializers.BooleanField(default=False, read_only=True)
 
     class Meta:
         model = Center
@@ -213,6 +214,14 @@ class AssociateAvailableCenterSerializer(BaseModelSerializer):
             "exists",
             "is_active",
             "is_admin",
+            "is_care_staff",
+            "address",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "country",
+            "pincode",
         ]
 
 

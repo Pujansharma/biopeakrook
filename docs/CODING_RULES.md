@@ -520,7 +520,7 @@ def process_record(record: Record) -> dict:
 
 ---
 
-## 11. Django FK Access — Always Use `.pk`, Never `_id` Suffix
+## 11. Django FK Access — Use `.pk`; Allow `_id` Only for `bulk_create()`
 
 ### ✅ DO: Access FK primary keys via `.pk`
 
@@ -530,7 +530,7 @@ increment_service_cancelled_count(program_service.program.pk)
 Program.objects.filter(pk=assignment.center.pk)
 ```
 
-### ❌ DON'T: Use Django's auto-generated `_id` accessor
+### ❌ DON'T: Use Django's auto-generated `_id` accessor in ordinary code
 
 ```python
 # Bad - uses the implicit FK column accessor
@@ -538,7 +538,50 @@ increment_service_cancelled_count(program_service.program_id)
 Program.objects.filter(pk=assignment.center_id)
 ```
 
-### Rule: Always traverse the relation and use `.pk`. Never use the `<field>_id` shortcut.
+This prohibition applies to ordinary assignments, reads, queryset filters,
+updates, serializers, helpers, and single-object create/save paths.
+
+### ✅ Narrow exception: Constructing objects for `bulk_create()`
+
+Direct `<field>_id=<validated_pk>` assignment is allowed only while constructing
+model instances that will be passed to `bulk_create()`:
+
+```python
+# Good - validated scalar IDs avoid hydrating related objects solely for a bulk insert
+assignments = [
+    AssociateCenterAssignment(
+        associate=associate,
+        center_id=center_data["id"],
+    )
+    for center_data in add_centers
+]
+AssociateCenterAssignment.objects.bulk_create(assignments)
+```
+
+The exception applies only when:
+
+- the foreign-key values were already validated;
+- the related objects are not otherwise needed; and
+- the instances are being constructed for `bulk_create()`.
+
+Do not broaden this exception to queryset filters, ordinary object assignment,
+single-object creation, or relation access merely because Django exposes the
+`<field>_id` attribute.
+
+### Rule: Use `relation.pk` everywhere except validated FK assignment during
+`bulk_create()` object construction.
+
+---
+
+## Intentional Instant-Search Lookups
+
+Combining `istartswith` and `icontains` on the same field is permitted only when
+the product contract explicitly requires both prefix and broader substring
+discovery and an adjacent comment marks the behavior as intentional.
+
+Although `icontains` subsumes `istartswith` for result inclusion, do not simplify
+or flag an explicitly documented pair. This exception does not imply prefix
+ranking or conditional fallback.
 
 ---
 

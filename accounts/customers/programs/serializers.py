@@ -34,7 +34,10 @@ from programs.serializers import (
     ServiceField,
 )
 from programs.services.models import Service, ServiceDocument, ServiceResult
-from programs.services.serializers import BaseServiceSerializer
+from programs.services.serializers import (
+    BaseServiceDocumentModuleCategorySerializer,
+    BaseServiceSerializer,
+)
 from programs.services.utils.constants import ServiceCategory
 from programs.utils.constants import ProgramType, ServiceAssignment
 from programs.utils.db import (
@@ -852,7 +855,9 @@ class CustomerResultSerializer(BaseModelSerializer):
         ]
 
 
-class CustomerServiceDocumentSerializer(BaseModelSerializer):
+class CustomerServiceDocumentSerializer(
+    BaseServiceDocumentModuleCategorySerializer
+):
     document_category_code = serializers.CharField(
         source="document_category",
         read_only=True,
@@ -869,6 +874,8 @@ class CustomerServiceDocumentSerializer(BaseModelSerializer):
             "content_type",
             "document_category",
             "document_category_code",
+            "module_category",
+            "module_category_code",
             "is_active",
             "created_at",
             "updated_at",

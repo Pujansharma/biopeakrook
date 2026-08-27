@@ -99,3 +99,113 @@ class ServiceDocumentCategory(models.TextChoices):
 class ServiceResultMode(models.TextChoices):
     UPLOAD = "upload", "Upload"
     FETCH = "fetch", "Fetch"
+
+
+class ModuleCategoryType(models.TextChoices):
+    UNKNOWN = "unknown", "Unknown"
+    CLINICAL_LAB_DIAGNOSTICS = "clinical_lab_diagnostics", "Clinical Lab Diagnostics"
+    FUNCTIONAL_METABOLIC_TESTS = (
+        "functional_metabolic_tests",
+        "Functional & Metabolic Tests",
+    )
+    GENETICS = "genetics", "Genetics"
+    IMAGING_BODY_ANALYSIS = "imaging_body_analysis", "Imaging & Body Analysis"
+    PSYCHOPHYSIOLOGY_AND_PERFORMANCE = (
+        "psychophysiology_performance",
+        "Psychophysiology & Performance",
+    )
+    CONSULTATION_NOTES = "consultation_notes", "Consultation Notes"
+    RISK_LANDSCAPE_ROOT_CAUSE = (
+        "risk_landscape_rootcause",
+        "Risk Landscape & Root cause",
+    )
+
+
+SERVICE_DOCUMENT_MODULE_CATEGORY_MAP = {
+    ServiceDocumentType.OTHER: ModuleCategoryType.UNKNOWN,
+    ServiceDocumentType.BLOOD: ModuleCategoryType.CLINICAL_LAB_DIAGNOSTICS,
+    ServiceDocumentType.OLIGOSCAN: ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS,
+    ServiceDocumentType.METSIGHTS_PP: ModuleCategoryType.RISK_LANDSCAPE_ROOT_CAUSE,
+    ServiceDocumentType.EVO_360: ModuleCategoryType.RISK_LANDSCAPE_ROOT_CAUSE,
+    ServiceDocumentType.OMICS_URINE: ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS,
+    ServiceDocumentType.OMICS_CORTISOL: ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS,
+    ServiceDocumentType.DXA_CORE_SCAN: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.DXA_BODY_COMPOSITION: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.DXA_SEGMENTAL_ANALYSIS: (
+        ModuleCategoryType.IMAGING_BODY_ANALYSIS
+    ),
+    ServiceDocumentType.SOMFIT: ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE,
+    ServiceDocumentType.BREATHING_STRESS_PROFILE_REPORT: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+    ServiceDocumentType.BREATHING_STRESS_RESPIRATORY_REPORT: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+    ServiceDocumentType.BREATHING_STRESS_COMMUNICATION_STYLE: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+    ServiceDocumentType.BREATHING_STRESS_COGNIFIT: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+    ServiceDocumentType.USG_CAROTID_DOPPLER: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_NECK: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_ABDOMEN_PELVIS: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_ARTERIAL_DOPPLER: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_VENOUS_DOPPLER: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_SONOMAMMOGRAM: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_SCROTUM: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_FOLLICULAR_TVS: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_PELVIC_TVS: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.USG_OTHERS: ModuleCategoryType.IMAGING_BODY_ANALYSIS,
+    ServiceDocumentType.GENETICS_FUNCTIONAL: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_NUTRI_DNA: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_HEALTH_INSIGHTS: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_BREAST_OVARIAN_CANCER: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_COMPREHENSIVE: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_PHARMACOGENOMICS: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_INHERITED_CANCER: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_NUTRI_DNA_PDF: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.GENETICS_NUTRI_DNA_VCF: ModuleCategoryType.GENETICS,
+    ServiceDocumentType.BUGSPEAKS_REPORT: (
+        ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS
+    ),
+    ServiceDocumentType.STEROID_HORMONE_PROFILE: (
+        ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS
+    ),
+    ServiceDocumentType.STEROID_HORMONE_NAD_LONGEVITY: (
+        ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS
+    ),
+    ServiceDocumentType.STEROID_HORMONE_NUTRITIONAL_TOXIC_ELEMENTS: (
+        ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS
+    ),
+    ServiceDocumentType.STEROID_HORMONE_FATTY_ACID_PROFILE: (
+        ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS
+    ),
+    ServiceDocumentType.STEROID_HORMONE_NEUROTRANSMITTER_PROFILE: (
+        ModuleCategoryType.FUNCTIONAL_METABOLIC_TESTS
+    ),
+    ServiceDocumentType.FITNESS_STRENGTH_PELVIC_FLOOR: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+    ServiceDocumentType.FITNESS_STRENGTH_PHYSICAL_ASSESSMENT: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+    ServiceDocumentType.FITNESS_STRENGTH_VO2_MAX: (
+        ModuleCategoryType.PSYCHOPHYSIOLOGY_AND_PERFORMANCE
+    ),
+}
+
+
+def get_service_document_module_category(document_type: str):
+    return SERVICE_DOCUMENT_MODULE_CATEGORY_MAP.get(
+        document_type,
+        ModuleCategoryType.UNKNOWN,
+    )
+
+
+def get_module_category_document_types(module_category: str):
+    return [
+        document_type.value
+        for document_type in ServiceDocumentType
+        if get_service_document_module_category(document_type) == module_category
+    ]
