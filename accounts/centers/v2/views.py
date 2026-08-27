@@ -219,9 +219,7 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
 
     def _assignment_prefetch(self, center):
         assignment_filter = {"center": center}
-        active_query = self.request.query_params.get("is_active")
-        if active_query is None:
-            active_query = self.request.query_params.get("active")
+        active_query = self.request.query_params.get("active")
         if active_query in {"0", "1"}:
             assignment_filter["is_active"] = bool(int(active_query))
         else:
@@ -236,9 +234,7 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
     def get_queryset(self):
         center = self.get_center()
         assignment_is_active = True
-        active_query = self.request.query_params.get("is_active")
-        if active_query is None:
-            active_query = self.request.query_params.get("active")
+        active_query = self.request.query_params.get("active")
         if active_query in {"0", "1"}:
             assignment_is_active = bool(int(active_query))
 

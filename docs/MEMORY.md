@@ -25,6 +25,7 @@
 - "update collection" / "update bruno" → update `bruno/` (requests, folders, envs).
 - API collection source of truth is Bruno at `bruno/`. Envs: `bruno/environments/{Development,Production}.bru`. Folder vars omitted so they cannot shadow env tokens.
 - **Always add or update Bruno** (2026-08-26): when adding or changing any API, update the Bruno collection at `bruno/` in the same change — never ship API changes without Bruno. Never miss.
+- **List active filter query param** (2026-08-27): always use `active=0|1` on list endpoints. Model/DB/body/response field remains `is_active`. Never use `is_active` as a query param name.
 
 ---
 

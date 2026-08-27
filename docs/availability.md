@@ -159,7 +159,7 @@ All write routes are **center-scoped** under `/centers/<center_id>/availability/
 | Update | PATCH | Soft-deactivate with `"is_active": false` |
 | Delete | — | **Not supported** — use PATCH |
 
-List endpoints exist on each collection URL (GET) with optional `?is_active=0|1`.
+List endpoints exist on each collection URL (GET) with optional `?active=0|1`.
 
 ### Permissions (v1)
 
@@ -187,7 +187,7 @@ Bulk upsert the same open/close window across selected weekdays; mark other days
 - Idempotent upsert per `(center, day_of_week)`
 - `open_time` / `close_time` required when `days` is non-empty; must have `open_time < close_time`
 - Days omitted from both lists are left unchanged
-- GET lists rows; optional `?is_active=0|1` (default active only)
+- GET lists rows; optional `?active=0|1` (default active only)
 
 Legacy `GET/POST /centers/<id>/operating-hours/` still exists but is not the canonical write API.
 
@@ -211,7 +211,7 @@ Legacy `GET/POST /centers/<id>/operating-hours/` still exists but is not the can
 - If an inactive row exists for that date, POST reactivates it and updates `type` / `reason`
 - PATCH `"is_active": false` reopens the date (soft deactivate); `"is_active": true` closes again; `type` / `reason` also patchable
 - Calendar events use `"type": "closure"` plus extras `closure_type` and `reason`
-- GET supports `?is_active=0|1` and optional inclusive `?start=` / `?end=` (`YYYY-MM-DD`)
+- GET supports `?active=0|1` and optional inclusive `?start=` / `?end=` (`YYYY-MM-DD`)
 - No DELETE
 - Model: `CenterClosure` — **user owns migration** for `type` + `reason` fields
 
@@ -239,7 +239,7 @@ Bulk upsert weekly work hours for an associate at this center. Associate comes f
 
 **GET** `/centers/<center_id>/availability/associate-roster/`
 
-Optional list of roster rows for the center. Supports `?associate=<uuid>` and `?is_active=0|1` (default active only).
+Optional list of roster rows for the center. Supports `?associate=<uuid>` and `?active=0|1` (default active only).
 ### Associate blocks (one-off or recurring)
 
 **POST/GET** `/centers/<center_id>/availability/associates/<associate_id>/blocks/`

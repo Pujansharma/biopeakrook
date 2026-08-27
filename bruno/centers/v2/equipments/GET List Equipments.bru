@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10&is_active=1&search=&equipment_type_id=&room_id=&operational_status=
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10&active=1&search=&equipment_type_id=&room_id=&operational_status=
   body: none
   auth: bearer
 }
@@ -13,7 +13,7 @@ get {
 params:query {
   page: 1
   limit: 10
-  is_active: 1
+  active: 1
   search: 
   equipment_type_id: 
   room_id: 
@@ -36,5 +36,6 @@ settings {
 docs {
   List equipments. Nested equipment_type + room.
   operational_status filter: operational | maintenance | downtime.
+  Query: active=0|1 (default active only).
   Response includes operational_status + read-only is_in_maintenance, is_downtime booleans.
 }

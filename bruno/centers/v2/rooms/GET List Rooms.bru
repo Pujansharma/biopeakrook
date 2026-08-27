@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/v2/rooms/?page=1&limit=10&is_active=1&search=&room_type_id=
+  url: {{baseURL}}/centers/{{center_id}}/v2/rooms/?page=1&limit=10&active=1&search=&room_type_id=
   body: none
   auth: bearer
 }
@@ -13,7 +13,7 @@ get {
 params:query {
   page: 1
   limit: 10
-  is_active: 1
+  active: 1
   search: 
   room_type_id: 
 }
@@ -32,5 +32,5 @@ settings {
 }
 
 docs {
-  List rooms. Nested room_type. Filter room_type_id.
+  List rooms. Nested room_type. Filter room_type_id. Query: active=0|1 (default active only).
 }
