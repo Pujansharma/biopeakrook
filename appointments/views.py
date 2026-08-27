@@ -18,7 +18,6 @@ from appointments.serializers import (
     AssociateAvailabilityBlockCreateSerializer,
     AssociateAvailabilityBlockSerializer,
     AssociateLeaveSerializer,
-    AssociateLeaveWriteSerializer,
     AssociateRosterBulkUpsertSerializer,
     AssociateRosterEntrySerializer,
     CenterClosureSerializer,
@@ -253,17 +252,21 @@ class AssociateAvailabilityBlockDetailView(
 
 class AssociateLeaveListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = AssociateLeaveSerializer
 
-    def get_serializer_class(self):
-        if self.request.method == "POST":
-            return AssociateLeaveWriteSerializer
-        return AssociateLeaveSerializer
+    def get_associate(self):
+        return get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
 
     def get_queryset(self):
         center = self.get_center()
+        associate = self.get_associate()
         filter_kwargs = self.get_active_query_filter()
         return (
-            AssociateLeave.objects.filter(**filter_kwargs)
+            AssociateLeave.objects.filter(associate=associate, **filter_kwargs)
             .filter(
                 models.Q(scope=LeaveScope.ALL_CENTERS)
                 | models.Q(center=center)
@@ -272,19 +275,52 @@ class AssociateLeaveListCreateView(CenterAvailabilityMixin, BaseListCreateAPIVie
             .order_by("-created_at")
         )
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["associate"] = self.get_associate()
+        context["center"] = self.get_center()
+        return context
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        scope = serializer.validated_data.get("scope", LeaveScope.CENTER)
+        center = self.get_center()
+        if scope == LeaveScope.ALL_CENTERS:
+            center = None
+        serializer.save(
+            associate=self.get_associate(),
+            center=center,
+            created_by=self.request.user,
+        )
 
 
 class AssociateLeaveDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateLeaveSerializer
 
+    def get_associate(self):
+        return get_object_or_404(
+            Associate.objects.filter(is_active=True),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
+
     def get_queryset(self):
         center = self.get_center()
-        return AssociateLeave.objects.filter(
-            models.Q(scope=LeaveScope.ALL_CENTERS) | models.Q(center=center)
-        ).select_related("associate", "created_by", "center")
+        associate = self.get_associate()
+        return (
+            AssociateLeave.objects.filter(associate=associate)
+            .filter(
+                models.Q(scope=LeaveScope.ALL_CENTERS)
+                | models.Q(center=center)
+            )
+            .select_related("associate", "created_by", "center")
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["associate"] = self.get_associate()
+        context["center"] = self.get_center()
+        return context
 
 
 class RoomAvailabilityBlockListCreateView(

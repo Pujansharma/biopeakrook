@@ -36,6 +36,4 @@ class CenterV2Mixin:
         active_query = self.request.query_params.get("active")
         if active_query in {"0", "1"}:
             filter_kwargs["is_active"] = bool(int(active_query))
-        else:
-            filter_kwargs["is_active"] = True
         return filter_kwargs

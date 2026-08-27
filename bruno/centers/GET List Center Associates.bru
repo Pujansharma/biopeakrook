@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/associates/?page=1&limit=10&active=1&admin=0
+  url: {{baseURL}}/centers/{{center_id}}/associates/?page=1&limit=10&admin=0
   body: none
   auth: bearer
 }
@@ -13,7 +13,6 @@ get {
 params:query {
   page: 1
   limit: 10
-  active: 1
   admin: 0
 }
 
@@ -29,7 +28,7 @@ settings {
 docs {
   Center-scoped associate assignments (admin or associate JWT). Nested role on each item (id, name, role_tag, is_system, is_active). Set env center_id.
   
-  Query: page, limit, search (email/phone/name), active=0|1, admin=0|1, care_staff=0|1.
+  Query: page, limit, search (email/phone/name), optional active=0|1 (omit = active + inactive), admin=0|1, care_staff=0|1.
   
   Auth: bearer {{access_token}}. Run Auth → Login Phone Direct first.
 }

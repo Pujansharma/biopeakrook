@@ -280,22 +280,22 @@ Associate comes from the URL (not the body). POST response is always a **list** 
 
 ### Associate leaves
 
-**POST/PATCH** `/centers/<center_id>/availability/associate-leaves/`
+**POST/GET** `/centers/<center_id>/availability/associates/<associate_id>/leaves/`
+
+**PATCH** `/centers/<center_id>/availability/associates/<associate_id>/leaves/<leave_id>/`
+
+Associate comes from the URL (not the body). `scope=center` uses the URL center; `scope=all_centers` stores `center=null`.
 
 Leaves can be **center-scoped** or **all-centers** (blocks the person everywhere).
 
 ```json
 {
-  "associate": "<associate_uuid>",
   "scope": "center",
-  "center": "<center_uuid>",
   "start_datetime": "2026-09-05T18:30:00+00:00",
   "end_datetime": "2026-09-06T18:29:59+00:00",
   "reason": "Personal leave"
 }
 ```
-
-For `scope: "all_centers"`, omit `center` (must be null).
 
 Supports full-day, partial-day, and multi-day ranges via `start_datetime` / `end_datetime`.
 

@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/v2/services/?page=1&limit=10&active=1&search=
+  url: {{baseURL}}/centers/{{center_id}}/v2/services/?page=1&limit=10&search=
   body: none
   auth: bearer
 }
@@ -13,7 +13,6 @@ get {
 params:query {
   page: 1
   limit: 10
-  active: 1
   search: 
 }
 
@@ -33,6 +32,6 @@ settings {
 docs {
   Assigned services + nested assignment config (duration, buffers, modality, required types/roles).
   required_room_type / required_equipment_type / required_roles may be null or empty — not mandatory.
-  Query: active=0|1 (default active only).
+  Query: optional active=0|1 (omit = active + inactive).
   v1 GET /centers/{{center_id}}/services/ unchanged.
 }

@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/v2/equipment-types/?page=1&limit=10&active=1&search=
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipment-types/?page=1&limit=10&search=
   body: none
   auth: bearer
 }
@@ -13,7 +13,6 @@ get {
 params:query {
   page: 1
   limit: 10
-  active: 1
   search: 
 }
 
@@ -31,5 +30,5 @@ settings {
 }
 
 docs {
-  List equipment types. Fields include description. portability: fixed | portable. Query: active=0|1 (default active only).
+  List equipment types. Fields include description. portability: fixed | portable. Query: optional active=0|1 (omit = active + inactive).
 }

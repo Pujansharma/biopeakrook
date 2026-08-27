@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseURL}}/centers/{{center_id}}/availability/associate-leaves/
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/leaves/
   body: json
   auth: bearer
 }
@@ -21,9 +21,7 @@ auth:bearer {
 
 body:json {
   {
-    "associate": "{{associate_id}}",
     "scope": "center",
-    "center": "{{center_id}}",
     "start_datetime": "2026-09-05T00:00:00+05:30",
     "end_datetime": "2026-09-05T23:59:59+05:30",
     "reason": "Personal leave"
@@ -36,6 +34,6 @@ settings {
 }
 
 docs {
-  Associate leave. Body still requires associate. scope=center requires center; scope=all_centers omits center.
+  Associate leave. Associate from URL. scope=center uses URL center; scope=all_centers stores center=null.
   Set associate_leave_id from response for PATCH.
 }

@@ -516,6 +516,12 @@ class AssociateAvailabilityBlockCreateSerializer(BaseSerializer):
         return results
 
 
+def resolve_associate_leave_center(scope, center):
+    if scope == LeaveScope.ALL_CENTERS:
+        return None
+    return center
+
+
 class AssociateLeaveSerializer(BaseModelSerializer):
     associate_id = serializers.UUIDField(source="associate.pk", read_only=True)
     center_id = serializers.UUIDField(source="center.pk", read_only=True, allow_null=True)
@@ -540,12 +546,15 @@ class AssociateLeaveSerializer(BaseModelSerializer):
 
     def validate(self, data):
         scope = data.get("scope", getattr(self.instance, "scope", LeaveScope.CENTER))
-        center = data.get("center", getattr(self.instance, "center", None))
+        associate = self.context.get("associate") or getattr(
+            self.instance, "associate", None
+        )
+        center = resolve_associate_leave_center(scope, self.context.get("center"))
+        if scope == LeaveScope.CENTER and center is None:
+            center = getattr(self.instance, "center", None)
         errors = {}
         if scope == LeaveScope.CENTER and center is None:
             errors["center"] = ["Required when scope is center."]
-        if scope == LeaveScope.ALL_CENTERS and center is not None:
-            errors["center"] = ["Must be null when scope is all_centers."]
         start_datetime = data.get("start_datetime") or getattr(
             self.instance, "start_datetime", None
         )
@@ -559,7 +568,6 @@ class AssociateLeaveSerializer(BaseModelSerializer):
         is_active = data.get(
             "is_active", getattr(self.instance, "is_active", True)
         )
-        associate = data.get("associate") or getattr(self.instance, "associate", None)
         if is_active and associate and start_datetime and end_datetime:
             exclude_id = self.instance.pk if self.instance is not None else None
             assert_associate_leave_no_overlap(
@@ -571,6 +579,13 @@ class AssociateLeaveSerializer(BaseModelSerializer):
                 exclude_id=exclude_id,
             )
         return data
+
+    def update(self, instance, validated_data):
+        scope = validated_data.get("scope", instance.scope)
+        validated_data["center"] = resolve_associate_leave_center(
+            scope, self.context.get("center")
+        )
+        return super().update(instance, validated_data)
 
 
 class RoomAvailabilityBlockSerializer(BaseModelSerializer):
@@ -1076,26 +1091,6 @@ class AssociateRosterBulkUpsertSerializer(BaseSerializer):
                     )
                 )
         return results
-
-
-class AssociateLeaveWriteSerializer(AssociateLeaveSerializer):
-    associate = serializers.PrimaryKeyRelatedField(queryset=Associate.objects.all())
-    center = serializers.PrimaryKeyRelatedField(
-        queryset=Center.objects.filter(is_active=True),
-        allow_null=True,
-        required=False,
-    )
-
-    class Meta(AssociateLeaveSerializer.Meta):
-        fields = AssociateLeaveSerializer.Meta.fields + ["associate", "center"]
-        read_only_fields = [
-            "id",
-            "associate_id",
-            "center_id",
-            "created_by",
-            "created_at",
-            "updated_at",
-        ]
 
 
 class CenterOperatingHourSerializer(BaseModelSerializer):

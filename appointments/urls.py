@@ -17,6 +17,14 @@ urlpatterns = [
         views.AssociateAvailabilityBlockDetailView.as_view(),
     ),
     path(
+        "associates/<uuid:associate_id>/leaves/",
+        views.AssociateLeaveListCreateView.as_view(),
+    ),
+    path(
+        "associates/<uuid:associate_id>/leaves/<uuid:pk>/",
+        views.AssociateLeaveDetailView.as_view(),
+    ),
+    path(
         "associates/<uuid:associate_id>/",
         views.AssociateCenterAvailabilityCalendarView.as_view(),
     ),
@@ -32,11 +40,6 @@ urlpatterns = [
     path("closures/", views.CenterClosureListCreateView.as_view()),
     path("closures/<uuid:pk>/", views.CenterClosureDetailView.as_view()),
     path("associate-roster/", views.AssociateRosterEntryListView.as_view()),
-    path("associate-leaves/", views.AssociateLeaveListCreateView.as_view()),
-    path(
-        "associate-leaves/<uuid:pk>/",
-        views.AssociateLeaveDetailView.as_view(),
-    ),
     path(
         "room-blocks/<uuid:room_id>/",
         views.RoomAvailabilityBlockListCreateView.as_view(),

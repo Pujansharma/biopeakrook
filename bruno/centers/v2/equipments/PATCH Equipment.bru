@@ -21,10 +21,7 @@ auth:bearer {
 
 body:json {
   {
-    "name": "DEXA-001",
-    "room_id": null,
-    "operational_status": "maintenance",
-    "is_active": true
+    "is_active": false
   }
 }
 
@@ -37,4 +34,5 @@ docs {
   Update equipment. room_id null clears room. is_active false = soft deactivate.
   operational_status: operational | maintenance | downtime (mutually exclusive).
   Read-only is_in_maintenance / is_downtime derived on GET responses.
+  Optional equipment_type_id / room_id must be active for this center; inactive → 400.
 }

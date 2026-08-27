@@ -222,8 +222,6 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
         active_query = self.request.query_params.get("active")
         if active_query in {"0", "1"}:
             assignment_filter["is_active"] = bool(int(active_query))
-        else:
-            assignment_filter["is_active"] = True
         return Prefetch(
             "center_assignments",
             queryset=CenterServiceAssignment.objects.filter(**assignment_filter)
@@ -233,10 +231,12 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
 
     def get_queryset(self):
         center = self.get_center()
-        assignment_is_active = True
+        assignment_filter = {"center_assignments__center": center}
         active_query = self.request.query_params.get("active")
         if active_query in {"0", "1"}:
-            assignment_is_active = bool(int(active_query))
+            assignment_filter["center_assignments__is_active"] = bool(
+                int(active_query)
+            )
 
         search = Q()
         search_params = self.request.query_params.get("search", "").strip()
@@ -245,11 +245,7 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
             search |= Q(name__icontains=search_params)
 
         return (
-            Service.objects.filter(
-                search,
-                center_assignments__center=center,
-                center_assignments__is_active=assignment_is_active,
-            )
+            Service.objects.filter(search, **assignment_filter)
             .prefetch_related(self._assignment_prefetch(center))
             .distinct()
             .order_by("-created_at")

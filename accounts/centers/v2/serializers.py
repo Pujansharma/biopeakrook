@@ -183,15 +183,23 @@ class RoomV2Serializer(BaseModelSerializer):
         return value.strip()
 
     def validate(self, attrs):
+        center = self.context["center"]
         if self.instance is None and "room_type_id" not in attrs:
             raise serializers.ValidationError(
                 {"room_type_id": "This field is required."}
             )
+        room_type_id = attrs.pop("room_type_id", None)
+        if room_type_id is not None:
+            attrs["room_type_ref"] = self._resolve_room_type(center, room_type_id)
+        if "equipment_ids" in attrs:
+            attrs["equipment_ids"] = self._resolve_equipment_ids(
+                center, attrs["equipment_ids"]
+            )
         return attrs
 
     def _resolve_room_type(self, center, room_type_id):
-        room_type = RoomType.objects.filter(
-            pk=room_type_id, center=center, is_active=True
+        room_type = RoomType.objects.filter_active(
+            pk=room_type_id, center=center
         ).first()
         if not room_type:
             raise serializers.ValidationError(
@@ -199,16 +207,15 @@ class RoomV2Serializer(BaseModelSerializer):
             )
         return room_type
 
-    def _resolve_equipments(self, center, equipment_ids):
+    def _resolve_equipment_ids(self, center, equipment_ids):
         if not equipment_ids:
             return []
-        equipments = list(
-            Equipment.objects.filter(
-                pk__in=equipment_ids, center=center, is_active=True
-            )
+        found_ids = list(
+            Equipment.objects.filter_active(
+                pk__in=equipment_ids, center=center
+            ).values_list("pk", flat=True)
         )
-        found_ids = {equipment.pk for equipment in equipments}
-        missing_ids = set(equipment_ids) - found_ids
+        missing_ids = set(equipment_ids) - set(found_ids)
         if missing_ids:
             raise serializers.ValidationError(
                 {
@@ -218,48 +225,33 @@ class RoomV2Serializer(BaseModelSerializer):
                     )
                 }
             )
-        return equipments
+        return found_ids
 
-    def _assign_equipments(self, room, equipments, replace):
+    def _assign_equipments(self, room, equipment_ids, replace):
         if replace:
             Equipment.objects.filter(room=room).exclude(
-                pk__in=[equipment.pk for equipment in equipments]
+                pk__in=equipment_ids
             ).update(room=None)
-        if equipments:
-            Equipment.objects.filter(
-                pk__in=[equipment.pk for equipment in equipments]
-            ).update(room=room)
+        if equipment_ids:
+            Equipment.objects.filter(pk__in=equipment_ids).update(room=room)
 
     def create(self, validated_data):
         center = self.context["center"]
-        room_type_id = validated_data.pop("room_type_id")
         equipment_ids = validated_data.pop("equipment_ids", None)
-        room_type = self._resolve_room_type(center, room_type_id)
-        equipments = (
-            self._resolve_equipments(center, equipment_ids)
-            if equipment_ids is not None
-            else []
-        )
         validated_data["center"] = center
-        validated_data["room_type_ref"] = room_type
         validated_data["code"] = generate_room_code(center.pk)
         with transaction.atomic():
             room = super().create(validated_data)
             if equipment_ids is not None:
-                self._assign_equipments(room, equipments, replace=False)
+                self._assign_equipments(room, equipment_ids, replace=False)
         return room
 
     def update(self, instance, validated_data):
-        center = self.context["center"]
-        room_type_id = validated_data.pop("room_type_id", None)
         equipment_ids = validated_data.pop("equipment_ids", None)
-        if room_type_id is not None:
-            instance.room_type_ref = self._resolve_room_type(center, room_type_id)
         with transaction.atomic():
             instance = super().update(instance, validated_data)
             if equipment_ids is not None:
-                equipments = self._resolve_equipments(center, equipment_ids)
-                self._assign_equipments(instance, equipments, replace=True)
+                self._assign_equipments(instance, equipment_ids, replace=True)
         return instance
 
     def to_representation(self, instance):
@@ -344,15 +336,23 @@ class EquipmentV2Serializer(BaseModelSerializer):
         return value.strip()
 
     def validate(self, attrs):
+        center = self.context["center"]
         if self.instance is None and "equipment_type_id" not in attrs:
             raise serializers.ValidationError(
                 {"equipment_type_id": "This field is required."}
             )
+        equipment_type_id = attrs.pop("equipment_type_id", None)
+        if equipment_type_id is not None:
+            attrs["equipment_type"] = self._resolve_equipment_type(
+                center, equipment_type_id
+            )
+        if "room_id" in attrs:
+            attrs["room"] = self._resolve_room(center, attrs.pop("room_id"))
         return attrs
 
     def _resolve_equipment_type(self, center, equipment_type_id):
-        equipment_type = EquipmentType.objects.filter(
-            pk=equipment_type_id, center=center, is_active=True
+        equipment_type = EquipmentType.objects.filter_active(
+            pk=equipment_type_id, center=center
         ).first()
         if not equipment_type:
             raise serializers.ValidationError(
@@ -367,7 +367,7 @@ class EquipmentV2Serializer(BaseModelSerializer):
     def _resolve_room(self, center, room_id):
         if room_id is None:
             return None
-        room = Room.objects.filter(pk=room_id, center=center, is_active=True).first()
+        room = Room.objects.filter_active(pk=room_id, center=center).first()
         if not room:
             raise serializers.ValidationError(
                 {"room_id": "Invalid or inactive room for this center."}
@@ -376,27 +376,9 @@ class EquipmentV2Serializer(BaseModelSerializer):
 
     def create(self, validated_data):
         center = self.context["center"]
-        equipment_type_id = validated_data.pop("equipment_type_id")
-        room_id = validated_data.pop("room_id", None)
         validated_data["center"] = center
-        validated_data["equipment_type"] = self._resolve_equipment_type(
-            center, equipment_type_id
-        )
-        validated_data["room"] = self._resolve_room(center, room_id)
         validated_data["code"] = generate_equipment_code(center.pk)
         return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        center = self.context["center"]
-        equipment_type_id = validated_data.pop("equipment_type_id", None)
-        if equipment_type_id is not None:
-            instance.equipment_type = self._resolve_equipment_type(
-                center, equipment_type_id
-            )
-        if "room_id" in validated_data:
-            room_id = validated_data.pop("room_id")
-            instance.room = self._resolve_room(center, room_id)
-        return super().update(instance, validated_data)
 
 
 class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
@@ -449,9 +431,9 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
         room_type_queryset = RoomType.objects.none()
         equipment_type_queryset = EquipmentType.objects.none()
         if center is not None:
-            room_type_queryset = RoomType.objects.filter(center=center, is_active=True)
-            equipment_type_queryset = EquipmentType.objects.filter(
-                center=center, is_active=True
+            room_type_queryset = RoomType.objects.filter_active(center=center)
+            equipment_type_queryset = EquipmentType.objects.filter_active(
+                center=center
             )
 
         fields["required_room_type"] = RoomTypeNestedSerializer(read_only=True)
@@ -494,14 +476,20 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
         ).data
         return representation
 
+    def validate(self, attrs):
+        if "required_role_ids" in attrs:
+            role_ids = attrs.get("required_role_ids") or []
+            attrs["required_role_ids"] = self._resolve_roles(
+                self.context["center"], role_ids
+            )
+        return attrs
+
     def _resolve_roles(self, center, role_ids):
         if not role_ids:
             return []
         roles = list(
-            AssociateRole.objects.filter(
-                Q(pk__in=role_ids)
-                & (Q(is_system=True) | Q(center=center))
-                & Q(is_active=True)
+            AssociateRole.objects.filter_active(
+                Q(pk__in=role_ids) & (Q(is_system=True) | Q(center=center))
             )
         )
         found_ids = {role.pk for role in roles}
@@ -518,16 +506,10 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
         return roles
 
     def update(self, instance, validated_data):
-        center = self.context["center"]
-        role_ids_provided = "required_role_ids" in validated_data
-        role_ids = validated_data.pop("required_role_ids", None)
-        if role_ids_provided and role_ids is None:
-            role_ids = []
-
+        roles = validated_data.pop("required_role_ids", None)
         with transaction.atomic():
             instance = super().update(instance, validated_data)
-            if role_ids_provided:
-                roles = self._resolve_roles(center, role_ids)
+            if roles is not None:
                 CenterServiceRoleRequirement.objects.filter(assignment=instance).delete()
                 CenterServiceRoleRequirement.objects.bulk_create(
                     [

@@ -39,4 +39,5 @@ docs {
   Optional: capacity (min 1), floor, equipment_ids (paste UUID strings into the array; empty = none).
   Do not use Bruno vars inside JSON arrays.
   Do not send code; server generates RM-{center_code}-{seq} (e.g. RM-CT-0001-0001).
+  room_type_id and equipment_ids must be active for this center; inactive → 400.
 }
