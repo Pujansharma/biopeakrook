@@ -389,6 +389,27 @@ Environment variables: `center_id`, `associate_id`, `room_id`, `equipment_id`, `
 
 ---
 
+## Appointment booking lifecycle
+
+Full design: `docs/superpowers/specs/2026-08-28-appointments-design.md` §6.
+
+Staff book creates `confirmed` immediately (no `pending` / `confirmation_pending`).
+
+| # | Flow |
+|---|---|
+| 1 | `confirmed` → `checked_in` → `in_progress` → `completed` |
+| 2 | same as 1 + `mark_late` while `in_progress` |
+| 3 | `confirmed` → `cancelled` |
+| 4 | `confirmed` → `no_show` |
+| 5 | `confirmed` → `checked_in` → `cancelled` |
+| 6 | `confirmed` → `checked_in` → reschedule → `confirmed` |
+
+Waiting-room (`checked_in`) is still reversible (cancel or reschedule). Session started (`in_progress`) is not. Reschedule always lands `confirmed`.
+
+Busy (exclusive reservation): `confirmed`, `checked_in`, `in_progress`. Not busy: `cancelled`, `no_show`, `completed`.
+
+---
+
 ## Implementation notes (for engineers)
 
 | Topic | Location |
@@ -407,4 +428,4 @@ Environment variables: `center_id`, `associate_id`, `room_id`, `equipment_id`, `
 
 ---
 
-*Last updated: 2026-08-27*
+*Last updated: 2026-08-30*

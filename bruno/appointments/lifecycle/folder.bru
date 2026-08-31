@@ -1,0 +1,15 @@
+meta {
+  name: lifecycle
+  type: folder
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Lifecycle actions for appointment {{appointment_id}}.
+  Flow: check-in → start → complete (optional mark-late while in_progress).
+  Cancel from confirmed or checked_in. No-show from confirmed only.
+  Reschedule from confirmed or checked_in; lands confirmed. Not from in_progress.
+}

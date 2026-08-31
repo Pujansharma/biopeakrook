@@ -10,11 +10,13 @@ from appointments.models import (
     AssociateAvailabilityBlock,
     AssociateLeave,
     AssociateRosterEntry,
+    Appointment,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
     RoomDowntime,
 )
+from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.constants import LeaveScope
 from appointments.utils.intervals import (
     clip_intervals_to_range,
@@ -467,6 +469,86 @@ def build_calendar_days(
     return days
 
 
+def collect_appointment_busy_intervals(
+    center, resource_type, resource_ids, range_start, range_end
+):
+    appointments = (
+        Appointment.objects.filter(
+            center=center,
+            status__in=BUSY_APPOINTMENT_STATUSES,
+            start_datetime__lt=range_end,
+            end_datetime__gt=range_start,
+        )
+        .select_related(
+            "customer_profile",
+            "service",
+            "room",
+            "equipment",
+        )
+        .prefetch_related("associate_links__associate", "associate_links__role")
+    )
+    resource_id_set = None
+    if resource_ids:
+        resource_id_set = {str(item) for item in resource_ids}
+    intervals = []
+    events = []
+    for appointment in appointments:
+        exclusive_interval = (
+            appointment.exclusive_start_datetime,
+            appointment.exclusive_end_datetime,
+        )
+        display_interval = (
+            appointment.start_datetime,
+            appointment.end_datetime,
+        )
+        include_interval = False
+        if resource_type == "center":
+            include_interval = True
+        elif resource_type == "associate":
+            for link in appointment.associate_links.all():
+                if resource_id_set is None or str(link.associate_id) in resource_id_set:
+                    include_interval = True
+                    break
+        elif resource_type == "room":
+            if appointment.room_id and (
+                resource_id_set is None
+                or str(appointment.room_id) in resource_id_set
+            ):
+                include_interval = True
+        elif resource_type == "equipment":
+            if appointment.equipment_id and (
+                resource_id_set is None
+                or str(appointment.equipment_id) in resource_id_set
+            ):
+                include_interval = True
+        if not include_interval:
+            continue
+        intervals.append(exclusive_interval)
+        customer_name = " ".join(
+            part
+            for part in [
+                appointment.customer_profile.first_name or "",
+                appointment.customer_profile.last_name or "",
+            ]
+            if part
+        ).strip()
+        events.append(
+            serialize_event(
+                "appointment",
+                appointment.pk,
+                display_interval,
+                {
+                    "code": appointment.code,
+                    "status": appointment.status,
+                    "has_open_exception": appointment.has_open_exception,
+                    "customer_name": customer_name or str(appointment.customer_profile_id),
+                    "service_name": appointment.service.name,
+                },
+            )
+        )
+    return merge_intervals(intervals), events
+
+
 def compute_center_calendar(center, start_date, granularity):
     query_start, query_end = resolve_query_date_range(start_date, granularity)
     timezone_name = get_center_timezone_name(center)
@@ -476,12 +558,20 @@ def compute_center_calendar(center, start_date, granularity):
     closure_intervals, closure_events = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    appointment_intervals, appointment_events = collect_appointment_busy_intervals(
+        center, "center", None, range_start, range_end
+    )
+    busy_intervals = merge_intervals(closure_intervals + appointment_intervals)
+    events = closure_events + appointment_events
     days = build_calendar_days(
         query_start,
         query_end,
         base_intervals,
-        closure_intervals,
-        closure_events,
+        busy_intervals,
+        events,
         timezone_name,
     )
     return {
@@ -514,10 +604,23 @@ def compute_associate_center_calendar(center, associate, start_date, granularity
     closure_intervals, closure_events = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
-    busy_intervals = merge_intervals(
-        block_intervals + leave_intervals + closure_intervals
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
     )
-    events = block_events + leave_events + closure_events
+    appointment_intervals, appointment_events = collect_appointment_busy_intervals(
+        center,
+        "associate",
+        [associate.pk],
+        range_start,
+        range_end,
+    )
+    busy_intervals = merge_intervals(
+        block_intervals
+        + leave_intervals
+        + closure_intervals
+        + appointment_intervals
+    )
+    events = block_events + leave_events + closure_events + appointment_events
     days = build_calendar_days(
         query_start,
         query_end,
@@ -553,10 +656,23 @@ def compute_room_calendar(center, room, start_date, granularity):
     closure_intervals, closure_events = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
-    busy_intervals = merge_intervals(
-        block_intervals + downtime_intervals + closure_intervals
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
     )
-    events = block_events + downtime_events + closure_events
+    appointment_intervals, appointment_events = collect_appointment_busy_intervals(
+        center,
+        "room",
+        [room.pk],
+        range_start,
+        range_end,
+    )
+    busy_intervals = merge_intervals(
+        block_intervals
+        + downtime_intervals
+        + closure_intervals
+        + appointment_intervals
+    )
+    events = block_events + downtime_events + closure_events + appointment_events
     days = build_calendar_days(
         query_start,
         query_end,
@@ -592,10 +708,23 @@ def compute_equipment_calendar(center, equipment, start_date, granularity):
     closure_intervals, closure_events = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
-    busy_intervals = merge_intervals(
-        block_intervals + downtime_intervals + closure_intervals
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
     )
-    events = block_events + downtime_events + closure_events
+    appointment_intervals, appointment_events = collect_appointment_busy_intervals(
+        center,
+        "equipment",
+        [equipment.pk],
+        range_start,
+        range_end,
+    )
+    busy_intervals = merge_intervals(
+        block_intervals
+        + downtime_intervals
+        + closure_intervals
+        + appointment_intervals
+    )
+    events = block_events + downtime_events + closure_events + appointment_events
     days = build_calendar_days(
         query_start,
         query_end,

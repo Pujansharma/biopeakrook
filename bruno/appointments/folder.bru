@@ -1,0 +1,14 @@
+meta {
+  name: appointments
+  type: folder
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Center-scoped appointment booking under /centers/{{center_id}}/appointments/.
+  Staff-only (associate/admin). No X-Center-ID required.
+  Env: center_id, customer_profile_id, service_id, appointment_id, idempotency_key.
+}

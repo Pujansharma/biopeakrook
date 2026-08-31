@@ -136,3 +136,17 @@ def datetime_range_for_dates(query_start, query_end, timezone_name):
     range_start = datetime.combine(query_start, time.min, tzinfo=zone).astimezone(UTC)
     range_end = datetime.combine(query_end, time.max, tzinfo=zone).astimezone(UTC)
     return range_start, range_end
+
+
+def split_into_slots(free_windows, duration_minutes, step_minutes):
+    if not free_windows or duration_minutes <= 0 or step_minutes <= 0:
+        return []
+    duration_delta = timedelta(minutes=duration_minutes)
+    step_delta = timedelta(minutes=step_minutes)
+    slots = []
+    for window_start, window_end in free_windows:
+        cursor = window_start
+        while cursor + duration_delta <= window_end:
+            slots.append((cursor, cursor + duration_delta))
+            cursor += step_delta
+    return sorted(slots, key=lambda item: item[0])

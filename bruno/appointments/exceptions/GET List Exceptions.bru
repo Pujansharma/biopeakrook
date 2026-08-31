@@ -1,0 +1,28 @@
+meta {
+  name: GET List Exceptions
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/exceptions/?status=open
+  body: none
+  auth: bearer
+}
+
+params:query {
+  status: open
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Paginated open appointment exceptions for sidenav and exceptions list.
+}

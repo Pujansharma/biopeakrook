@@ -1,14 +1,38 @@
+from django.contrib.postgres.constraints import ExclusionConstraint
 from django.db import models
+from django.db.models import F, Func, Q
 
-from accounts.associates.models import Associate
+from accounts.associates.models import Associate, AssociateRole
 from accounts.centers.models import Center
+from accounts.customers.models import CustomerProfile
 from accounts.utils import get_user_model
-from appointments.utils.constants import LeaveScope
-from core.utils.constants import AppointmentDays
+from appointments.utils.constants import (
+    AppointmentAuditAction,
+    AppointmentStatus,
+    BUSY_APPOINTMENT_STATUSES,
+    ExceptionResolution,
+    ExceptionScanJobStatus,
+    ExceptionSourceType,
+    ExceptionStatus,
+    LeaveScope,
+)
+from core.utils.constants import AppointmentDays, AppointmentModes
 from core.utils.models import BaseUUIDModel
 from inventory.models import Equipment, Room
+from programs.services.models import Service
 
 User = get_user_model()
+
+_BUSY_STATUS_VALUES = list(BUSY_APPOINTMENT_STATUSES)
+
+
+def _exclusive_range_expression():
+    return Func(
+        F("exclusive_start_datetime"),
+        F("exclusive_end_datetime"),
+        function="tstzrange",
+        template="%(function)s(%(expressions)s, '[)')",
+    )
 
 
 class AssociateRosterEntry(BaseUUIDModel):
@@ -210,6 +234,312 @@ class EquipmentDowntime(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class Appointment(BaseUUIDModel):
+    """
+    Standalone center-scoped appointment booking.
+
+    First migration must run: CREATE EXTENSION IF NOT EXISTS btree_gist;
+    before GiST ExclusionConstraint definitions.
+    """
+
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name="appointments"
+    )
+    code = models.CharField(max_length=64)
+    customer_profile = models.ForeignKey(
+        CustomerProfile,
+        on_delete=models.CASCADE,
+        related_name="appointments",
+    )
+    service = models.ForeignKey(
+        Service, on_delete=models.PROTECT, related_name="appointments"
+    )
+    modality = models.CharField(choices=AppointmentModes)
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    duration_minutes = models.PositiveIntegerField()
+    buffer_before_minutes = models.PositiveIntegerField(default=0)
+    buffer_after_minutes = models.PositiveIntegerField(default=0)
+    exclusive_start_datetime = models.DateTimeField()
+    exclusive_end_datetime = models.DateTimeField()
+    status = models.CharField(
+        choices=AppointmentStatus,
+        default=AppointmentStatus.CONFIRMED,
+    )
+    is_late = models.BooleanField(default=False)
+    late_by = models.PositiveIntegerField(null=True, blank=True)
+    cancel_reason = models.CharField(max_length=500, blank=True)
+    has_open_exception = models.BooleanField(default=False)
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointments",
+    )
+    equipment = models.ForeignKey(
+        Equipment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointments",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_appointments",
+    )
+
+    class Meta:
+        ordering = ["-start_datetime"]
+        indexes = [
+            models.Index(fields=["center", "start_datetime"]),
+            models.Index(fields=["center", "status", "start_datetime"]),
+            models.Index(fields=["customer_profile", "start_datetime"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["center", "code"],
+                name="uniq_appointment_code_per_center",
+            ),
+            models.CheckConstraint(
+                condition=Q(end_datetime__gt=F("start_datetime")),
+                name="appointment_end_after_start",
+            ),
+            models.CheckConstraint(
+                condition=Q(
+                    exclusive_end_datetime__gt=F("exclusive_start_datetime")
+                ),
+                name="appointment_exclusive_end_after_start",
+            ),
+            ExclusionConstraint(
+                name="appointment_room_no_overlap",
+                expressions=[
+                    (F("room_id"), "="),
+                    (_exclusive_range_expression(), "&&"),
+                ],
+                condition=Q(
+                    room_id__isnull=False,
+                    status__in=_BUSY_STATUS_VALUES,
+                ),
+            ),
+            ExclusionConstraint(
+                name="appointment_equipment_no_overlap",
+                expressions=[
+                    (F("equipment_id"), "="),
+                    (_exclusive_range_expression(), "&&"),
+                ],
+                condition=Q(
+                    equipment_id__isnull=False,
+                    status__in=_BUSY_STATUS_VALUES,
+                ),
+            ),
+        ]
+
+    def __str__(self):
+        return self.code
+
+
+class AppointmentAssociate(BaseUUIDModel):
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name="associate_links",
+    )
+    associate = models.ForeignKey(
+        Associate,
+        on_delete=models.CASCADE,
+        related_name="appointment_links",
+    )
+    role = models.ForeignKey(
+        AssociateRole,
+        on_delete=models.PROTECT,
+        related_name="appointment_links",
+    )
+    exclusive_start_datetime = models.DateTimeField()
+    exclusive_end_datetime = models.DateTimeField()
+    appointment_status = models.CharField(choices=AppointmentStatus)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["associate", "exclusive_start_datetime"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment", "role"],
+                name="uniq_appointment_associate_role",
+            ),
+            ExclusionConstraint(
+                name="appointment_associate_no_overlap",
+                expressions=[
+                    (F("associate_id"), "="),
+                    (_exclusive_range_expression(), "&&"),
+                ],
+                condition=Q(appointment_status__in=_BUSY_STATUS_VALUES),
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AppointmentException(BaseUUIDModel):
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name="exceptions",
+    )
+    center = models.ForeignKey(
+        Center,
+        on_delete=models.CASCADE,
+        related_name="appointment_exceptions",
+    )
+    source_type = models.CharField(choices=ExceptionSourceType)
+    source_id = models.UUIDField()
+    source_label = models.CharField(max_length=255, blank=True)
+    source_start_datetime = models.DateTimeField()
+    source_end_datetime = models.DateTimeField()
+    status = models.CharField(
+        choices=ExceptionStatus,
+        default=ExceptionStatus.OPEN,
+    )
+    resolution = models.CharField(
+        choices=ExceptionResolution,
+        null=True,
+        blank=True,
+    )
+    detected_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-detected_at"]
+        indexes = [
+            models.Index(fields=["center", "status"]),
+            models.Index(fields=["appointment", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment", "source_type", "source_id"],
+                condition=Q(status=ExceptionStatus.OPEN),
+                name="uniq_open_appointment_exception_source",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AppointmentAuditLog(BaseUUIDModel):
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+    )
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointment_audit_logs",
+    )
+    action = models.CharField(choices=AppointmentAuditAction)
+    note = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["appointment", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AppointmentHistory(BaseUUIDModel):
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name="history_entries",
+    )
+    previous_start_datetime = models.DateTimeField()
+    previous_end_datetime = models.DateTimeField()
+    previous_exclusive_start_datetime = models.DateTimeField()
+    previous_exclusive_end_datetime = models.DateTimeField()
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointment_history_entries",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AppointmentExceptionScanJob(BaseUUIDModel):
+    """Async queue for recurring/bulk exception overlap scans."""
+
+    center = models.ForeignKey(
+        Center,
+        on_delete=models.CASCADE,
+        related_name="appointment_exception_scan_jobs",
+    )
+    source_type = models.CharField(choices=ExceptionSourceType)
+    source_id = models.UUIDField()
+    status = models.CharField(
+        choices=ExceptionScanJobStatus,
+        default=ExceptionScanJobStatus.PENDING,
+    )
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["center", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AppointmentIdempotencyKey(BaseUUIDModel):
+    center = models.ForeignKey(
+        Center,
+        on_delete=models.CASCADE,
+        related_name="appointment_idempotency_keys",
+    )
+    idempotency_key = models.CharField(max_length=255)
+    payload_hash = models.CharField(max_length=64)
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name="idempotency_keys",
+    )
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["expires_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["center", "idempotency_key"],
+                name="uniq_appointment_idempotency_key_per_center",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.pk}"

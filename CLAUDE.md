@@ -176,8 +176,8 @@ biopeak-nexus/
 **Scheduling**
 - `Schedule` — recurring weekly availability (associate, day_of_week, start/end time, duration, buffer)
 - `BlockedPeriod` — one-off unavailability windows (UTC)
-- `Appointment` — booked sessions with full lifecycle (pending → confirmed → completed/cancelled)
-- `AppointmentHistory` — reschedule audit trail
+- `Appointment` — booked sessions; book lands `confirmed` (no `pending`). Cancel/reschedule from `confirmed` or `checked_in`; `in_progress` is not reversible. No-show from `confirmed` only.
+- `AppointmentHistory` — reschedule window snapshots; `AppointmentAuditLog` — appointment-scoped lifecycle trail
 
 **Services & Inventory**
 - `Service` + `ServiceRequirement` — service catalogue per center

@@ -1,6 +1,12 @@
+from accounts.associates.models import AssociateCenterAssignment
 from accounts.centers.models import Center
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
+from appointments.models import Appointment
+from appointments.utils.exceptions import (
+    apply_availability_exception_hooks,
+    get_source_type_for_instance,
+)
 from core.utils.exceptions import get_object_or_404
 
 
@@ -39,3 +45,67 @@ class CenterAvailabilityMixin:
         else:
             filter_kwargs["is_active"] = True
         return filter_kwargs
+
+
+class CenterAppointmentsMixin:
+    """Resolve URL center for appointment APIs without X-Center-ID requirement."""
+
+    def get_center_id(self):
+        return self.kwargs["center_id"]
+
+    def get_center(self):
+        center_id = self.get_center_id()
+        centers = Center.objects.filter(is_active=True)
+        account_type = get_user_account_type(self.request.user)
+        if account_type in {UserType.ADMIN, UserType.ASSOCIATE}:
+            if hasattr(self.request.user, "associate"):
+                active_assignments = AssociateCenterAssignment.objects.filter(
+                    associate=self.request.user.associate,
+                    is_active=True,
+                )
+                if active_assignments.exists():
+                    centers = centers.filter(
+                        pk__in=active_assignments.values_list("center_id", flat=True)
+                    )
+        return get_object_or_404(
+            centers.distinct(),
+            "No valid center found with the given ID.",
+            pk=center_id,
+        )
+
+    def get_appointment_queryset(self):
+        return (
+            Appointment.objects.filter(center=self.get_center())
+            .select_related(
+                "customer_profile",
+                "service",
+                "room",
+                "equipment",
+                "center",
+            )
+            .prefetch_related("associate_links__associate", "associate_links__role")
+        )
+
+
+class AvailabilityExceptionHooksMixin:
+    """Run exception detection/resolution after availability writes."""
+
+    def apply_exception_side_effects(self, instance, validated_data=None, created=False):
+        source_type = get_source_type_for_instance(instance)
+        if source_type is None:
+            return None
+        return apply_availability_exception_hooks(
+            center=self.get_center(),
+            instance=instance,
+            source_type=source_type,
+            validated_data=validated_data,
+            created=created,
+        )
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        self.apply_exception_side_effects(
+            serializer.instance,
+            serializer.validated_data,
+            created=False,
+        )

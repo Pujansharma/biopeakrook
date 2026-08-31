@@ -5,13 +5,13 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/?start=2026-09-05&granularity=day
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/?start=2026-08-25&granularity=day
   body: none
   auth: bearer
 }
 
 params:query {
-  start: 2026-09-05
+  start: 2026-08-25
   granularity: day
 }
 
@@ -32,4 +32,3 @@ docs {
   Associate calendar at one center (roster intersect center hours minus blocks/leaves/closures).
   Omit start → today. Each day includes day_of_week ("0"=Mon … "6"=Sun) and day_of_week_name.
 }
-​

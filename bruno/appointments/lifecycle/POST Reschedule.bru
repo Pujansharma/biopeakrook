@@ -1,0 +1,42 @@
+meta {
+  name: POST Reschedule
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/{{appointment_id}}/reschedule/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "customer_profile_id": "{{customer_profile_id}}",
+    "service_id": "{{service_id}}",
+    "modality": "in_person",
+    "start": "2026-09-05T05:00:00Z",
+    "end": "2026-09-05T05:40:00Z",
+    "associates": [],
+    "room_id": "{{room_id}}",
+    "equipment_id": null
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Allowed from confirmed or checked_in. Lands confirmed. Not from in_progress.
+  Adjust slot to match availability.
+}

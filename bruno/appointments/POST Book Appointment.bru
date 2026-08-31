@@ -1,0 +1,49 @@
+meta {
+  name: POST Book Appointment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+  Idempotency-Key: {{idempotency_key}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "customer_profile_id": "{{customer_profile_id}}",
+    "service_id": "{{service_id}}",
+    "modality": "in_person",
+    "start": "2026-09-05T04:00:00Z",
+    "end": "2026-09-05T04:40:00Z",
+    "associates": [],
+    "room_id": "{{room_id}}",
+    "equipment_id": null
+  }
+}
+
+script:pre-request {
+  if (!bru.getEnvVar('idempotency_key')) {
+    bru.setEnvVar('idempotency_key', bru.interpolate('{{$uuid}}'));
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Books a confirmed appointment. Use Idempotency-Key for safe retries.
+  Adjust start/end/associates to match a slot from POST Find Slots.
+}

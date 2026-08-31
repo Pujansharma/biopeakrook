@@ -1,0 +1,29 @@
+meta {
+  name: GET Operations Capacity
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/operations/capacity/?start=2026-09-01&granularity=week
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2026-09-01
+  granularity: week
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Aggregated capacity vs booked hours by resource type.
+}

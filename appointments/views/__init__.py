@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from accounts.associates.models import Associate
 from accounts.centers.models import CenterClosure, CenterOperatingHour
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
-from appointments.mixins import CenterAvailabilityMixin
+from appointments.mixins import CenterAvailabilityMixin, AvailabilityExceptionHooksMixin
 from appointments.models import (
     AssociateAvailabilityBlock,
     AssociateLeave,
@@ -188,7 +188,7 @@ class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView)
 
 
 class AssociateAvailabilityBlockListCreateView(
-    CenterAvailabilityMixin, BaseListCreateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     create_success_message = "Associate availability blocks created."
@@ -225,12 +225,14 @@ class AssociateAvailabilityBlockListCreateView(
             associate=self.get_associate(),
             created_by=request.user,
         )
+        for block in results:
+            self.apply_exception_side_effects(block, serializer.validated_data, created=True)
         data = AssociateAvailabilityBlockSerializer(results, many=True).data
         return Response(data, status=201)
 
 
 class AssociateAvailabilityBlockDetailView(
-    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateAvailabilityBlockSerializer
@@ -250,7 +252,9 @@ class AssociateAvailabilityBlockDetailView(
         ).select_related("associate", "created_by", "center")
 
 
-class AssociateLeaveListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
+class AssociateLeaveListCreateView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
+):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateLeaveSerializer
 
@@ -291,9 +295,16 @@ class AssociateLeaveListCreateView(CenterAvailabilityMixin, BaseListCreateAPIVie
             center=center,
             created_by=self.request.user,
         )
+        self.apply_exception_side_effects(
+            serializer.instance,
+            serializer.validated_data,
+            created=True,
+        )
 
 
-class AssociateLeaveDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
+class AssociateLeaveDetailView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
+):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateLeaveSerializer
 
@@ -324,7 +335,7 @@ class AssociateLeaveDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIVie
 
 
 class RoomAvailabilityBlockListCreateView(
-    CenterAvailabilityMixin, BaseListCreateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     create_success_message = "Room availability blocks created."
@@ -357,12 +368,14 @@ class RoomAvailabilityBlockListCreateView(
             room=self.get_room(),
             created_by=request.user,
         )
+        for block in results:
+            self.apply_exception_side_effects(block, serializer.validated_data, created=True)
         data = RoomAvailabilityBlockSerializer(results, many=True).data
         return Response(data, status=201)
 
 
 class RoomAvailabilityBlockDetailView(
-    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = RoomAvailabilityBlockSerializer
@@ -381,7 +394,9 @@ class RoomAvailabilityBlockDetailView(
         )
 
 
-class RoomDowntimeListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
+class RoomDowntimeListCreateView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
+):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = RoomDowntimeSerializer
 
@@ -408,9 +423,16 @@ class RoomDowntimeListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView)
 
     def perform_create(self, serializer):
         serializer.save(room=self.get_room(), created_by=self.request.user)
+        self.apply_exception_side_effects(
+            serializer.instance,
+            serializer.validated_data,
+            created=True,
+        )
 
 
-class RoomDowntimeDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
+class RoomDowntimeDetailView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
+):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = RoomDowntimeSerializer
 
@@ -429,7 +451,7 @@ class RoomDowntimeDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView)
 
 
 class EquipmentAvailabilityBlockListCreateView(
-    CenterAvailabilityMixin, BaseListCreateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     create_success_message = "Equipment availability blocks created."
@@ -464,12 +486,14 @@ class EquipmentAvailabilityBlockListCreateView(
             equipment=self.get_equipment(),
             created_by=request.user,
         )
+        for block in results:
+            self.apply_exception_side_effects(block, serializer.validated_data, created=True)
         data = EquipmentAvailabilityBlockSerializer(results, many=True).data
         return Response(data, status=201)
 
 
 class EquipmentAvailabilityBlockDetailView(
-    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = EquipmentAvailabilityBlockSerializer
@@ -489,7 +513,7 @@ class EquipmentAvailabilityBlockDetailView(
 
 
 class EquipmentDowntimeListCreateView(
-    CenterAvailabilityMixin, BaseListCreateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = EquipmentDowntimeSerializer
@@ -519,10 +543,15 @@ class EquipmentDowntimeListCreateView(
         serializer.save(
             equipment=self.get_equipment(), created_by=self.request.user
         )
+        self.apply_exception_side_effects(
+            serializer.instance,
+            serializer.validated_data,
+            created=True,
+        )
 
 
 class EquipmentDowntimeDetailView(
-    CenterAvailabilityMixin, BaseRetrieveUpdateAPIView
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = EquipmentDowntimeSerializer
@@ -571,7 +600,9 @@ class CenterAvailabilityOperatingHoursView(CenterAvailabilityMixin, BaseGenericA
         return self.send_response(self.update_success_message, data)
 
 
-class CenterClosureListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView):
+class CenterClosureListCreateView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
+):
     permission_classes = [IsAdminUser | IsAssociateUser]
     list_success_message = "Center closures retrieved."
     create_success_message = "Center closure created."
@@ -602,9 +633,16 @@ class CenterClosureListCreateView(CenterAvailabilityMixin, BaseListCreateAPIView
     def perform_create(self, serializer):
         center = self.get_center()
         serializer.save(center=center)
+        self.apply_exception_side_effects(
+            serializer.instance,
+            serializer.validated_data,
+            created=True,
+        )
 
 
-class CenterClosureDetailView(CenterAvailabilityMixin, BaseRetrieveUpdateAPIView):
+class CenterClosureDetailView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
+):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CenterClosureSerializer
     retrieve_success_message = "Center closure details."
