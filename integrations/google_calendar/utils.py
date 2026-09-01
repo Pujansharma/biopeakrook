@@ -1,36 +1,38 @@
-from datetime import datetime, timedelta, timezone
-
+from django.conf import settings
 from cryptography.fernet import Fernet
 
-from integrations.google_calendar.config import GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY
+GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY = getattr(settings, "GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY", None)
 
-IST = timezone(timedelta(hours=5, minutes=30))
-_fernet = Fernet(GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY)
+_fernet_instance = None
 
 
-def now_ist() -> datetime:
+def _get_fernet():
     """
     Input: none
-    Output: datetime(2026, 9, 1, 15, 30, 0, tzinfo=IST) — current time in IST.
+    Output: a `cryptography.fernet.Fernet` instance built from
+        `GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` (cached after the first call).
     """
-    return datetime.now(IST)
+    global _fernet_instance
+    if _fernet_instance is None:
+        _fernet_instance = Fernet(GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY.encode())
+    return _fernet_instance
 
 
-def encrypt(plaintext: str) -> str:
+def encrypt(plaintext: str):
     """
     Encrypts a token before it's stored in the database.
 
     Input:  plaintext="ya29.a0Af..." (a raw Google access/refresh token)
     Output: "gAAAAABo...==" (Fernet ciphertext, safe to store in a text column)
     """
-    return _fernet.encrypt(plaintext.encode()).decode()
+    return _get_fernet().encrypt(plaintext.encode()).decode()
 
 
-def decrypt(ciphertext: str) -> str:
+def decrypt(ciphertext: str):
     """
-    Reverses `encrypt()` — used right before a stored token is sent to Google.
+    Reverses `encrypt()` - used right before a stored token is sent to Google.
 
     Input:  ciphertext="gAAAAABo...==" (value read from the database)
     Output: "ya29.a0Af..." (the original plaintext token)
     """
-    return _fernet.decrypt(ciphertext.encode()).decode()
+    return _get_fernet().decrypt(ciphertext.encode()).decode()

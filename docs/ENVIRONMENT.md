@@ -122,6 +122,31 @@ STG_PASSWORD_RESET_URL=https://staging.yourdomain.com/reset-password
 PRD_PASSWORD_RESET_URL=https://yourdomain.com/reset-password
 ```
 
+## Google Calendar Integration
+
+Credentials for `integrations/google_calendar/` (staff Google Calendar sync -
+see `docs/google-calendar-integration.md`). Same per-environment prefix
+pattern as everything else on this page:
+
+```env
+DEV_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+DEV_GOOGLE_CLIENT_SECRET=your-client-secret
+DEV_GOOGLE_REDIRECT_URI=http://127.0.0.1:8001/google-calendar/callback/
+DEV_GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
+```
+
+Staging/production use the same names with `STG_`/`PRD_` prefixes.
+
+`GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` isn't a password you make up - generate
+one with:
+
+```bash
+uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+If it ever leaks, treat it like a leaked password: rotate it and have every
+connected staff member reconnect their calendar.
+
 ## User Management
 
 ### Django Superuser (for automated deployment)

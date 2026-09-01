@@ -4,8 +4,10 @@ Lets a staff member (an `Associate`) connect their Google Calendar, so their
 appointments in this system can show up there too - with a Google Meet link
 attached automatically.
 
-**Status: not live yet.** The code is written and the database tables are
-defined, but nothing is turned on.
+**Status: not live yet.** The connect/callback/disconnect endpoints and
+Google API client are written, but the database columns they need don't
+exist yet - see `integrations/google_calendar/db.md` for exactly what's
+pending.
 
 ---
 
@@ -27,12 +29,13 @@ the appointment needs one.
 3. **We trade that code for tokens** using `exchange_code()` - Google gives us
    back an `access_token` (short-lived, ~1 hour) and a `refresh_token`
    (long-lived, doesn't expire until revoked).
-4. **We save those tokens**, encrypted, in a `GoogleCalendarConnection` row -
-   one per associate.
+4. **We save those tokens**, encrypted, directly on that staff member's
+   `Associate` row (see `db.md` for the column list).
 5. **When an appointment is created/rescheduled/cancelled**, we call
    `insert_event()` / `patch_event()` / `delete_event()` to create or update
    the matching event on that staff member's Google Calendar and save the
-   Google event's ID + Meet link in a `GoogleCalendarEvent` row.
+   Google event's ID + Meet link on the `Appointment` row (not wired into
+   appointment creation yet).
 6. **Before every Google API call**, `get_valid_access_token()` checks if the
    saved access token has expired - if so, it silently uses the refresh token
    to get a new one first.
@@ -41,84 +44,88 @@ the appointment needs one.
 
 All under `integrations/google_calendar/`:
 
-| File              | What it does                                                                                                                                                                                                               |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.py`       | Reads the Google API credentials (client ID/secret, redirect URL, encryption key) from Django settings, per environment — see `ORANGE_LABS_*` in `core/settings/{development,staging,production}.py` for the same pattern. |
-| `utils.py`        | Small helpers: current time in IST and encrypt/decrypt for tokens before they touch the database.                                                                                                                          |
-| `google_oauth.py` | Talks to Google's _login_ side - builds the consent screen URL, trades codes for tokens, refreshes tokens, looks up the connected email, revokes access.                                                                   |
-| `calendar_api.py` | Talks to Google's _calendar_ side - create/update/list/delete events on someone's calendar.                                                                                                                                |
-| `tokens.py`       | The glue: given a saved connection, hands back a token that's guaranteed to still be valid (refreshing it first if needed).                                                                                                |
+| File              | What it does                                                                                                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `utils.py`        | Encrypt/decrypt for tokens before they touch the database. Reads the encryption key from Django settings and builds the Fernet cipher lazily on first use, so importing this module doesn't require the key to be configured.                                                                                      |
+| `google_oauth.py` | Talks to Google's _login_ side - builds the consent screen URL, trades codes for tokens, refreshes tokens, looks up the connected email, revokes access. Reads its own client ID/secret/redirect URL from Django settings, same pattern as `ORANGE_LABS_*` in `core/settings/{development,staging,production}.py`. |
+| `calendar_api.py` | Talks to Google's _calendar_ side - create/update/list/delete events on someone's calendar.                                                                                                                                                                                                                        |
+| `tokens.py`       | The glue: given an associate, hands back a token that's guaranteed to still be valid (refreshing it first if needed).                                                                                                                                                                                              |
+| `db.py`           | Persists a refreshed access/refresh token onto the `Associate` row via `save(update_fields=...)` - only the columns that changed, not a full-row save.                                                                                                                                                             |
+| `state.py`        | Builds/verifies the OAuth `state` value - a signed token (Django's `django.core.signing`, no server-side storage needed) that ties the callback back to the associate who started the connect flow. See "Connect/disconnect endpoints" below.                                                                      |
+| `views.py`        | The three HTTP endpoints associates actually hit: connect, callback, disconnect. See below.                                                                                                                                                                                                                        |
+| `urls.py`         | Routes those three views under `/google-calendar/`.                                                                                                                                                                                                                                                                |
+| `db.md`           | The exact `Associate`/`Appointment` columns this feature needs and why - not yet migrated. See there for the full column list.                                                                                                                                                                                     |
 
-The two database tables (`GoogleCalendarConnection`, `GoogleCalendarEvent`)
-live in `integrations/models.py`, alongside every other model this app owns.
+`integrations/models.py` is empty - this feature doesn't get its own tables.
+Connection/event data lives directly on `Associate` and `Appointment`
+(pending migration, see `db.md`).
 
-## The two database tables
+## Connect/disconnect endpoints
 
-Both defined in `integrations/models.py`. Both also inherit `BaseUUIDModel`
-(`core/utils/models.py`), which is where the first four columns of every
-table below come from - every model in this project gets these for free.
+| Endpoint                              | Auth            | What it does                                                                                                                                                       |
+| ------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /google-calendar/connect/`       | Associate (JWT) | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). The frontend navigates the browser there itself.                                    |
+| `GET /google-calendar/callback/`      | None (public)   | Google redirects the browser here after consent. Always ends in a redirect back to `ADMIN_FRONTEND_URL` with `?connected=1&email=...` or `?connected=0&error=...`. |
+| `DELETE /google-calendar/disconnect/` | Associate (JWT) | Revokes the token with Google and clears the signed-in associate's own `google_*` columns.                                                                         |
 
-### `GoogleCalendarConnection`
+**Why `/connect/` doesn't redirect directly:** the callback (`/callback/`) is a
+plain browser navigation triggered by Google - it can't carry our
+`Authorization` header. So `/connect/` is a normal authenticated JSON
+endpoint the frontend calls first; the frontend itself then sends the
+browser to the returned `auth_url`.
 
-One row per staff member who connected their Google account.
+**Why `/callback/` is unauthenticated but still safe:** the associate it
+acts on is never taken from a query param or client input - it's decoded
+from the signed `state` value that `/connect/` minted for that specific
+associate (`state.py`), which can't be forged without the app's
+`SECRET_KEY` and expires after 10 minutes. A request with a missing,
+tampered, expired, or reused `state` is rejected before anything is
+written to the database.
 
-| Column                     | Data type                                         | Purpose                                                                                                 |
-| -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `id`                       | UUID (primary key)                                | Unique ID for this row. From `BaseUUIDModel`.                                                           |
-| `is_active`                | Boolean                                           | Whether this row is still considered valid. From `BaseUUIDModel`.                                       |
-| `created_at`               | DateTime                                          | When this row was first saved. From `BaseUUIDModel`.                                                    |
-| `updated_at`               | DateTime                                          | When this row was last changed. From `BaseUUIDModel`.                                                   |
-| `associate`                | Foreign key → `associates.Associate` (one-to-one) | Which staff member this connection belongs to. Real column name in Postgres is `associate_id`.          |
-| `google_email`             | Email (unique)                                    | The Google account's email address, shown in the UI as "Connected as \_\_\_".                           |
-| `access_token`             | Text                                              | The short-lived Google API token, encrypted before it's saved (see `utils.encrypt`).                    |
-| `refresh_token`            | Text                                              | The long-lived token used to get a new access token once it expires, encrypted the same way.            |
-| `access_token_expires_at`  | DateTime (nullable)                               | When `access_token` stops being valid - checked by `tokens.is_expired()`.                               |
-| `sync_token`               | Text, up to 255 characters (blank allowed)        | Reserved for incremental calendar sync (fetching only what changed since last check). Not used yet.     |
-| `watch_channel_id`         | Text, up to 255 characters (blank allowed)        | Reserved for Google's push-notification feature (Google pings us when something changes). Not used yet. |
-| `watch_channel_expiration` | DateTime (nullable)                               | When that push-notification subscription expires. Not used yet.                                         |
+**Why `/disconnect/` takes no id in the URL:** it always acts on
+`request.user.associate`, the associate the JWT belongs to - never a
+client-supplied associate/staff id - so one associate can never disconnect
+another's calendar.
 
-### `GoogleCalendarEvent`
+## Database columns
 
-One row per appointment that's been mirrored onto Google Calendar. Deliberately
-does **not** repeat fields that already exist on `Appointment` (title,
-start/end time, notes, location) - it only stores what Google adds on top.
+No dedicated tables - the columns this feature needs go directly on
+`Associate` (connection: email, tokens, expiry) and `Appointment` (mirrored
+event: Google event id, Meet link). Full column list, types and reasoning:
+`integrations/google_calendar/db.md`. **Not migrated yet** - the code in this
+package reads/writes these columns, but they don't exist on the real tables
+until that migration lands.
 
-| Column               | Data type                                                  | Purpose                                                                                                          |
-| -------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `id`                 | UUID (primary key)                                         | Unique ID for this row. From `BaseUUIDModel`.                                                                    |
-| `is_active`          | Boolean                                                    | Whether this row is still considered valid. From `BaseUUIDModel`.                                                |
-| `created_at`         | DateTime                                                   | When this row was first saved. From `BaseUUIDModel`.                                                             |
-| `updated_at`         | DateTime                                                   | When this row was last changed. From `BaseUUIDModel`.                                                            |
-| `appointment`        | Foreign key → `appointments.Appointment` (one-to-one)      | Which real appointment this event mirrors. Real column name in Postgres is `appointment_id`.                     |
-| `google_event_id`    | Text, up to 255 characters, indexed                        | The ID Google assigned this event - needed to update (`patch_event`) or cancel (`delete_event`) it later.        |
-| `meet_link`          | URL (blank allowed)                                        | The Google Meet video link Google generated for this event, if one was requested.                                |
-| `participant_emails` | List of emails (Postgres array, defaults to an empty list) | Everyone invited to this event on the Google side - may not exactly match `appointment.customer`'s contact info. |
+## Rescheduling and Meet links
+
+`patch_event()` takes `add_meet_link`, not `need_meet_link` - and it must only
+be passed `True` the first time a Meet link is being added to an event.
+Passing it `True` on an event that already has one sends Google a fresh
+`conferenceData.createRequest`, which creates a brand new conference and
+rotates the Meet link, stranding anyone holding the old one. Ordinary
+reschedules should leave it `False`.
+
+`patch_event()` also always sends `location` / `description` / `attendees` in
+the body (empty when unset), unlike `insert_event()` which omits them when
+not given - Google's PATCH only touches the keys present in the request, so
+omitting a field there would leave the previous value in place instead of
+clearing it.
 
 ## Required `.env` values
 
-Following the same per-environment pattern as `ORANGE_LABS_*` in
-`core/settings/{development,staging,production}.py` — each environment reads
+Same per-environment pattern as `ORANGE_LABS_*` in
+`core/settings/{development,staging,production}.py` - each environment reads
 its own prefixed variable (`DEV_`/`STG_`/`PRD_`) into a plain settings
-constant and `integrations/google_calendar/config.py` reads those constants
-via `django.conf.settings` (not `.env` directly). Locally, add these to `.env`:
+constant, which `google_oauth.py` (and `utils.py` for the encryption key)
+reads via `django.conf.settings`. See `docs/ENVIRONMENT.md` for the full list
+alongside every other integration's env vars.
 
-```
-DEV_GOOGLE_CLIENT_ID=
-DEV_GOOGLE_CLIENT_SECRET=
-DEV_GOOGLE_REDIRECT_URI=
-DEV_GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
-DEV_ADMIN_FRONTEND_URL=
-```
-
-`DEV_GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` isn't a password you make up -
+`GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` isn't a password you make up -
 generate it with:
 
 ```bash
 uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
-
-Staging and production use the same variable names with `STG_`/`PRD_`
-prefixes instead, set wherever that environment's secrets live.
 
 ## A note on tokens and security
 

@@ -1,8 +1,13 @@
 from urllib.parse import urlencode
 
 import requests
+from django.conf import settings
 
-from integrations.google_calendar import config
+from core.utils.log import logger
+
+GOOGLE_CLIENT_ID = getattr(settings, "GOOGLE_CLIENT_ID", None)
+GOOGLE_CLIENT_SECRET = getattr(settings, "GOOGLE_CLIENT_SECRET", None)
+GOOGLE_REDIRECT_URI = getattr(settings, "GOOGLE_REDIRECT_URI", None)
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -17,7 +22,7 @@ SCOPES = [
 ]
 
 
-def build_auth_url(state: str) -> str:
+def build_auth_url(state: str):
     """
     Builds the URL to redirect the staff member's browser to, so they can approve
     calendar access on Google's consent screen.
@@ -26,12 +31,12 @@ def build_auth_url(state: str) -> str:
     Input:
         state="associate:3f1c...-random-csrf-token"
         (an opaque value you generate, stored server-side and verify when the
-        callback comes back — protects against CSRF on the OAuth redirect)
+        callback comes back - protects against CSRF on the OAuth redirect)
 
     Query params encoded into the URL:
         {
             "client_id": "xxx.apps.googleusercontent.com",
-            "redirect_uri": "http://127.0.0.1:8001/auth/google/callback",
+            "redirect_uri": "http://127.0.0.1:8001/google-calendar/callback/",
             "response_type": "code",
             "scope": "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email",
             "access_type": "offline",
@@ -44,8 +49,8 @@ def build_auth_url(state: str) -> str:
         (send the staff member's browser here; nothing to call directly)
     """
     params = {
-        "client_id": config.GOOGLE_CLIENT_ID,
-        "redirect_uri": config.GOOGLE_REDIRECT_URI,
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "access_type": "offline",  # required to receive a refresh_token
@@ -55,7 +60,7 @@ def build_auth_url(state: str) -> str:
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
-def exchange_code(code: str) -> dict:
+def exchange_code(code: str):
     """
     Trades the one-time authorization code (from the OAuth callback's `?code=`
     query param) for an access token + refresh token.
@@ -70,7 +75,7 @@ def exchange_code(code: str) -> dict:
             "client_secret": "GOCSPX-xxx",
             "code": "4/0AY0e-g7...",
             "grant_type": "authorization_code",
-            "redirect_uri": "http://127.0.0.1:8001/auth/google/callback",
+            "redirect_uri": "http://127.0.0.1:8001/google-calendar/callback/",
         }
 
     Output (Google's response, returned as-is):
@@ -85,18 +90,20 @@ def exchange_code(code: str) -> dict:
     response = requests.post(
         TOKEN_URL,
         data={
-            "client_id": config.GOOGLE_CLIENT_ID,
-            "client_secret": config.GOOGLE_CLIENT_SECRET,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
             "code": code,
             "grant_type": "authorization_code",
-            "redirect_uri": config.GOOGLE_REDIRECT_URI,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
         },
     )
+    if not response.ok:
+        logger.warning(f"Google OAuth code exchange error {response.status_code}: {response.text}")
     response.raise_for_status()
     return response.json()
 
 
-def refresh_access_token(refresh_token: str) -> dict:
+def refresh_access_token(refresh_token: str):
     """
     Exchanges a stored refresh token for a fresh access token, once the old one
     has expired (or is about to).
@@ -113,7 +120,7 @@ def refresh_access_token(refresh_token: str) -> dict:
             "grant_type": "refresh_token",
         }
 
-    Output (Google's response, returned as-is — note: no new refresh_token
+    Output (Google's response, returned as-is - note: no new refresh_token
     unless Google decides to rotate it, which is why callers check for its
     presence before overwriting the stored one):
         {
@@ -126,17 +133,19 @@ def refresh_access_token(refresh_token: str) -> dict:
     response = requests.post(
         TOKEN_URL,
         data={
-            "client_id": config.GOOGLE_CLIENT_ID,
-            "client_secret": config.GOOGLE_CLIENT_SECRET,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         },
     )
+    if not response.ok:
+        logger.warning(f"Google OAuth token refresh error {response.status_code}: {response.text}")
     response.raise_for_status()
     return response.json()
 
 
-def fetch_email(access_token: str) -> str:
+def fetch_email(access_token: str):
     """
     Looks up the Google account's email address, just to label the connection
     in the UI (e.g. "Connected as priya@gmail.com").
@@ -155,14 +164,17 @@ def fetch_email(access_token: str) -> str:
         USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
     )
+    if not response.ok:
+        logger.warning(f"Google OAuth userinfo lookup error {response.status_code}: {response.text}")
     response.raise_for_status()
     return response.json()["email"]
 
 
-def revoke_token(token: str) -> None:
+def revoke_token(token: str):
     """
     Revokes an access or refresh token on Google's side (used when a staff
-    member disconnects their calendar). Best-effort — response isn't checked.
+    member disconnects their calendar). Best-effort - logs on failure, does
+    not raise.
     POST https://oauth2.googleapis.com/revoke
 
     Input:
@@ -170,7 +182,8 @@ def revoke_token(token: str) -> None:
 
     Request form body: {"token": "ya29.a0Af..."}
 
-    Output:
-        None
+    Output: None
     """
-    requests.post(REVOKE_URL, data={"token": token})
+    response = requests.post(REVOKE_URL, data={"token": token})
+    if not response.ok:
+        logger.warning(f"Google OAuth token revoke error {response.status_code}: {response.text}")

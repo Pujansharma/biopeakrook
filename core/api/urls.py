@@ -49,6 +49,7 @@ urlpatterns = [
     path("programs/", include("programs.urls")),
     path("services/", include("programs.services.urls")),
     path("leads/", include("leads.urls")),
+    path("google-calendar/", include("integrations.google_calendar.urls")),
     path("webhooks/", include("webhooks.urls")),
     path("pre-consultation/", include("pre_consultation.urls")),
 ]
