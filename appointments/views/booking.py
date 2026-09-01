@@ -27,6 +27,10 @@ from appointments.serializers.booking import (
     AppointmentRescheduleSerializer,
     AppointmentSlotFindSerializer,
 )
+from appointments.utils.care_teams import (
+    care_team_associates_payload,
+    expand_care_team_for_assignment,
+)
 from appointments.utils.calendar import get_center_timezone_name, parse_calendar_query_params
 from appointments.utils.codes import generate_appointment_code
 from appointments.utils.constants import (
@@ -140,6 +144,16 @@ def create_appointment_associates(appointment, associates_payload, exclusive_sta
         )
 
 
+def resolve_booking_associates(center, assignment, validated):
+    care_team_id = validated.get("care_team_id")
+    if care_team_id:
+        members = expand_care_team_for_assignment(
+            center, care_team_id, assignment
+        )
+        return care_team_associates_payload(members), members[0].care_team
+    return build_associate_payload(validated["associates"]), None
+
+
 def create_appointment_record(
     center,
     validated_data,
@@ -147,6 +161,8 @@ def create_appointment_record(
     room,
     equipment,
     actor,
+    associates_payload,
+    care_team,
 ):
     start = validated_data["start"]
     end = validated_data["end"]
@@ -171,11 +187,12 @@ def create_appointment_record(
         status=AppointmentStatus.CONFIRMED,
         room=room,
         equipment=equipment,
+        care_team=care_team,
         created_by=actor,
     )
     create_appointment_associates(
         appointment,
-        build_associate_payload(validated_data["associates"]),
+        associates_payload,
         exclusive_start,
         exclusive_end,
     )
@@ -245,7 +262,12 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
             self.raise_bad_request("Service is not available at this center.")
         room = resolve_room(center, validated.get("room_id"))
         equipment = resolve_equipment(center, validated.get("equipment_id"))
-        associates_payload = build_associate_payload(validated["associates"])
+        try:
+            associates_payload, care_team = resolve_booking_associates(
+                center, assignment, validated
+            )
+        except DjangoValidationError as exc:
+            self.raise_bad_request(exc.messages[0])
 
         idempotency_key = request.headers.get("Idempotency-Key")
         payload_hash = canonical_payload_hash(request.data)
@@ -256,7 +278,7 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
                     idempotency_key=idempotency_key,
                     expires_at__gt=timezone.now(),
                 )
-                .select_related("appointment")
+                .select_related("appointment__care_team")
                 .first()
             )
             if existing_key:
@@ -296,6 +318,8 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
                     room,
                     equipment,
                     request.user,
+                    associates_payload,
+                    care_team,
                 )
                 if idempotency_key:
                     AppointmentIdempotencyKey.objects.create(
@@ -563,7 +587,12 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
             self.raise_bad_request("Service is not available at this center.")
         room = resolve_room(center, validated.get("room_id"))
         equipment = resolve_equipment(center, validated.get("equipment_id"))
-        associates_payload = build_associate_payload(validated["associates"])
+        try:
+            associates_payload, care_team = resolve_booking_associates(
+                center, assignment, validated
+            )
+        except DjangoValidationError as exc:
+            self.raise_bad_request(exc.messages[0])
 
         try:
             validate_appointment_allocation(
@@ -610,6 +639,7 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
                 appointment.modality = validated["modality"]
                 appointment.room = room
                 appointment.equipment = equipment
+                appointment.care_team = care_team
                 appointment.status = AppointmentStatus.CONFIRMED
                 appointment.save()
                 appointment.associate_links.all().delete()

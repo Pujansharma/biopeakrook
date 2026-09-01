@@ -239,6 +239,71 @@ class EquipmentDowntime(BaseUUIDModel):
         return f"{self.pk}"
 
 
+class CenterCareTeam(BaseUUIDModel):
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name="care_teams"
+    )
+    name = models.CharField(max_length=100)
+    members_count = models.PositiveIntegerField()
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_center_care_teams",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["center", "name"],
+                name="uniq_center_care_team_name",
+            ),
+            models.CheckConstraint(
+                condition=Q(members_count__gte=2),
+                name="center_care_team_min_members",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CenterCareTeamMember(BaseUUIDModel):
+    care_team = models.ForeignKey(
+        CenterCareTeam,
+        on_delete=models.CASCADE,
+        related_name="members",
+    )
+    associate = models.ForeignKey(
+        Associate,
+        on_delete=models.CASCADE,
+        related_name="care_team_memberships",
+    )
+    role = models.ForeignKey(
+        AssociateRole,
+        on_delete=models.PROTECT,
+        related_name="care_team_memberships",
+    )
+
+    class Meta:
+        ordering = ["role"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["care_team", "role"],
+                name="uniq_center_care_team_role",
+            ),
+            models.UniqueConstraint(
+                fields=["care_team", "associate"],
+                name="uniq_center_care_team_associate",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class Appointment(BaseUUIDModel):
     """
     Standalone center-scoped appointment booking.
@@ -288,6 +353,13 @@ class Appointment(BaseUUIDModel):
         null=True,
         blank=True,
         related_name="appointments",
+    )
+    care_team = models.ForeignKey(
+        CenterCareTeam,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="booked_appointments",
     )
     created_by = models.ForeignKey(
         User,

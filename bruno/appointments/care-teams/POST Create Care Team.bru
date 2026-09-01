@@ -1,0 +1,46 @@
+meta {
+  name: POST Create Care Team
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/care-teams/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "Alpha",
+    "members": [
+      {
+        "associate_id": "{{associate_id}}",
+        "role_id": "{{role_id}}"
+      },
+      {
+        "associate_id": "{{associate_id_2}}",
+        "role_id": "{{role_id_2}}"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create a named care team. members required, min 2. Unique role and associate on the team.
+  Associates must have an active center assignment with that role.
+  Auth: bearer {{access_token}}. Set env center_id, associate_id, role_id, associate_id_2, role_id_2.
+}

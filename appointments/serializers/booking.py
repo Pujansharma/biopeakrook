@@ -12,6 +12,7 @@ class AppointmentPreferredSerializer(BaseSerializer):
     doctor_id = serializers.UUIDField(required=False)
     health_coach_id = serializers.UUIDField(required=False)
     room_id = serializers.UUIDField(required=False)
+    care_team_id = serializers.UUIDField(required=False)
 
 
 class AppointmentSlotFindSerializer(BaseSerializer):
@@ -54,6 +55,17 @@ class AppointmentSlotFindSerializer(BaseSerializer):
         for key, value in preferred.items():
             if value is not None:
                 normalized_preferred[key] = str(value)
+        if normalized_preferred.get("care_team_id") and (
+            normalized_preferred.get("doctor_id")
+            or normalized_preferred.get("health_coach_id")
+        ):
+            raise serializers.ValidationError(
+                {
+                    "preferred": [
+                        "care_team_id cannot be combined with doctor_id or health_coach_id."
+                    ]
+                }
+            )
         attrs["preferred"] = normalized_preferred or None
         return attrs
 
@@ -78,6 +90,7 @@ class AppointmentBookSerializer(BaseSerializer):
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()
     associates = AppointmentAssociateInputSerializer(many=True, required=False)
+    care_team_id = serializers.UUIDField(required=False)
     room_id = serializers.UUIDField(required=False, allow_null=True)
     equipment_id = serializers.UUIDField(required=False, allow_null=True)
 
@@ -110,6 +123,11 @@ class AppointmentBookSerializer(BaseSerializer):
         attrs["service"] = service
         attrs["center"] = center
         attrs["associates"] = attrs.get("associates") or []
+        care_team_id = attrs.get("care_team_id")
+        if care_team_id and attrs["associates"]:
+            raise serializers.ValidationError(
+                "Send care_team_id or associates, not both."
+            )
         return attrs
 
 
@@ -154,6 +172,11 @@ class AppointmentEquipmentNestedSerializer(BaseSerializer):
     name = serializers.CharField()
 
 
+class AppointmentCareTeamNestedSerializer(BaseSerializer):
+    id = serializers.UUIDField(source="pk")
+    name = serializers.CharField()
+
+
 class AppointmentListSerializer(BaseSerializer):
     id = serializers.UUIDField(source="pk")
     code = serializers.CharField()
@@ -166,6 +189,7 @@ class AppointmentListSerializer(BaseSerializer):
     has_open_exception = serializers.BooleanField()
     customer = AppointmentCustomerNestedSerializer(source="customer_profile")
     service = AppointmentServiceNestedSerializer()
+    care_team = AppointmentCareTeamNestedSerializer(allow_null=True)
     associates = AppointmentAssociateNestedSerializer(
         source="associate_links", many=True
     )

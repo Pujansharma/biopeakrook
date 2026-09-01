@@ -82,6 +82,7 @@ class CenterAppointmentsMixin:
                 "room",
                 "equipment",
                 "center",
+                "care_team",
             )
             .prefetch_related("associate_links__associate", "associate_links__role")
         )

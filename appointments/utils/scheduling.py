@@ -18,6 +18,10 @@ from appointments.utils.calendar import (
     expand_roster_entries,
     get_center_timezone_name,
 )
+from appointments.utils.care_teams import (
+    apply_care_team_to_resource_pools,
+    expand_care_team_for_assignment,
+)
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.intervals import (
     datetime_range_for_dates,
@@ -475,6 +479,13 @@ def find_appointment_slots(
 
     resource_pools = build_service_resource_pools(center, assignment, modality)
     validate_service_bookable(assignment, modality, resource_pools)
+    preferred = preferred or {}
+    care_team_id = preferred.get("care_team_id")
+    if care_team_id:
+        team_members = expand_care_team_for_assignment(
+            center, care_team_id, assignment
+        )
+        apply_care_team_to_resource_pools(resource_pools, team_members)
 
     timezone_name = get_center_timezone_name(center)
     query_start = slot_date
