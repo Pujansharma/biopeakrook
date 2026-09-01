@@ -278,7 +278,7 @@ Associate comes from the URL (not the body). POST response is always a **list** 
 - expands to **one DB row per day** (same times / `effective_from` / reason)
 - **No `effective_until`** — recurring blocks stay open-ended; remove with PATCH `is_active=false` (sending `effective_until` is rejected)
 - PATCH still edits a single row (`day_of_week` string on that row)
-- **Overlap rejection:** active blocks that intersect other active blocks are rejected (`non_field_errors`: "Overlaps an existing unavailability window."). Soft-inactive rows ignored. **Leave always wins:** a leave may overlap an existing associate block; a block may not be created (or reactivated) on top of an existing leave. Leave vs leave still rejects. Room/equipment blocks ↔ downtimes still cross-check. Touching endpoints (end == next start) allowed.
+- **Overlap rejection:** active blocks that intersect other active blocks are rejected (`non_field_errors`: "Overlaps an existing unavailability window."). Soft-inactive rows ignored. **Leave always wins:** a leave may overlap an existing associate block; a block may not be created (or reactivated) on top of an existing leave. Leave vs leave still rejects. **Downtime always wins:** room/equipment downtime may overlap an existing block; a block may not be created (or reactivated) on top of an existing downtime. Downtime vs downtime still rejects. Touching endpoints (end == next start) allowed.
 
 ### Associate leaves
 
@@ -311,7 +311,7 @@ Supports full-day, partial-day, and multi-day ranges via `start_datetime` / `end
 
 **PATCH** `/centers/<center_id>/availability/room-downtimes/<room_id>/<downtime_id>/`
 
-Room from URL. Block POST → **list** (same create rules as associate blocks: `days_of_week` expand, no `effective_until`). **Downtime = one-off only** (never recurring).
+Room from URL. Block POST → **list** (same create rules as associate blocks: `days_of_week` expand, no `effective_until`). **Downtime = one-off only** (never recurring). Downtime may overlap an existing room block; the reverse is rejected.
 
 **One-off block / downtime** — same calendar day (`settings.TIME_ZONE`): `date` + `start_time` + `end_time`. No multi-day; one POST per day.
 
@@ -349,7 +349,7 @@ Downtime (required `reason`):
 }
 ```
 
-**Overlap:** active blocks ↔ downtimes same room.
+**Overlap:** downtime always wins vs block on the same room (same rule as leave vs associate block).
 
 ### Equipment blocks & downtime
 
@@ -361,7 +361,7 @@ Downtime (required `reason`):
 
 **PATCH** `/centers/<center_id>/availability/equipment-downtimes/<equipment_id>/<downtime_id>/`
 
-Same as rooms. Equip from URL. Blocks: one-off (`date`+times) or recurring (`days_of_week`). Downtime: one-off only.
+Same as rooms. Equip from URL. Blocks: one-off (`date`+times) or recurring (`days_of_week`). Downtime: one-off only. Downtime may overlap an existing equipment block; the reverse is rejected.
 
 ---
 

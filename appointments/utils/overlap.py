@@ -353,10 +353,6 @@ def assert_room_block_no_overlap(
 def assert_room_downtime_no_overlap(
     room, day_value, start_time, end_time, exclude_id=None
 ):
-    timezone_name = get_availability_timezone_name()
-    one_off_window = one_off_day_window(
-        day_value, start_time, end_time, timezone_name
-    )
     downtimes = exclude_pk(
         RoomDowntime.objects.filter(room=room, is_active=True),
         exclude_id,
@@ -364,25 +360,6 @@ def assert_room_downtime_no_overlap(
     for downtime in downtimes:
         if downtime.date == day_value and times_overlap(
             start_time, end_time, downtime.start_time, downtime.end_time
-        ):
-            raise_overlap()
-
-    blocks = RoomAvailabilityBlock.objects.filter(room=room, is_active=True)
-    for block in blocks:
-        if block.is_recurring:
-            if one_off_window and one_off_overlaps_recurring_block(
-                one_off_window[0],
-                one_off_window[1],
-                block.day_of_week,
-                block.recurring_start_time,
-                block.recurring_end_time,
-                block.effective_from,
-                block.effective_until,
-                timezone_name,
-            ):
-                raise_overlap()
-        elif block.date == day_value and times_overlap(
-            start_time, end_time, block.start_time, block.end_time
         ):
             raise_overlap()
 
@@ -489,10 +466,6 @@ def assert_equipment_block_no_overlap(
 def assert_equipment_downtime_no_overlap(
     equipment, day_value, start_time, end_time, exclude_id=None
 ):
-    timezone_name = get_availability_timezone_name()
-    one_off_window = one_off_day_window(
-        day_value, start_time, end_time, timezone_name
-    )
     downtimes = exclude_pk(
         EquipmentDowntime.objects.filter(equipment=equipment, is_active=True),
         exclude_id,
@@ -500,26 +473,5 @@ def assert_equipment_downtime_no_overlap(
     for downtime in downtimes:
         if downtime.date == day_value and times_overlap(
             start_time, end_time, downtime.start_time, downtime.end_time
-        ):
-            raise_overlap()
-
-    blocks = EquipmentAvailabilityBlock.objects.filter(
-        equipment=equipment, is_active=True
-    )
-    for block in blocks:
-        if block.is_recurring:
-            if one_off_window and one_off_overlaps_recurring_block(
-                one_off_window[0],
-                one_off_window[1],
-                block.day_of_week,
-                block.recurring_start_time,
-                block.recurring_end_time,
-                block.effective_from,
-                block.effective_until,
-                timezone_name,
-            ):
-                raise_overlap()
-        elif block.date == day_value and times_overlap(
-            start_time, end_time, block.start_time, block.end_time
         ):
             raise_overlap()
