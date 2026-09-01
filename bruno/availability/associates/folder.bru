@@ -9,8 +9,9 @@ auth {
 }
 
 docs {
-  Order: roster POST/PATCH → GET associate-roster → blocks one-off/recurring/PATCH → leaves POST/PATCH.
+  Order: roster POST/PATCH → GET associate-roster → blocks one-off/recurring/GET/PATCH → leaves POST/PATCH.
   Roster + blocks + leaves: associate in URL.
+  Roster POST additive; PATCH week-diff (omit day = is_active=false). Empty entries rejected.
   Recurring blocks: days_of_week string array ("0"… "6") → one row per day.
   Env: associate_id, associate_block_id, associate_leave_id.
 }

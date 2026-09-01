@@ -235,7 +235,6 @@ def assert_associate_block_no_overlap(
 def assert_associate_leave_no_overlap(
     associate, scope, center, start_datetime, end_datetime, exclude_id=None
 ):
-    timezone_name = get_availability_timezone_name()
     leaves = AssociateLeave.objects.filter(associate=associate, is_active=True)
     leaves = exclude_pk(leaves, exclude_id)
     for leave in leaves:
@@ -248,28 +247,6 @@ def assert_associate_leave_no_overlap(
             continue
         if datetimes_overlap(
             start_datetime, end_datetime, leave.start_datetime, leave.end_datetime
-        ):
-            raise_overlap()
-
-    block_filter = models.Q(associate=associate, is_active=True)
-    if scope == LeaveScope.CENTER:
-        block_filter &= models.Q(center=center)
-    blocks = AssociateAvailabilityBlock.objects.filter(block_filter)
-    for block in blocks:
-        if block.is_recurring:
-            if one_off_overlaps_recurring_block(
-                start_datetime,
-                end_datetime,
-                block.day_of_week,
-                block.recurring_start_time,
-                block.recurring_end_time,
-                block.effective_from,
-                block.effective_until,
-                timezone_name,
-            ):
-                raise_overlap()
-        elif datetimes_overlap(
-            start_datetime, end_datetime, block.start_datetime, block.end_datetime
         ):
             raise_overlap()
 

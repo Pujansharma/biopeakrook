@@ -219,7 +219,7 @@ Legacy `GET/POST /centers/<id>/operating-hours/` still exists but is not the can
 
 **POST/PATCH** `/centers/<center_id>/availability/associates/<associate_id>/roster/`
 
-Bulk upsert weekly work hours for an associate at this center. Associate comes from the URL (not the body). POST and PATCH share the same upsert-by-`day_of_week` semantics.
+Bulk weekly work hours for an associate at this center. Associate comes from the URL (not the body).
 
 ```json
 {
@@ -233,9 +233,11 @@ Bulk upsert weekly work hours for an associate at this center. Associate comes f
 - `day_of_week`: int `0`=Monday … `6`=Sunday on the API (stored as `AppointmentDays` char `"0"`…`"6"`)
 - `entries` must be non-empty; duplicate days in one request are rejected
 - each entry requires `start_time` < `end_time`
-- upserts listed days only (create, or update times + reactivate if soft-inactive); omitted days are not deleted or deactivated
+- listed days: create, or update times + reactivate if soft-inactive
+- **POST** is additive — omitted days stay as they are
+- **PATCH** is a week diff — omitted **active** days are soft-deactivated (`is_active=false`). Empty `entries` rejected (cannot wipe the whole week)
 - all entries applied in one atomic transaction
-- response: list of roster entry representations
+- response: list of the listed (upserted) roster entry representations
 
 **GET** `/centers/<center_id>/availability/associate-roster/`
 
@@ -276,7 +278,7 @@ Associate comes from the URL (not the body). POST response is always a **list** 
 - expands to **one DB row per day** (same times / `effective_from` / reason)
 - **No `effective_until`** — recurring blocks stay open-ended; remove with PATCH `is_active=false` (sending `effective_until` is rejected)
 - PATCH still edits a single row (`day_of_week` string on that row)
-- **Overlap rejection:** active blocks/leaves that intersect in time are rejected (`non_field_errors`: "Overlaps an existing unavailability window."). Soft-inactive rows ignored. Cross-checks blocks ↔ leaves for the same associate (and room/equipment blocks ↔ downtimes). Touching endpoints (end == next start) allowed.
+- **Overlap rejection:** active blocks that intersect other active blocks are rejected (`non_field_errors`: "Overlaps an existing unavailability window."). Soft-inactive rows ignored. **Leave always wins:** a leave may overlap an existing associate block; a block may not be created (or reactivated) on top of an existing leave. Leave vs leave still rejects. Room/equipment blocks ↔ downtimes still cross-check. Touching endpoints (end == next start) allowed.
 
 ### Associate leaves
 
@@ -286,7 +288,7 @@ Associate comes from the URL (not the body). POST response is always a **list** 
 
 Associate comes from the URL (not the body). `scope=center` uses the URL center; `scope=all_centers` stores `center=null`.
 
-Leaves can be **center-scoped** or **all-centers** (blocks the person everywhere).
+Leaves can be **center-scoped** or **all-centers** (blocks the person everywhere). Leave may overlap an existing associate block; the reverse is rejected.
 
 ```json
 {

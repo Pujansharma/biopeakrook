@@ -62,5 +62,5 @@ settings {
 }
 
 docs {
-  Bulk upsert weekly associate roster at center. Associate from URL. day_of_week int 0=Mon … 6=Sun. Upserts by day_of_week (create or update start/end, reactivate if soft-inactive). Omitted days are left untouched.
+  Bulk upsert weekly associate roster at center. Associate from URL. day_of_week int 0=Mon … 6=Sun. Upserts by day_of_week (create or update start/end, reactivate if soft-inactive). Additive: omitted days are left untouched. PATCH is the week-diff (omit = deactivate).
 }

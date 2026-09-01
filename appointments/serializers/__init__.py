@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.associates.models import Associate
@@ -1010,6 +1011,17 @@ class EquipmentDowntimeSerializer(BaseModelSerializer):
         return data
 
 
+def deactivate_unlisted_roster_days(center, associate, listed_day_values):
+    AssociateRosterEntry.objects.filter(
+        center=center,
+        associate=associate,
+        is_active=True,
+    ).exclude(day_of_week__in=listed_day_values).update(
+        is_active=False,
+        updated_at=timezone.now(),
+    )
+
+
 def upsert_associate_roster_entry(
     center, associate, day_of_week, start_time, end_time, created_by
 ):
@@ -1077,18 +1089,26 @@ class AssociateRosterBulkUpsertSerializer(BaseSerializer):
         center = validated_data["center"]
         associate = validated_data["associate"]
         created_by = validated_data.get("created_by")
+        replace_unlisted = validated_data.pop("replace_unlisted", False)
         results = []
+        listed_day_values = []
         with transaction.atomic():
             for entry in validated_data["entries"]:
+                day_of_week = str(entry["day_of_week"])
+                listed_day_values.append(day_of_week)
                 results.append(
                     upsert_associate_roster_entry(
                         center,
                         associate,
-                        str(entry["day_of_week"]),
+                        day_of_week,
                         entry["start_time"],
                         entry["end_time"],
                         created_by,
                     )
+                )
+            if replace_unlisted:
+                deactivate_unlisted_roster_days(
+                    center, associate, listed_day_values
                 )
         return results
 

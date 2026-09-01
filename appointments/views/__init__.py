@@ -166,12 +166,12 @@ class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView)
         )
 
     def post(self, request, *args, **kwargs):
-        return self.upsert_roster(request)
+        return self.upsert_roster(request, replace_unlisted=False)
 
     def patch(self, request, *args, **kwargs):
-        return self.upsert_roster(request)
+        return self.upsert_roster(request, replace_unlisted=True)
 
-    def upsert_roster(self, request):
+    def upsert_roster(self, request, replace_unlisted):
         center = self.get_center()
         associate = self.get_associate()
         serializer = AssociateRosterBulkUpsertSerializer(data=request.data)
@@ -180,6 +180,7 @@ class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView)
             center=center,
             associate=associate,
             created_by=request.user,
+            replace_unlisted=replace_unlisted,
         )
         data = AssociateRosterEntrySerializer(results, many=True).data
         if request.method == "POST":
