@@ -1,9 +1,11 @@
+import logging
 from datetime import timedelta
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from accounts.centers.models import Center, CenterClosure
 from appointments.models import (
@@ -37,6 +39,8 @@ from appointments.utils.intervals import (
 )
 from appointments.utils.metrics import record_exceptions_detected
 from appointments.utils.overlap import datetimes_overlap, local_day_window
+
+logger = logging.getLogger("appointments")
 
 RECURRING_SCAN_HORIZON_DAYS = 90
 SOURCE_MODEL_MAP = {
@@ -95,9 +99,13 @@ def resolve_exceptions_for_source(
         updated_at=now,
     )
     for appointment_id in appointment_ids:
-        recompute_appointment_exception_flag(
-            Appointment.objects.get(pk=appointment_id)
-        )
+        appointment = Appointment.objects.filter(pk=appointment_id).first()
+        if appointment is None:
+            logger.warning(
+                f"Skip exception flag recompute; appointment {appointment_id} missing."
+            )
+            continue
+        recompute_appointment_exception_flag(appointment)
     return updated
 
 
@@ -512,7 +520,17 @@ def process_pending_exception_scans(limit: int = 50) -> int:
                 center=job.center,
             )
             job.status = ExceptionScanJobStatus.COMPLETED
-        except Exception:
+        except (
+            IntegrityError,
+            ObjectDoesNotExist,
+            ZoneInfoNotFoundError,
+            ValueError,
+        ) as exc:
+            logger.exception(
+                f"Exception scan job {job.pk} failed "
+                f"source_type={job.source_type} source_id={job.source_id} "
+                f"center={job.center_id}: {exc}"
+            )
             job.status = ExceptionScanJobStatus.FAILED
         job.save(update_fields=["status", "updated_at"])
         processed += 1

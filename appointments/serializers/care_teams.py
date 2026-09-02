@@ -1,9 +1,9 @@
 from django.db import transaction
-from django.db.models import Prefetch
 from rest_framework import serializers
 
-from accounts.associates.models import AssociateCenterAssignment, AssociateRole
+from accounts.associates.models import AssociateRole
 from appointments.models import CenterCareTeam, CenterCareTeamMember
+from appointments.utils.care_teams import live_associate_center_assignments
 from appointments.utils.scheduling import get_associate_display_name
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
@@ -33,19 +33,6 @@ class CenterCareTeamMemberNestedSerializer(BaseModelSerializer):
 class CenterCareTeamMemberInputSerializer(BaseSerializer):
     associate_id = serializers.UUIDField()
     role_id = serializers.UUIDField()
-
-
-def prefetched_care_team_queryset():
-    return CenterCareTeam.objects.prefetch_related(
-        Prefetch(
-            "members",
-            queryset=CenterCareTeamMember.objects.select_related(
-                "associate__user",
-                "role",
-            ).order_by("role"),
-            to_attr="prefetched_members",
-        )
-    )
 
 
 class CenterCareTeamSerializer(BaseModelSerializer):
@@ -107,13 +94,7 @@ class CenterCareTeamSerializer(BaseModelSerializer):
             raise serializers.ValidationError(
                 {"members": ["Role is inactive."]}
             )
-        assignments = AssociateCenterAssignment.objects.filter(
-            center=center,
-            is_active=True,
-            associate__is_active=True,
-            role__is_active=True,
-            associate__pk__in=associate_ids,
-        ).select_related("associate", "role")
+        assignments = live_associate_center_assignments(center, associate_ids)
         assignment_by_associate = {
             assignment.associate.pk: assignment for assignment in assignments
         }
@@ -127,6 +108,8 @@ class CenterCareTeamSerializer(BaseModelSerializer):
                         ]
                     }
                 )
+            entry["associate"] = assignment.associate
+            entry["role"] = assignment.role
         return members
 
     def validate(self, attrs):
@@ -163,17 +146,14 @@ class CenterCareTeamSerializer(BaseModelSerializer):
             [
                 CenterCareTeamMember(
                     care_team=care_team,
-                    associate_id=entry["associate_id"],
-                    role_id=entry["role_id"],
+                    associate=entry["associate"],
+                    role=entry["role"],
                 )
                 for entry in members
             ]
         )
         care_team.members_count = len(members)
         care_team.save(update_fields=["members_count", "updated_at"])
-
-    def reload_team(self, care_team):
-        return prefetched_care_team_queryset().filter(pk=care_team.pk).first()
 
     def create(self, validated_data):
         members = validated_data.pop("members")
@@ -187,7 +167,7 @@ class CenterCareTeamSerializer(BaseModelSerializer):
                 **validated_data,
             )
             self.replace_members(care_team, members)
-        return self.reload_team(care_team)
+        return care_team
 
     def update(self, instance, validated_data):
         members = validated_data.pop("members", None)
@@ -196,4 +176,4 @@ class CenterCareTeamSerializer(BaseModelSerializer):
             instance = super().update(instance, validated_data)
             if members_in_payload:
                 self.replace_members(instance, members)
-        return self.reload_team(instance)
+        return instance

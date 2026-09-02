@@ -38,4 +38,5 @@ settings {
 docs {
   Returns available slots for a service on a given date. Cap 200/day with truncated flag.
   preferred.care_team_id XOR preferred.doctor_id / health_coach_id. room_id may combine with care_team_id.
+  Care team members must still have a live center assignment+role (same as catalog writes). Stale required members → 400 "Care team does not cover all required service roles."
 }

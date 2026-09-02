@@ -1,21 +1,14 @@
 import hashlib
 import json
 import time
-from datetime import timedelta
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
 from appointments.mixins import CenterAppointmentsMixin
-from appointments.models import (
-    Appointment,
-    AppointmentAssociate,
-    AppointmentAuditLog,
-    AppointmentHistory,
-    AppointmentIdempotencyKey,
-)
+from appointments.models import AppointmentIdempotencyKey
 from appointments.permissions import CenterAppointmentPermission
 from appointments.serializers.booking import (
     AppointmentBookSerializer,
@@ -32,17 +25,7 @@ from appointments.utils.care_teams import (
     expand_care_team_for_assignment,
 )
 from appointments.utils.calendar import get_center_timezone_name, parse_calendar_query_params
-from appointments.utils.codes import generate_appointment_code
-from appointments.utils.constants import (
-    AppointmentAuditAction,
-    AppointmentStatus,
-    AvailabilityGranularity,
-    ExceptionResolution,
-)
-from appointments.utils.exceptions import (
-    detect_exceptions_for_appointment,
-    resolve_exceptions_for_appointment,
-)
+from appointments.utils.constants import AvailabilityGranularity
 from appointments.utils.operations import invalidate_operations_cache
 from appointments.utils.intervals import datetime_range_for_dates, resolve_query_date_range
 from appointments.utils.metrics import (
@@ -52,28 +35,17 @@ from appointments.utils.metrics import (
     record_slots_duration,
 )
 from appointments.utils.scheduling import (
-    compute_exclusive_bounds,
     find_appointment_slots,
     get_center_service_assignment,
     validate_appointment_allocation,
 )
-from appointments.utils.transitions import apply_status_change, sync_associate_status_snapshots
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView, BaseRetrieveAPIView
 from inventory.models import Equipment, Room
 
 LIST_CAP = 500
-IDEMPOTENCY_TTL_HOURS = 24
-
-ACTION_AUDIT_MAP = {
-    "check-in": AppointmentAuditAction.CHECK_IN,
-    "start": AppointmentAuditAction.START,
-    "mark-late": AppointmentAuditAction.MARK_LATE,
-    "complete": AppointmentAuditAction.COMPLETE,
-    "no-show": AppointmentAuditAction.NO_SHOW,
-    "cancel": AppointmentAuditAction.CANCEL,
-    "reschedule": AppointmentAuditAction.RESCHEDULE,
-}
+APPOINTMENT_CODE_CONSTRAINT = "uniq_appointment_code_per_center"
+IDEMPOTENCY_KEY_CONSTRAINT = "uniq_appointment_idempotency_key_per_center"
 
 
 class ConflictError(APIException):
@@ -89,6 +61,35 @@ class AppointmentBookingMixin(CenterAppointmentsMixin):
 def canonical_payload_hash(payload):
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def integrity_error_constraint_name(error):
+    diagnostic = getattr(error.__cause__, "diag", None)
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    if constraint_name:
+        return constraint_name
+    return str(error)
+
+
+def integrity_error_matches_constraint(error, constraint_name):
+    return constraint_name in integrity_error_constraint_name(error)
+
+
+def get_appointment_idempotency_key(center, idempotency_key, unexpired_only=False):
+    queryset = AppointmentIdempotencyKey.objects.filter(
+        center=center,
+        idempotency_key=idempotency_key,
+    ).select_related("appointment__care_team")
+    if unexpired_only:
+        queryset = queryset.filter(expires_at__gt=timezone.now())
+    return queryset.first()
+
+
+def raise_idempotency_payload_conflict(existing_key, payload_hash):
+    if existing_key.payload_hash != payload_hash:
+        raise ConflictError(
+            "Idempotency key was already used with a different payload."
+        )
 
 
 def resolve_room(center, room_id):
@@ -111,15 +112,6 @@ def resolve_equipment(center, equipment_id):
     )
 
 
-def create_audit_log(appointment, actor, action, note=""):
-    AppointmentAuditLog.objects.create(
-        appointment=appointment,
-        actor=actor,
-        action=action,
-        note=note,
-    )
-
-
 def build_associate_payload(raw_associates):
     payload = []
     for entry in raw_associates:
@@ -132,18 +124,6 @@ def build_associate_payload(raw_associates):
     return payload
 
 
-def create_appointment_associates(appointment, associates_payload, exclusive_start, exclusive_end):
-    for entry in associates_payload:
-        AppointmentAssociate.objects.create(
-            appointment=appointment,
-            associate_id=entry["associate_id"],
-            role_id=entry["role_id"],
-            exclusive_start_datetime=exclusive_start,
-            exclusive_end_datetime=exclusive_end,
-            appointment_status=appointment.status,
-        )
-
-
 def resolve_booking_associates(center, assignment, validated):
     care_team_id = validated.get("care_team_id")
     if care_team_id:
@@ -152,52 +132,6 @@ def resolve_booking_associates(center, assignment, validated):
         )
         return care_team_associates_payload(members), members[0].care_team
     return build_associate_payload(validated["associates"]), None
-
-
-def create_appointment_record(
-    center,
-    validated_data,
-    assignment,
-    room,
-    equipment,
-    actor,
-    associates_payload,
-    care_team,
-):
-    start = validated_data["start"]
-    end = validated_data["end"]
-    buffer_before = assignment.buffer_before
-    buffer_after = assignment.buffer_after
-    exclusive_start, exclusive_end = compute_exclusive_bounds(
-        start, end, buffer_before, buffer_after
-    )
-    appointment = Appointment.objects.create(
-        center=center,
-        code=generate_appointment_code(center),
-        customer_profile=validated_data["customer_profile"],
-        service=validated_data["service"],
-        modality=validated_data["modality"],
-        start_datetime=start,
-        end_datetime=end,
-        duration_minutes=assignment.duration,
-        buffer_before_minutes=buffer_before,
-        buffer_after_minutes=buffer_after,
-        exclusive_start_datetime=exclusive_start,
-        exclusive_end_datetime=exclusive_end,
-        status=AppointmentStatus.CONFIRMED,
-        room=room,
-        equipment=equipment,
-        care_team=care_team,
-        created_by=actor,
-    )
-    create_appointment_associates(
-        appointment,
-        associates_payload,
-        exclusive_start,
-        exclusive_end,
-    )
-    create_audit_log(appointment, actor, AppointmentAuditAction.CREATE)
-    return appointment
 
 
 def dispatch_to_view(view_class, request, *args, **kwargs):
@@ -257,9 +191,7 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
         )
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
-        assignment = get_center_service_assignment(center, validated["service"])
-        if assignment is None:
-            self.raise_bad_request("Service is not available at this center.")
+        assignment = validated["assignment"]
         room = resolve_room(center, validated.get("room_id"))
         equipment = resolve_equipment(center, validated.get("equipment_id"))
         try:
@@ -272,20 +204,13 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
         idempotency_key = request.headers.get("Idempotency-Key")
         payload_hash = canonical_payload_hash(request.data)
         if idempotency_key:
-            existing_key = (
-                AppointmentIdempotencyKey.objects.filter(
-                    center=center,
-                    idempotency_key=idempotency_key,
-                    expires_at__gt=timezone.now(),
-                )
-                .select_related("appointment__care_team")
-                .first()
+            existing_key = get_appointment_idempotency_key(
+                center,
+                idempotency_key,
+                unexpired_only=True,
             )
             if existing_key:
-                if existing_key.payload_hash != payload_hash:
-                    raise ConflictError(
-                        "Idempotency key was already used with a different payload."
-                    )
+                raise_idempotency_payload_conflict(existing_key, payload_hash)
                 detail = AppointmentDetailSerializer(existing_key.appointment).data
                 return self.send_response(
                     "Appointment retrieved.",
@@ -310,29 +235,38 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
             self.raise_bad_request(exc.messages[0])
 
         try:
-            with transaction.atomic():
-                appointment = create_appointment_record(
+            serializer.save(
+                assignment=assignment,
+                room=room,
+                equipment=equipment,
+                associates_payload=associates_payload,
+                care_team=care_team,
+                actor=request.user,
+                idempotency_key=idempotency_key,
+                payload_hash=payload_hash,
+            )
+        except IntegrityError as error:
+            if integrity_error_matches_constraint(error, IDEMPOTENCY_KEY_CONSTRAINT):
+                existing_key = get_appointment_idempotency_key(
                     center,
-                    validated,
-                    assignment,
-                    room,
-                    equipment,
-                    request.user,
-                    associates_payload,
-                    care_team,
+                    idempotency_key,
                 )
-                if idempotency_key:
-                    AppointmentIdempotencyKey.objects.create(
-                        center=center,
-                        idempotency_key=idempotency_key,
-                        payload_hash=payload_hash,
-                        appointment=appointment,
-                        expires_at=timezone.now() + timedelta(hours=IDEMPOTENCY_TTL_HOURS),
+                if existing_key:
+                    raise_idempotency_payload_conflict(existing_key, payload_hash)
+                    detail = AppointmentDetailSerializer(
+                        existing_key.appointment
+                    ).data
+                    return self.send_response(
+                        "Appointment retrieved.",
+                        detail,
+                        status=200,
                     )
-        except IntegrityError:
             record_book_outcome(center.pk, "conflict")
+            if integrity_error_matches_constraint(error, APPOINTMENT_CODE_CONSTRAINT):
+                self.raise_bad_request("Appointment code already exists.")
             self.raise_bad_request("Slot no longer available.")
 
+        appointment = serializer.instance
         record_book_outcome(center.pk, "success")
         invalidate_operations_cache(center.pk)
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -434,6 +368,7 @@ class AppointmentLifecycleActionView(AppointmentBookingMixin, BaseGenericAPIView
         started = time.monotonic()
         appointment = self.get_appointment()
         serializer = self.serializer_class(
+            appointment,
             data=request.data,
             context={
                 "appointment": appointment,
@@ -442,11 +377,9 @@ class AppointmentLifecycleActionView(AppointmentBookingMixin, BaseGenericAPIView
             },
         )
         serializer.is_valid(raise_exception=True)
+        serializer.save(actor=request.user)
+        appointment = serializer.instance
         center = self.get_center()
-        apply_status_change(appointment, self.action)
-        appointment.refresh_from_db()
-        audit_action = ACTION_AUDIT_MAP[self.action]
-        create_audit_log(appointment, request.user, audit_action)
         record_lifecycle(center.pk, self.action, appointment.status)
         invalidate_operations_cache(center.pk)
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -491,21 +424,14 @@ class AppointmentMarkLateView(AppointmentBookingMixin, BaseGenericAPIView):
             pk=self.kwargs["pk"],
         )
         serializer = AppointmentMarkLateSerializer(
+            appointment,
             data=request.data,
             context={"appointment": appointment, "request": request},
         )
         serializer.is_valid(raise_exception=True)
+        serializer.save(actor=request.user)
+        appointment = serializer.instance
         center = self.get_center()
-        apply_status_change(appointment, "mark-late")
-        appointment.is_late = True
-        appointment.late_by = serializer.validated_data["late_by"]
-        appointment.save(update_fields=["is_late", "late_by", "updated_at"])
-        create_audit_log(
-            appointment,
-            request.user,
-            AppointmentAuditAction.MARK_LATE,
-            note=f"Late by {appointment.late_by} minutes",
-        )
         record_lifecycle(center.pk, "mark-late", appointment.status)
         duration_ms = int((time.monotonic() - started) * 1000)
         log_appointment_event(
@@ -529,25 +455,14 @@ class AppointmentCancelView(AppointmentBookingMixin, BaseGenericAPIView):
             pk=self.kwargs["pk"],
         )
         serializer = AppointmentCancelSerializer(
+            appointment,
             data=request.data,
             context={"appointment": appointment, "request": request},
         )
         serializer.is_valid(raise_exception=True)
+        serializer.save(actor=request.user)
+        appointment = serializer.instance
         center = self.get_center()
-        appointment.cancel_reason = serializer.validated_data["reason"]
-        appointment.save(update_fields=["cancel_reason", "updated_at"])
-        apply_status_change(appointment, "cancel")
-        appointment.refresh_from_db()
-        resolve_exceptions_for_appointment(
-            appointment,
-            ExceptionResolution.CANCELLED,
-        )
-        create_audit_log(
-            appointment,
-            request.user,
-            AppointmentAuditAction.CANCEL,
-            note=appointment.cancel_reason,
-        )
         record_lifecycle(center.pk, "cancel", appointment.status)
         invalidate_operations_cache(center.pk)
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -573,6 +488,7 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
         )
         center = self.get_center()
         serializer = AppointmentRescheduleSerializer(
+            appointment,
             data=request.data,
             context={
                 "center": center,
@@ -582,9 +498,7 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
         )
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
-        assignment = get_center_service_assignment(center, validated["service"])
-        if assignment is None:
-            self.raise_bad_request("Service is not available at this center.")
+        assignment = validated["assignment"]
         room = resolve_room(center, validated.get("room_id"))
         equipment = resolve_equipment(center, validated.get("equipment_id"))
         try:
@@ -610,59 +524,19 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
         except DjangoValidationError as exc:
             self.raise_bad_request(exc.messages[0])
 
-        buffer_before = assignment.buffer_before
-        buffer_after = assignment.buffer_after
-        exclusive_start, exclusive_end = compute_exclusive_bounds(
-            validated["start"],
-            validated["end"],
-            buffer_before,
-            buffer_after,
-        )
-
         try:
-            with transaction.atomic():
-                AppointmentHistory.objects.create(
-                    appointment=appointment,
-                    previous_start_datetime=appointment.start_datetime,
-                    previous_end_datetime=appointment.end_datetime,
-                    previous_exclusive_start_datetime=appointment.exclusive_start_datetime,
-                    previous_exclusive_end_datetime=appointment.exclusive_end_datetime,
-                    actor=request.user,
-                )
-                appointment.start_datetime = validated["start"]
-                appointment.end_datetime = validated["end"]
-                appointment.duration_minutes = assignment.duration
-                appointment.buffer_before_minutes = buffer_before
-                appointment.buffer_after_minutes = buffer_after
-                appointment.exclusive_start_datetime = exclusive_start
-                appointment.exclusive_end_datetime = exclusive_end
-                appointment.modality = validated["modality"]
-                appointment.room = room
-                appointment.equipment = equipment
-                appointment.care_team = care_team
-                appointment.status = AppointmentStatus.CONFIRMED
-                appointment.save()
-                appointment.associate_links.all().delete()
-                create_appointment_associates(
-                    appointment,
-                    associates_payload,
-                    exclusive_start,
-                    exclusive_end,
-                )
-                sync_associate_status_snapshots(appointment)
-                create_audit_log(
-                    appointment,
-                    request.user,
-                    AppointmentAuditAction.RESCHEDULE,
-                )
+            serializer.save(
+                assignment=assignment,
+                room=room,
+                equipment=equipment,
+                associates_payload=associates_payload,
+                care_team=care_team,
+                actor=request.user,
+            )
         except IntegrityError:
             self.raise_bad_request("Slot no longer available.")
 
-        resolve_exceptions_for_appointment(
-            appointment,
-            ExceptionResolution.RESCHEDULED,
-        )
-        detect_exceptions_for_appointment(appointment)
+        appointment = serializer.instance
         record_lifecycle(center.pk, "reschedule", appointment.status)
         invalidate_operations_cache(center.pk)
         duration_ms = int((time.monotonic() - started) * 1000)

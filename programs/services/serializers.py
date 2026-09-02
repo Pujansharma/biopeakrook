@@ -112,6 +112,23 @@ class ServiceSerializer(BaseServiceSerializerMeta, BaseModelSerializer):
             "created_by",
         ]
 
+    def validate_name(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        name = attrs.get("name")
+        if name is None and self.instance is not None:
+            name = self.instance.name
+        if name:
+            clash = Service.objects.filter(name__iexact=name)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"name": ["A service with this name already exists."]}
+                )
+        return attrs
+
     def create(self, validated_data):
         is_global = validated_data.get("is_global", False)
         add_centers = validated_data.pop("add_centers", [])

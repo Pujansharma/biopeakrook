@@ -1,7 +1,7 @@
 vars {
   baseURL: http://localhost:8000
   phone: +91-7338766426
-  access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzg4NDIwMDk0LCJpYXQiOjE3ODgzMzM2OTQsImp0aSI6IjgxZDViNmIwMzU4NDQwNDk5ZjMxM2NkMDMzYzVhNDg0IiwiaWQiOiJiNzdjMGIwMS1hMjZjLTQxZjUtOWI1ZS04OWNiZjk2YzMxMjIiLCJlbWFpbCI6ImFkbWluLmRldkBiaW9wZWFrLmxvY2FsIiwicGhvbmUiOiIrOTEtNzMzODc2NjQyNiIsInVzZXJfdHlwZSI6ImFkbWluIn0.xOdtafOZQKB64KjJlREZ0bquBBq9QNkX6CBz-H-fAYE
+  access_token:
   refresh_token: 
   customer_access_token: 
   customer_user_id: 
@@ -39,6 +39,7 @@ vars {
   idempotency_key: {{$uuid}}
 }
 vars:secret [
+  access_token,
   otp,
   orange_webhook_secret
 ]

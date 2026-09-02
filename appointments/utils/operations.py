@@ -53,14 +53,14 @@ def invalidate_operations_cache(center_id) -> None:
     cache.set(version_key, current_version + 1, timeout=None)
 
 
-def get_cached_operations(center_id, start_date, end_date, tab, builder):
-    cache_key = operations_cache_key(center_id, start_date, end_date, tab)
+def get_cached_operations(center, start_date, end_date, tab, builder):
+    cache_key = operations_cache_key(center.pk, start_date, end_date, tab)
     cached = cache.get(cache_key)
     if cached is not None:
-        record_operations_cache_hit(center_id, tab, True)
+        record_operations_cache_hit(center.pk, tab, True)
         return cached
-    record_operations_cache_hit(center_id, tab, False)
-    payload = builder()
+    record_operations_cache_hit(center.pk, tab, False)
+    payload = builder(center, start_date, end_date)
     cache.set(cache_key, payload, timeout=OPERATIONS_CACHE_TTL)
     return payload
 
@@ -428,32 +428,32 @@ def build_operations_bottlenecks(center, start_date, end_date) -> list:
     return bottlenecks
 
 
+def summarize_operations_capacity(rows, resource_type):
+    available_minutes = sum(row["available_minutes"] for row in rows)
+    booked_minutes = sum(row["booked_minutes"] for row in rows)
+    utilization = 0.0
+    if available_minutes > 0:
+        utilization = round(booked_minutes / available_minutes, 4)
+    return {
+        "resource_type": resource_type,
+        "resource_count": len(rows),
+        "available_minutes": round(available_minutes, 2),
+        "available_hours": minutes_to_hours(available_minutes),
+        "booked_minutes": booked_minutes,
+        "booked_hours": minutes_to_hours(booked_minutes),
+        "utilization": utilization,
+    }
+
+
 def build_operations_capacity(center, start_date, end_date) -> dict:
     staff_rows = build_operations_staff(center, start_date, end_date)
     room_rows = build_operations_rooms(center, start_date, end_date)
     equipment_rows = build_operations_equipment(center, start_date, end_date)
-
-    def summarize(rows, resource_type):
-        available_minutes = sum(row["available_minutes"] for row in rows)
-        booked_minutes = sum(row["booked_minutes"] for row in rows)
-        utilization = 0.0
-        if available_minutes > 0:
-            utilization = round(booked_minutes / available_minutes, 4)
-        return {
-            "resource_type": resource_type,
-            "resource_count": len(rows),
-            "available_minutes": round(available_minutes, 2),
-            "available_hours": minutes_to_hours(available_minutes),
-            "booked_minutes": booked_minutes,
-            "booked_hours": minutes_to_hours(booked_minutes),
-            "utilization": utilization,
-        }
-
     return {
         "center_id": str(center.pk),
         "start": start_date.isoformat(),
         "end": end_date.isoformat(),
-        "staff": summarize(staff_rows, "staff"),
-        "rooms": summarize(room_rows, "rooms"),
-        "equipment": summarize(equipment_rows, "equipment"),
+        "staff": summarize_operations_capacity(staff_rows, "staff"),
+        "rooms": summarize_operations_capacity(room_rows, "rooms"),
+        "equipment": summarize_operations_capacity(equipment_rows, "equipment"),
     }

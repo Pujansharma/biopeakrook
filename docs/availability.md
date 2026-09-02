@@ -67,7 +67,6 @@ One GET endpoint per resource type. All return the same day-by-day shape.
 
 ```json
 {
-  "success": true,
   "detail": "Center availability retrieved.",
   "data": { ... }
 }
@@ -281,7 +280,7 @@ Optional list of roster rows for the center. Supports `?associate=<uuid>` and `?
 
 **PATCH** `/centers/<center_id>/availability/associates/<associate_id>/blocks/<block_id>/`
 
-Associate comes from the URL (not the body). POST response is always a **list** of created block rows.
+Associate comes from the URL (not the body). POST 201 is `{detail, data}`; `data` is the list of created block rows (never a top-level array).
 
 **One-off:**
 
@@ -344,7 +343,7 @@ Supports full-day, partial-day, and multi-day ranges via `start_datetime` / `end
 
 **PATCH** `/centers/<center_id>/availability/room-downtimes/<room_id>/<downtime_id>/`
 
-Room from URL. Block POST → **list** (same create rules as associate blocks: `days_of_week` expand, no `effective_until`). **Downtime = one-off only** (never recurring). Downtime may overlap an existing room block; the reverse is rejected.
+Room from URL. Block POST 201 `{detail, data}` with `data` = created rows (same create rules as associate blocks: `days_of_week` expand, no `effective_until`). **Downtime = one-off only** (never recurring). Downtime may overlap an existing room block; the reverse is rejected.
 
 **One-off block / downtime** — same calendar day (`settings.TIME_ZONE`): `date` + `start_time` + `end_time`. No multi-day; one POST per day.
 

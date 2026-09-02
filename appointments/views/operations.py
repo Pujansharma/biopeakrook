@@ -23,11 +23,11 @@ class OperationsMixin(CenterAppointmentsMixin):
         center = self.get_center()
         start_date, end_date = self.get_date_range()
         data = get_cached_operations(
-            center.pk,
+            center,
             start_date,
             end_date,
             tab,
-            lambda: builder(center, start_date, end_date),
+            builder,
         )
         return self.send_response(f"Operations {tab} retrieved.", data)
 

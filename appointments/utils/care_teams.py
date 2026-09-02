@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 
+from accounts.associates.models import AssociateCenterAssignment
 from appointments.models import CenterCareTeam, CenterCareTeamMember
 
 
@@ -32,6 +33,35 @@ def care_team_member_role_sort_key(member):
     return str(member.role.pk)
 
 
+def live_associate_center_assignments(center, associate_ids):
+    return AssociateCenterAssignment.objects.filter(
+        center=center,
+        is_active=True,
+        associate__is_active=True,
+        role__is_active=True,
+        associate__pk__in=associate_ids,
+    ).select_related("associate", "role")
+
+
+def members_with_live_center_role(center, members):
+    associate_ids = [member.associate.pk for member in members]
+    assignments_by_associate = {
+        center_assignment.associate.pk: center_assignment
+        for center_assignment in live_associate_center_assignments(
+            center, associate_ids
+        )
+    }
+    eligible_members = []
+    for member in members:
+        center_assignment = assignments_by_associate.get(member.associate.pk)
+        if center_assignment is None:
+            continue
+        if center_assignment.role.pk != member.role.pk:
+            continue
+        eligible_members.append(member)
+    return eligible_members
+
+
 def expand_care_team_for_assignment(center, care_team_id, assignment):
     team = load_active_center_care_team(center, care_team_id)
     role_requirements = list(
@@ -42,7 +72,7 @@ def expand_care_team_for_assignment(center, care_team_id, assignment):
             "Care team allocation is only valid when the service requires staff."
         )
     required_role_ids = {requirement.role.pk for requirement in role_requirements}
-    members = list(team.members.all())
+    members = members_with_live_center_role(center, list(team.members.all()))
     team_role_ids = {member.role.pk for member in members}
     if required_role_ids - team_role_ids:
         raise ValidationError(

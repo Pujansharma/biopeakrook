@@ -20,8 +20,7 @@ docs {
 
   Aggregate associate calendar lives under bruno/associates/ (not center-scoped).
 
-  Block POSTs (assoc/room/equip) return a bare JSON array on 201 — use [0].id / [n].id for env ids.
-  Other writes use standard {success, detail, data} envelope.
+  All writes use {detail, data}. Block POSTs (assoc/room/equip): data = array of created rows; use data[0].id / data[n].id for env ids.
 
   Sample fixtures clustered early Sep 2026 so calendar GETs see CRUD seed data.
 

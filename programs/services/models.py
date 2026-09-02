@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.functions import Lower
 
 from core.utils.constants import AppointmentModes
 from core.utils.models import BaseUUIDModel
@@ -28,6 +29,12 @@ class Service(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                name="uniq_service_name",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"

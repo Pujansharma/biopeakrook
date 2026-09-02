@@ -1,5 +1,4 @@
 from django.db import models
-from rest_framework.response import Response
 
 from accounts.centers.models import CenterClosure, CenterOperatingHour
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
@@ -182,7 +181,7 @@ class AssociateAvailabilityBlockListCreateView(
             .order_by("-created_at")
         )
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         results = serializer.save(
@@ -193,7 +192,7 @@ class AssociateAvailabilityBlockListCreateView(
         for block in results:
             self.apply_exception_side_effects(block, serializer.validated_data, created=True)
         data = AssociateAvailabilityBlockSerializer(results, many=True).data
-        return Response(data, status=201)
+        return self.send_response(self.create_success_message, data, status=201)
 
 
 class AssociateAvailabilityBlockDetailView(
@@ -305,7 +304,7 @@ class RoomAvailabilityBlockListCreateView(
             .order_by("-created_at")
         )
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         results = serializer.save(
@@ -315,7 +314,7 @@ class RoomAvailabilityBlockListCreateView(
         for block in results:
             self.apply_exception_side_effects(block, serializer.validated_data, created=True)
         data = RoomAvailabilityBlockSerializer(results, many=True).data
-        return Response(data, status=201)
+        return self.send_response(self.create_success_message, data, status=201)
 
 
 class RoomAvailabilityBlockDetailView(
@@ -423,7 +422,7 @@ class EquipmentAvailabilityBlockListCreateView(
             .order_by("-created_at")
         )
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         results = serializer.save(
@@ -433,7 +432,7 @@ class EquipmentAvailabilityBlockListCreateView(
         for block in results:
             self.apply_exception_side_effects(block, serializer.validated_data, created=True)
         data = EquipmentAvailabilityBlockSerializer(results, many=True).data
-        return Response(data, status=201)
+        return self.send_response(self.create_success_message, data, status=201)
 
 
 class EquipmentAvailabilityBlockDetailView(

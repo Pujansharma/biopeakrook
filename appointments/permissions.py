@@ -33,7 +33,7 @@ class CenterAppointmentPermission(BasePermission):
         )
         if not active_assignments.exists():
             return True
-        return active_assignments.filter(center_id=center_id).exists()
+        return active_assignments.filter(center=center_id).exists()
 
     def _associate_center_allowed(self, request, center_id):
         if not hasattr(request.user, "associate"):
@@ -41,5 +41,5 @@ class CenterAppointmentPermission(BasePermission):
         return AssociateCenterAssignment.objects.filter(
             associate=request.user.associate,
             is_active=True,
-            center_id=center_id,
+            center=center_id,
         ).exists()

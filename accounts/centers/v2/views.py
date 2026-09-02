@@ -256,7 +256,6 @@ class CenterServiceV2DetailView(CenterV2Mixin, BaseRetrieveUpdateAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CenterServiceV2Serializer
     lookup_url_kwarg = "service_id"
-    http_method_names = ["get", "patch", "head", "options"]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

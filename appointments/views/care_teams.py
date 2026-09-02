@@ -1,11 +1,9 @@
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 
 from appointments.mixins import CenterAppointmentsMixin
+from appointments.models import CenterCareTeam, CenterCareTeamMember
 from appointments.permissions import CenterAppointmentPermission
-from appointments.serializers.care_teams import (
-    CenterCareTeamSerializer,
-    prefetched_care_team_queryset,
-)
+from appointments.serializers.care_teams import CenterCareTeamSerializer
 from core.utils.views.main import BaseListCreateAPIView, BaseRetrieveUpdateAPIView
 
 
@@ -18,8 +16,23 @@ class CenterCareTeamViewMeta(CenterAppointmentsMixin):
         context["center"] = self.get_center()
         return context
 
-    def get_prefetched_queryset(self):
-        return prefetched_care_team_queryset().filter(center=self.get_center())
+    def get_queryset(self):
+        filter_kwargs = {}
+        return CenterCareTeam.objects.filter(
+            center=self.get_center(), **filter_kwargs
+        ).prefetch_related(
+            Prefetch(
+                "members",
+                queryset=CenterCareTeamMember.objects.select_related(
+                    "associate__user",
+                    "role",
+                ).order_by("role"),
+                to_attr="prefetched_members",
+            )
+        )
+
+    def reload_prefetched_instance(self, instance):
+        return CenterCareTeamViewMeta.get_queryset(self).filter(pk=instance.pk).first()
 
 
 class CenterCareTeamListCreateView(CenterCareTeamViewMeta, BaseListCreateAPIView):
@@ -37,18 +50,21 @@ class CenterCareTeamListCreateView(CenterCareTeamViewMeta, BaseListCreateAPIView
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
         return (
-            self.get_prefetched_queryset()
+            super()
+            .get_queryset()
             .filter(search, **filter_kwargs)
             .order_by("-created_at")
         )
 
     def perform_create(self, serializer):
         serializer.save(center=self.get_center(), created_by=self.request.user)
+        serializer.instance = self.reload_prefetched_instance(serializer.instance)
 
 
 class CenterCareTeamDetailView(CenterCareTeamViewMeta, BaseRetrieveUpdateAPIView):
     retrieve_success_message = "Care team retrieved."
     update_success_message = "Care team updated."
 
-    def get_queryset(self):
-        return self.get_prefetched_queryset()
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        serializer.instance = self.reload_prefetched_instance(serializer.instance)

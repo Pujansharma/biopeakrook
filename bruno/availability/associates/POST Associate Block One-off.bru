@@ -35,6 +35,6 @@ settings {
 
 docs {
   One-off associate block. Associate from URL. No days_of_week.
-  POST 201 body = JSON array (not {data:...}). Set associate_block_id from [0].id for PATCH.
+  POST 201 {detail, data}. data = array of created rows. Set associate_block_id from data[0].id for PATCH.
   Rejects overlap with existing active blocks/leaves.
 }

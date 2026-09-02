@@ -25,7 +25,12 @@ body:json {
     "modality": "in_person",
     "start": "2026-09-05T05:00:00Z",
     "end": "2026-09-05T05:40:00Z",
-    "associates": [],
+    "associates": [
+      {
+        "role_id": "{{role_id}}",
+        "associate_id": "{{associate_id}}"
+      }
+    ],
     "room_id": "{{room_id}}",
     "equipment_id": null
   }
@@ -39,4 +44,5 @@ settings {
 docs {
   Allowed from confirmed or checked_in. Lands confirmed. Not from in_progress.
   Send care_team_id XOR associates. Adjust slot to match availability.
+  care_team_id: live assignment+role required; stale required members → 400 "Care team does not cover all required service roles."
 }

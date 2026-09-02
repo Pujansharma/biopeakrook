@@ -36,6 +36,6 @@ settings {
 
 docs {
   One-off room block. Room from URL. Same-day only: date + start_time + end_time. No days_of_week.
-  POST 201 body = JSON array (not {data:...}). Set room_block_id from [0].id for PATCH.
+  POST 201 {detail, data}. data = array of created rows. Set room_block_id from data[0].id for PATCH.
   Rejects overlap.
 }

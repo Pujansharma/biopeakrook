@@ -183,14 +183,14 @@ def build_service_resource_pools(center, assignment, modality):
     rooms = []
     equipment = []
     if modality == AppointmentModes.IN_PERSON:
-        if assignment.required_room_type_id:
+        if assignment.required_room_type is not None:
             rooms = list(
                 Room.objects.filter_active(
                     center=center,
                     room_type=assignment.required_room_type,
                 )
             )
-        if assignment.required_equipment_type_id:
+        if assignment.required_equipment_type is not None:
             equipment = list(
                 Equipment.objects.filter_active(
                     center=center,
@@ -207,8 +207,8 @@ def build_service_resource_pools(center, assignment, modality):
 def validate_service_bookable(assignment, modality, resource_pools):
     role_pools = resource_pools["roles"]
     has_roles = len(role_pools) > 0
-    has_room_type = assignment.required_room_type_id is not None
-    has_equipment_type = assignment.required_equipment_type_id is not None
+    has_room_type = assignment.required_room_type is not None
+    has_equipment_type = assignment.required_equipment_type is not None
     if not has_roles and modality == AppointmentModes.VIRTUAL:
         return
     if (
@@ -525,11 +525,11 @@ def find_appointment_slots(
     truncated = False
     requires_room = (
         modality == AppointmentModes.IN_PERSON
-        and assignment.required_room_type_id is not None
+        and assignment.required_room_type is not None
     )
     requires_equipment = (
         modality == AppointmentModes.IN_PERSON
-        and assignment.required_equipment_type_id is not None
+        and assignment.required_equipment_type is not None
     )
 
     for slot_start, slot_end in candidate_slots:
@@ -628,7 +628,7 @@ def find_appointment_slots(
 
 
 def validate_associate_assignments(center, associates_payload, role_requirements):
-    required_role_ids = {str(item.role_id) for item in role_requirements}
+    required_role_ids = {str(item.role.pk) for item in role_requirements}
     provided_role_ids = set()
     for entry in associates_payload:
         role_id = str(entry["role_id"])
@@ -638,8 +638,8 @@ def validate_associate_assignments(center, associates_payload, role_requirements
             raise ValidationError(f"Unexpected role assignment: {role_id}.")
         assignment = AssociateCenterAssignment.objects.filter(
             center=center,
-            associate_id=associate_id,
-            role_id=role_id,
+            associate=associate_id,
+            role=role_id,
             is_active=True,
             associate__is_active=True,
         ).first()
@@ -688,24 +688,24 @@ def validate_appointment_allocation(
     validate_service_bookable(assignment, modality, resource_pools)
 
     if modality == AppointmentModes.IN_PERSON:
-        if assignment.required_room_type_id and room is None:
+        if assignment.required_room_type is not None and room is None:
             raise ValidationError("A room is required for this service.")
-        if assignment.required_equipment_type_id and equipment is None:
+        if assignment.required_equipment_type is not None and equipment is None:
             raise ValidationError("Equipment is required for this service.")
-        if room is not None and room.center_id != center.pk:
+        if room is not None and room.center.pk != center.pk:
             raise ValidationError("Room does not belong to this center.")
-        if equipment is not None and equipment.center_id != center.pk:
+        if equipment is not None and equipment.center.pk != center.pk:
             raise ValidationError("Equipment does not belong to this center.")
         if (
             room is not None
-            and assignment.required_room_type_id
-            and room.room_type_id != assignment.required_room_type_id
+            and assignment.required_room_type is not None
+            and room.room_type.pk != assignment.required_room_type.pk
         ):
             raise ValidationError("Room type does not match service requirements.")
         if (
             equipment is not None
-            and assignment.required_equipment_type_id
-            and equipment.equipment_type_id != assignment.required_equipment_type_id
+            and assignment.required_equipment_type is not None
+            and equipment.equipment_type.pk != assignment.required_equipment_type.pk
         ):
             raise ValidationError(
                 "Equipment type does not match service requirements."
