@@ -127,7 +127,7 @@ class CenterCareTeamSerializer(BaseModelSerializer):
         if name is None and self.instance is not None:
             name = self.instance.name
         if name:
-            clash = CenterCareTeam.objects.filter(center=center, name=name)
+            clash = CenterCareTeam.objects.filter(center=center, name__iexact=name)
             if self.instance is not None:
                 clash = clash.exclude(pk=self.instance.pk)
             if clash.exists():

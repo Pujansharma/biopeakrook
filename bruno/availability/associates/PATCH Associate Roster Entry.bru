@@ -45,4 +45,5 @@ docs {
   Week diff vs current active roster. Listed days upserted (create/update/reactivate).
   Omitted active days soft-deactivated (is_active=false). Empty entries rejected — cannot wipe the whole week.
   POST stays additive (omitted days untouched).
+  Same center-hours gate as POST (400 detail.day_errors).
 }

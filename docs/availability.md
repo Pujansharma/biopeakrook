@@ -46,7 +46,7 @@ One GET endpoint per resource type. All return the same day-by-day shape.
 - **week** — Monday–Sunday week containing `start`
 - **month** — full calendar month containing `start`
 
-`GET /centers/<center_id>/availability/` defaults to **week** when `granularity` is omitted. Associate, room, equipment, and aggregate associate calendars still default to **day**.
+`GET /centers/<center_id>/availability/` defaults to **week** when `granularity` is omitted. Associate, room, and equipment calendars still default to **day**. No cross-center aggregate associate calendar.
 
 ### Endpoints
 
@@ -169,6 +169,7 @@ Bulk upsert the same open/close window across selected weekdays; mark other days
 - `open_time` / `close_time` required when `days` is non-empty; must have `open_time < close_time`
 - Days omitted from both lists are left unchanged
 - GET lists rows; optional `?active=0|1` (default active only)
+- **Roster guard:** PATCH rejects if any **active** associate roster would fall outside the new window, or if a day being closed still has active roster. 400 `detail.day_errors` (codes below). Inactive roster ignored. No write.
 
 Legacy `GET/POST /centers/<id>/operating-hours/` still exists but is not the canonical write API.
 
@@ -215,10 +216,61 @@ Bulk weekly work hours for an associate at this center. Associate comes from the
 - `entries` must be non-empty; duplicate days in one request are rejected
 - each entry requires `start_time` < `end_time`
 - listed days: create, or update times + reactivate if soft-inactive
+- **Must fall inside that weekday’s center hours** (inclusive edges). Before open, after close, closed day, or missing hours → 400, nothing saved. All bad days returned together.
 - **POST** is additive — omitted days stay as they are
 - **PATCH** is a week diff — omitted **active** days are soft-deactivated (`is_active=false`). Empty `entries` rejected (cannot wipe the whole week)
 - all entries applied in one atomic transaction
 - response: list of the listed (upserted) roster entry representations
+
+Error 400 (global handler puts serializer errors in `detail`; no extra envelope):
+
+```json
+{
+  "detail": {
+    "non_field_errors": ["Roster must fall within center operating hours."],
+    "day_errors": [
+      {
+        "day_of_week": "1",
+        "day_of_week_name": "Tuesday",
+        "open_time": "09:00:00",
+        "close_time": "18:00:00",
+        "errors": [
+          {
+            "code": "before_opening",
+            "field": "start_time",
+            "message": "Starts before center opening time."
+          },
+          {
+            "code": "after_closing",
+            "field": "end_time",
+            "message": "Ends after center closing time."
+          }
+        ]
+      },
+      {
+        "day_of_week": "6",
+        "day_of_week_name": "Sunday",
+        "errors": [
+          {
+            "code": "center_closed",
+            "field": "day_of_week",
+            "message": "Center is closed on this day."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+| `code` | When | `field` |
+|---|---|---|
+| `before_opening` | `start_time` < center `open_time` | `start_time` |
+| `after_closing` | `end_time` > center `close_time` | `end_time` |
+| `center_closed` | that weekday `is_open=false` | `day_of_week` |
+| `center_hours_missing` | no active open hours row | `day_of_week` |
+
+`day_of_week` in `day_errors` is `"0"`…`"6"`. `open_time` / `close_time` omitted when there is no window. Operating-hours PATCH uses the same `day_errors` shape; extra `associate_ids` on each error; codes `before_opening` / `after_closing` / `roster_on_closed_day`; summary `"Operating hours conflict with existing staff roster."`
 
 **GET** `/centers/<center_id>/availability/associate-roster/`
 
@@ -410,4 +462,4 @@ Busy (exclusive reservation): `confirmed`, `checked_in`, `in_progress`. Not busy
 
 ---
 
-*Last updated: 2026-08-30*
+*Last updated: 2026-09-02*

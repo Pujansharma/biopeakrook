@@ -69,16 +69,26 @@ class CenterAppointmentsMixin:
         center_id = self.get_center_id()
         centers = Center.objects.filter(is_active=True)
         account_type = get_user_account_type(self.request.user)
-        if account_type in {UserType.ADMIN, UserType.ASSOCIATE}:
-            if hasattr(self.request.user, "associate"):
-                active_assignments = AssociateCenterAssignment.objects.filter(
-                    associate=self.request.user.associate,
-                    is_active=True,
+        has_associate_profile = hasattr(self.request.user, "associate")
+        if account_type == UserType.ASSOCIATE:
+            if not has_associate_profile:
+                centers = centers.none()
+            else:
+                centers = centers.filter(
+                    pk__in=AssociateCenterAssignment.objects.filter(
+                        associate=self.request.user.associate,
+                        is_active=True,
+                    ).values_list("center_id", flat=True)
                 )
-                if active_assignments.exists():
-                    centers = centers.filter(
-                        pk__in=active_assignments.values_list("center_id", flat=True)
-                    )
+        elif account_type == UserType.ADMIN and has_associate_profile:
+            active_assignments = AssociateCenterAssignment.objects.filter(
+                associate=self.request.user.associate,
+                is_active=True,
+            )
+            if active_assignments.exists():
+                centers = centers.filter(
+                    pk__in=active_assignments.values_list("center_id", flat=True)
+                )
         return get_object_or_404(
             centers.distinct(),
             "No valid center found with the given ID.",

@@ -19,12 +19,12 @@ class CenterAppointmentPermission(BasePermission):
             return False
         account_type = get_user_account_type(request.user)
         if account_type == UserType.ADMIN:
-            return self._associate_center_allowed(request, center_id)
+            return self._admin_center_allowed(request, center_id)
         if account_type == UserType.ASSOCIATE:
             return self._associate_center_allowed(request, center_id)
         return False
 
-    def _associate_center_allowed(self, request, center_id):
+    def _admin_center_allowed(self, request, center_id):
         if not hasattr(request.user, "associate"):
             return True
         active_assignments = AssociateCenterAssignment.objects.filter(
@@ -34,3 +34,12 @@ class CenterAppointmentPermission(BasePermission):
         if not active_assignments.exists():
             return True
         return active_assignments.filter(center_id=center_id).exists()
+
+    def _associate_center_allowed(self, request, center_id):
+        if not hasattr(request.user, "associate"):
+            return False
+        return AssociateCenterAssignment.objects.filter(
+            associate=request.user.associate,
+            is_active=True,
+            center_id=center_id,
+        ).exists()

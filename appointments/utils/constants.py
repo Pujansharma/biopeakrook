@@ -69,3 +69,26 @@ class AvailabilityGranularity(models.TextChoices):
 class LeaveScope(models.TextChoices):
     CENTER = "center", "Center"
     ALL_CENTERS = "all_centers", "All Centers"
+
+
+ROSTER_HOURS_ERROR = "Roster must fall within center operating hours."
+OPERATING_HOURS_ROSTER_ERROR = "Operating hours conflict with existing staff roster."
+
+BEFORE_OPENING = "before_opening"
+AFTER_CLOSING = "after_closing"
+CENTER_CLOSED = "center_closed"
+CENTER_HOURS_MISSING = "center_hours_missing"
+ROSTER_ON_CLOSED_DAY = "roster_on_closed_day"
+
+BEFORE_OPENING_MESSAGE = "Starts before center opening time."
+AFTER_CLOSING_MESSAGE = "Ends after center closing time."
+CENTER_CLOSED_MESSAGE = "Center is closed on this day."
+CENTER_HOURS_MISSING_MESSAGE = "Center operating hours are not set for this day."
+ROSTER_BEFORE_NEW_OPENING_MESSAGE = "Active roster starts before the new opening time."
+ROSTER_AFTER_NEW_CLOSING_MESSAGE = "Active roster ends after the new closing time."
+ROSTER_ON_CLOSED_DAY_MESSAGE = "Active roster exists on a day being closed."
+
+UNAVAILABLE_DAY_ERROR = {
+    True: (CENTER_CLOSED, CENTER_CLOSED_MESSAGE),
+    False: (CENTER_HOURS_MISSING, CENTER_HOURS_MISSING_MESSAGE),
+}

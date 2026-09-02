@@ -63,4 +63,71 @@ settings {
 
 docs {
   Bulk upsert weekly associate roster at center. Associate from URL. day_of_week int 0=Mon … 6=Sun. Upserts by day_of_week (create or update start/end, reactivate if soft-inactive). Additive: omitted days are left untouched. PATCH is the week-diff (omit = deactivate).
+  Hours must sit inside that weekday’s center operating hours (inclusive). Outside / closed / missing hours → 400 detail.day_errors (codes: before_opening, after_closing, center_closed, center_hours_missing). All bad days in one response; nothing saved.
+}
+
+example {
+  name: 400 Outside center hours
+
+  request: {
+    url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/roster/
+    method: POST
+    mode: json
+    headers: {
+      X-Center-ID: {{center_id}}
+      content-type: application/json
+    }
+
+    body:json: {
+      {
+        "entries": [
+          {
+            "day_of_week": 1,
+            "start_time": "08:00:00",
+            "end_time": "22:00:00"
+          }
+        ]
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "detail": {
+            "non_field_errors": [
+              "Roster must fall within center operating hours."
+            ],
+            "day_errors": [
+              {
+                "day_of_week": "1",
+                "day_of_week_name": "Tuesday",
+                "open_time": "09:00:00",
+                "close_time": "18:00:00",
+                "errors": [
+                  {
+                    "code": "before_opening",
+                    "field": "start_time",
+                    "message": "Starts before center opening time."
+                  },
+                  {
+                    "code": "after_closing",
+                    "field": "end_time",
+                    "message": "Ends after center closing time."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      '''
+    }
+  }
 }

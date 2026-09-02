@@ -1,6 +1,7 @@
 from django.contrib.postgres.constraints import ExclusionConstraint
 from django.db import models
 from django.db.models import F, Func, Q
+from django.db.models.functions import Lower
 
 from accounts.associates.models import Associate, AssociateRole
 from accounts.centers.models import Center
@@ -257,7 +258,8 @@ class CenterCareTeam(BaseUUIDModel):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["center", "name"],
+                "center",
+                Lower("name"),
                 name="uniq_center_care_team_name",
             ),
             models.CheckConstraint(
@@ -412,6 +414,15 @@ class Appointment(BaseUUIDModel):
                     equipment_id__isnull=False,
                     status__in=_BUSY_STATUS_VALUES,
                 ),
+            ),
+            ExclusionConstraint(
+                name="appointment_customer_center_no_overlap",
+                expressions=[
+                    (F("customer_profile_id"), "="),
+                    (F("center_id"), "="),
+                    (_exclusive_range_expression(), "&&"),
+                ],
+                condition=Q(status__in=_BUSY_STATUS_VALUES),
             ),
         ]
 

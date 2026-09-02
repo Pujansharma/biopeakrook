@@ -11,4 +11,5 @@ auth {
 docs {
   Center weekly operating hours.
   Suggested: PATCH bulk upsert first, then GET, then calendars/GET Center Availability.
+  PATCH 400 if new hours would leave active roster outside the window.
 }

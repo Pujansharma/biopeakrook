@@ -16,6 +16,10 @@ from appointments.models import (
     RoomDowntime,
 )
 from appointments.utils.constants import LeaveScope
+from appointments.utils.operating_hours import (
+    assert_operating_hours_cover_roster,
+    assert_roster_within_operating_hours,
+)
 from appointments.utils.overlap import (
     assert_associate_block_no_overlap,
     assert_associate_leave_no_overlap,
@@ -1090,6 +1094,7 @@ class AssociateRosterBulkUpsertSerializer(BaseSerializer):
         associate = validated_data["associate"]
         created_by = validated_data.get("created_by")
         replace_unlisted = validated_data.pop("replace_unlisted", False)
+        assert_roster_within_operating_hours(center, validated_data["entries"])
         results = []
         listed_day_values = []
         with transaction.atomic():
@@ -1226,6 +1231,9 @@ class CenterOperatingHoursBulkUpsertSerializer(BaseSerializer):
         close_time = validated_data.get("close_time")
         days = validated_data.get("days") or []
         closed_days = validated_data.get("closed_days") or []
+        assert_operating_hours_cover_roster(
+            center, days, closed_days, open_time, close_time
+        )
         results = []
         with transaction.atomic():
             for day_of_week in days:
