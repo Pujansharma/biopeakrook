@@ -100,10 +100,18 @@ class CenterCareTeamSerializer(BaseModelSerializer):
             raise serializers.ValidationError(
                 {"members": ["Role does not belong to this center."]}
             )
+        inactive_roles = [
+            role_id for role_id in role_ids if not roles[role_id].is_active
+        ]
+        if inactive_roles:
+            raise serializers.ValidationError(
+                {"members": ["Role is inactive."]}
+            )
         assignments = AssociateCenterAssignment.objects.filter(
             center=center,
             is_active=True,
             associate__is_active=True,
+            role__is_active=True,
             associate__pk__in=associate_ids,
         ).select_related("associate", "role")
         assignment_by_associate = {

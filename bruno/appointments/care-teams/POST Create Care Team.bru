@@ -42,6 +42,6 @@ settings {
 docs {
   Create a named care team. members required, min 2. Unique role and associate on the team.
   Name unique per center, case-insensitive ("Health" clashes with "health").
-  Associates must have an active center assignment with that role.
+  Associates must have an active center assignment with that role. Role must be active (inactive role → 400 "Role is inactive.").
   Auth: bearer {{access_token}}. Set env center_id, associate_id, role_id, associate_id_2, role_id_2.
 }
