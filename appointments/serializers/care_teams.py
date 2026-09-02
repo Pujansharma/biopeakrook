@@ -36,8 +36,8 @@ class CenterCareTeamMemberInputSerializer(BaseSerializer):
 
 
 class CenterCareTeamSerializer(BaseModelSerializer):
-    members = CenterCareTeamMemberInputSerializer(
-        many=True, required=False, write_only=True
+    members = CenterCareTeamMemberNestedSerializer(
+        many=True, read_only=True, source="prefetched_members"
     )
     members_count = serializers.IntegerField(read_only=True)
     is_active = serializers.BooleanField(required=False)
@@ -54,13 +54,14 @@ class CenterCareTeamSerializer(BaseModelSerializer):
             "updated_at",
         ]
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        member_rows = getattr(instance, "prefetched_members", [])
-        representation["members"] = CenterCareTeamMemberNestedSerializer(
-            member_rows, many=True
-        ).data
-        return representation
+    def parse_members_payload(self):
+        member_serializer = CenterCareTeamMemberInputSerializer(
+            data=self.initial_data.get("members") or [],
+            many=True,
+        )
+        if not member_serializer.is_valid():
+            raise serializers.ValidationError({"members": member_serializer.errors})
+        return self.validate_members_payload(member_serializer.validated_data)
 
     def validate_members_payload(self, members):
         if len(members) < 2:
@@ -129,15 +130,14 @@ class CenterCareTeamSerializer(BaseModelSerializer):
                         ]
                     }
                 )
-        members = attrs.get("members")
-        creating = self.instance is None
         members_in_payload = "members" in getattr(self, "initial_data", {})
-        if creating and not members:
+        creating = self.instance is None
+        if creating and not members_in_payload:
             raise serializers.ValidationError(
                 {"members": ["A care team must have at least two members."]}
             )
         if members_in_payload:
-            attrs["members"] = self.validate_members_payload(members or [])
+            attrs["members"] = self.parse_members_payload()
         return attrs
 
     def replace_members(self, care_team, members):

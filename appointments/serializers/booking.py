@@ -49,6 +49,42 @@ LIFECYCLE_AUDIT_MAP = {
 }
 
 
+def resolve_center_customer_profile(center, customer_profile_id):
+    customer_profile = (
+        CustomerProfile.objects.filter(
+            pk=customer_profile_id,
+            is_active=True,
+            center_assignments__center=center,
+            center_assignments__is_active=True,
+        )
+        .distinct()
+        .first()
+    )
+    if customer_profile is None:
+        raise serializers.ValidationError(
+            {"customer_profile_id": ["Invalid customer profile for this center."]}
+        )
+    return customer_profile
+
+
+def resolve_center_service(center, service_id):
+    service = (
+        Service.objects.filter(
+            pk=service_id,
+            is_active=True,
+            center_assignments__center=center,
+            center_assignments__is_active=True,
+        )
+        .distinct()
+        .first()
+    )
+    if service is None:
+        raise serializers.ValidationError(
+            {"service_id": ["Invalid service for this center."]}
+        )
+    return service
+
+
 def create_audit_log(appointment, actor, action, note=""):
     AppointmentAuditLog.objects.create(
         appointment=appointment,
@@ -155,22 +191,10 @@ class AppointmentSlotFindSerializer(BaseSerializer):
 
     def validate(self, attrs):
         center = self.context["center"]
-        customer_profile = CustomerProfile.objects.filter(
-            pk=attrs["customer_profile_id"],
-            is_active=True,
-        ).first()
-        if customer_profile is None:
-            raise serializers.ValidationError(
-                {"customer_profile_id": ["Invalid or inactive customer profile."]}
-            )
-        service = Service.objects.filter(
-            pk=attrs["service_id"],
-            is_active=True,
-        ).first()
-        if service is None:
-            raise serializers.ValidationError(
-                {"service_id": ["Invalid or inactive service."]}
-            )
+        customer_profile = resolve_center_customer_profile(
+            center, attrs["customer_profile_id"]
+        )
+        service = resolve_center_service(center, attrs["service_id"])
         attrs["customer_profile"] = customer_profile
         attrs["service"] = service
         attrs["center"] = center
@@ -227,22 +251,10 @@ class AppointmentBookSerializer(BaseSerializer):
 
     def validate(self, attrs):
         center = self.context["center"]
-        customer_profile = CustomerProfile.objects.filter(
-            pk=attrs["customer_profile_id"],
-            is_active=True,
-        ).first()
-        if customer_profile is None:
-            raise serializers.ValidationError(
-                {"customer_profile_id": ["Invalid or inactive customer profile."]}
-            )
-        service = Service.objects.filter(
-            pk=attrs["service_id"],
-            is_active=True,
-        ).first()
-        if service is None:
-            raise serializers.ValidationError(
-                {"service_id": ["Invalid or inactive service."]}
-            )
+        customer_profile = resolve_center_customer_profile(
+            center, attrs["customer_profile_id"]
+        )
+        service = resolve_center_service(center, attrs["service_id"])
         attrs["customer_profile"] = customer_profile
         attrs["service"] = service
         attrs["center"] = center
@@ -441,16 +453,17 @@ class AppointmentMarkLateSerializer(BaseSerializer):
 
     def update(self, instance, validated_data):
         actor = validated_data.pop("actor")
-        apply_status_change(instance, "mark-late")
-        instance.is_late = True
-        instance.late_by = validated_data["late_by"]
-        instance.save(update_fields=["is_late", "late_by", "updated_at"])
-        create_audit_log(
-            instance,
-            actor,
-            AppointmentAuditAction.MARK_LATE,
-            note=f"Late by {instance.late_by} minutes",
-        )
+        with transaction.atomic():
+            apply_status_change(instance, "mark-late")
+            instance.is_late = True
+            instance.late_by = validated_data["late_by"]
+            instance.save(update_fields=["is_late", "late_by", "updated_at"])
+            create_audit_log(
+                instance,
+                actor,
+                AppointmentAuditAction.MARK_LATE,
+                note=f"Late by {instance.late_by} minutes",
+            )
         return instance
 
 

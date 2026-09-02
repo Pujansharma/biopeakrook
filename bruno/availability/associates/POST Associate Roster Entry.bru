@@ -64,6 +64,7 @@ settings {
 docs {
   Bulk upsert weekly associate roster at center. Associate from URL. day_of_week int 0=Mon … 6=Sun. Upserts by day_of_week (create or update start/end, reactivate if soft-inactive). Additive: omitted days are left untouched. PATCH is the week-diff (omit = deactivate).
   Hours must sit inside that weekday’s center operating hours (inclusive). Outside / closed / missing hours → 400 detail.day_errors (codes: before_opening, after_closing, center_closed, center_hours_missing). All bad days in one response; nothing saved.
+  Response may include top-level exception_scan: "queued" (async associate_roster scan). Run process_appointment_exception_scans.
 }
 
 example {

@@ -39,4 +39,5 @@ docs {
   Recurring associate block. Associate from URL. days_of_week ("0"=Mon … "6"=Sun) → one row per day.
   POST 201 {detail, data}. data = array of created rows (one per day). Set associate_block_id from data[n].id for PATCH.
   No effective_until — open-ended until PATCH is_active=false. Rejects overlap.
+  Top-level exception_scan: "queued" (async multi-day scan). process_appointment_exception_scans required for apply.
 }

@@ -37,6 +37,10 @@ from appointments.utils.calendar import (
     parse_calendar_query_params,
 )
 from appointments.utils.constants import AvailabilityGranularity, LeaveScope
+from appointments.utils.exceptions import (
+    pick_exception_scan_status,
+    trigger_roster_exception_detection,
+)
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseGenericAPIView,
@@ -152,10 +156,16 @@ class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView)
             created_by=request.user,
             replace_unlisted=replace_unlisted,
         )
+        scan_result = trigger_roster_exception_detection(center, associate)
         data = AssociateRosterEntrySerializer(results, many=True).data
-        if request.method == "POST":
-            return self.send_response(self.create_success_message, data)
-        return self.send_response(self.update_success_message, data)
+        message = self.create_success_message
+        if request.method != "POST":
+            message = self.update_success_message
+        response = self.send_response(message, data)
+        exception_scan = pick_exception_scan_status([scan_result])
+        if exception_scan is not None:
+            response.data["exception_scan"] = exception_scan
+        return response
 
 
 class AssociateAvailabilityBlockListCreateView(
@@ -189,10 +199,17 @@ class AssociateAvailabilityBlockListCreateView(
             associate=self.get_associate(),
             created_by=request.user,
         )
-        for block in results:
-            self.apply_exception_side_effects(block, serializer.validated_data, created=True)
+        scan_results = [
+            self.apply_exception_side_effects(
+                block, serializer.validated_data, created=True
+            )
+            for block in results
+        ]
         data = AssociateAvailabilityBlockSerializer(results, many=True).data
-        return self.send_response(self.create_success_message, data, status=201)
+        response = self.send_response(
+            self.create_success_message, data, status=201
+        )
+        return self.attach_exception_scan(response, scan_results)
 
 
 class AssociateAvailabilityBlockDetailView(
@@ -311,10 +328,17 @@ class RoomAvailabilityBlockListCreateView(
             room=self.get_room(),
             created_by=request.user,
         )
-        for block in results:
-            self.apply_exception_side_effects(block, serializer.validated_data, created=True)
+        scan_results = [
+            self.apply_exception_side_effects(
+                block, serializer.validated_data, created=True
+            )
+            for block in results
+        ]
         data = RoomAvailabilityBlockSerializer(results, many=True).data
-        return self.send_response(self.create_success_message, data, status=201)
+        response = self.send_response(
+            self.create_success_message, data, status=201
+        )
+        return self.attach_exception_scan(response, scan_results)
 
 
 class RoomAvailabilityBlockDetailView(
@@ -429,10 +453,17 @@ class EquipmentAvailabilityBlockListCreateView(
             equipment=self.get_equipment(),
             created_by=request.user,
         )
-        for block in results:
-            self.apply_exception_side_effects(block, serializer.validated_data, created=True)
+        scan_results = [
+            self.apply_exception_side_effects(
+                block, serializer.validated_data, created=True
+            )
+            for block in results
+        ]
         data = EquipmentAvailabilityBlockSerializer(results, many=True).data
-        return self.send_response(self.create_success_message, data, status=201)
+        response = self.send_response(
+            self.create_success_message, data, status=201
+        )
+        return self.attach_exception_scan(response, scan_results)
 
 
 class EquipmentAvailabilityBlockDetailView(

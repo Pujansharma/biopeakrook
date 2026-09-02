@@ -46,4 +46,5 @@ docs {
   Omitted active days soft-deactivated (is_active=false). Empty entries rejected — cannot wipe the whole week.
   POST stays additive (omitted days untouched).
   Same center-hours gate as POST (400 detail.day_errors).
+  Response may include top-level exception_scan: "queued" (async associate_roster scan). Run process_appointment_exception_scans.
 }

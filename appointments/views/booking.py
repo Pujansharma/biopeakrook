@@ -75,6 +75,12 @@ def integrity_error_matches_constraint(error, constraint_name):
     return constraint_name in integrity_error_constraint_name(error)
 
 
+def appointment_write_integrity_detail(error):
+    if integrity_error_matches_constraint(error, APPOINTMENT_CODE_CONSTRAINT):
+        return "Appointment code already exists."
+    return "Slot no longer available."
+
+
 def get_appointment_idempotency_key(center, idempotency_key, unexpired_only=False):
     queryset = AppointmentIdempotencyKey.objects.filter(
         center=center,
@@ -262,9 +268,7 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
                         status=200,
                     )
             record_book_outcome(center.pk, "conflict")
-            if integrity_error_matches_constraint(error, APPOINTMENT_CODE_CONSTRAINT):
-                self.raise_bad_request("Appointment code already exists.")
-            self.raise_bad_request("Slot no longer available.")
+            self.raise_bad_request(appointment_write_integrity_detail(error))
 
         appointment = serializer.instance
         record_book_outcome(center.pk, "success")
@@ -533,8 +537,8 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
                 care_team=care_team,
                 actor=request.user,
             )
-        except IntegrityError:
-            self.raise_bad_request("Slot no longer available.")
+        except IntegrityError as error:
+            self.raise_bad_request(appointment_write_integrity_detail(error))
 
         appointment = serializer.instance
         record_lifecycle(center.pk, "reschedule", appointment.status)

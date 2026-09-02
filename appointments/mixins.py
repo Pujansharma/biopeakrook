@@ -6,6 +6,7 @@ from appointments.models import Appointment
 from appointments.utils.exceptions import (
     apply_availability_exception_hooks,
     get_source_type_for_instance,
+    pick_exception_scan_status,
 )
 from core.utils.exceptions import get_object_or_404
 
@@ -117,13 +118,23 @@ class AvailabilityExceptionHooksMixin:
         source_type = get_source_type_for_instance(instance)
         if source_type is None:
             return None
-        return apply_availability_exception_hooks(
+        result = apply_availability_exception_hooks(
             center=self.get_center(),
             instance=instance,
             source_type=source_type,
             validated_data=validated_data,
             created=created,
         )
+        self._last_exception_scan = result
+        return result
+
+    def attach_exception_scan(self, response, scan_results=None):
+        if scan_results is None:
+            scan_results = [getattr(self, "_last_exception_scan", None)]
+        exception_scan = pick_exception_scan_status(scan_results)
+        if exception_scan is not None:
+            response.data["exception_scan"] = exception_scan
+        return response
 
     def perform_update(self, serializer):
         super().perform_update(serializer)
@@ -132,3 +143,13 @@ class AvailabilityExceptionHooksMixin:
             serializer.validated_data,
             created=False,
         )
+
+    def patch(self, request, *args, **kwargs):
+        self._last_exception_scan = None
+        response = super().patch(request, *args, **kwargs)
+        return self.attach_exception_scan(response)
+
+    def post(self, request, *args, **kwargs):
+        self._last_exception_scan = None
+        response = super().post(request, *args, **kwargs)
+        return self.attach_exception_scan(response)

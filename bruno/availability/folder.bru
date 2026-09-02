@@ -21,6 +21,8 @@ docs {
   Aggregate associate calendar lives under bruno/associates/ (not center-scoped).
 
   All writes use {detail, data}. Block POSTs (assoc/room/equip): data = array of created rows; use data[0].id / data[n].id for env ids.
+  Writes that trigger exception detection may also return top-level exception_scan: queued | completed | resolved | skipped (data shape unchanged).
+  Async scans (recurring blocks, roster): run `uv run manage.py process_appointment_exception_scans` (~1 min cron).
 
   Sample fixtures clustered early Sep 2026 so calendar GETs see CRUD seed data.
 

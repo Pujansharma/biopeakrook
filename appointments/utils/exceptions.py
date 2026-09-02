@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from accounts.associates.models import Associate
 from accounts.centers.models import Center, CenterClosure
 from appointments.models import (
     Appointment,
@@ -38,7 +39,12 @@ from appointments.utils.intervals import (
     full_day_interval,
 )
 from appointments.utils.metrics import record_exceptions_detected
+from appointments.utils.operations import invalidate_operations_cache
 from appointments.utils.overlap import datetimes_overlap, local_day_window
+from appointments.utils.scheduling import (
+    compute_associate_free_windows,
+    is_interval_contained_in_windows,
+)
 
 logger = logging.getLogger("appointments")
 
@@ -360,6 +366,88 @@ def scan_source_intervals(
     return created_count
 
 
+def detect_and_reconcile_roster_exceptions(center: Center, associate_id) -> int:
+    """
+    Find busy appointments outside (center hours ∩ roster − blocks − leaves −
+    closures) after a roster shrink/deactivate. Create open associate_roster
+    exceptions; clear open ones that no longer conflict.
+    """
+    associate = Associate.objects.filter(pk=associate_id, is_active=True).first()
+    if associate is None:
+        return 0
+    timezone_name = get_center_timezone_name(center)
+    query_start = timezone.localdate()
+    query_end = query_start + timedelta(days=RECURRING_SCAN_HORIZON_DAYS)
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    free_windows = compute_associate_free_windows(
+        center,
+        associate,
+        query_start,
+        query_end,
+        timezone_name,
+        {},
+    )
+    appointments = Appointment.objects.filter(
+        center=center,
+        status__in=BUSY_APPOINTMENT_STATUSES,
+        associate_links__associate_id=associate_id,
+        exclusive_start_datetime__lt=range_end,
+        exclusive_end_datetime__gt=range_start,
+    ).distinct()
+    created_count = 0
+    conflicted_appointment_ids = set()
+    for appointment in appointments:
+        if is_interval_contained_in_windows(
+            appointment.exclusive_start_datetime,
+            appointment.exclusive_end_datetime,
+            free_windows,
+        ):
+            continue
+        conflicted_appointment_ids.add(appointment.pk)
+        snapshot = {
+            "source_type": ExceptionSourceType.ASSOCIATE_ROSTER,
+            "source_id": associate_id,
+            "source_label": "Associate roster reduced",
+            "source_start_datetime": appointment.exclusive_start_datetime,
+            "source_end_datetime": appointment.exclusive_end_datetime,
+        }
+        if create_exception_for_appointment(appointment, center, snapshot):
+            created_count += 1
+    now = timezone.now()
+    stale_exceptions = AppointmentException.objects.filter(
+        center=center,
+        source_type=ExceptionSourceType.ASSOCIATE_ROSTER,
+        source_id=associate_id,
+        status=ExceptionStatus.OPEN,
+    ).exclude(appointment_id__in=conflicted_appointment_ids)
+    appointment_ids_to_recompute = list(
+        stale_exceptions.values_list("appointment_id", flat=True).distinct()
+    )
+    stale_exceptions.update(
+        status=ExceptionStatus.RESOLVED,
+        resolution=ExceptionResolution.BLOCKER_CLEARED,
+        resolved_at=now,
+        updated_at=now,
+    )
+    for appointment_id in appointment_ids_to_recompute:
+        appointment = Appointment.objects.filter(pk=appointment_id).first()
+        if appointment is not None:
+            recompute_appointment_exception_flag(appointment)
+    return created_count
+
+
+def trigger_roster_exception_detection(center: Center, associate) -> dict:
+    enqueue_exception_scan(
+        center,
+        ExceptionSourceType.ASSOCIATE_ROSTER,
+        associate.pk,
+    )
+    invalidate_operations_cache(center.pk)
+    return {"exception_scan": "queued"}
+
+
 def detect_exceptions_for_source(
     source_type: str,
     source_id,
@@ -367,12 +455,24 @@ def detect_exceptions_for_source(
     sync: bool = True,
     center: Center | None = None,
 ) -> int:
+    mode = "sync" if sync else "async"
+    if source_type == ExceptionSourceType.ASSOCIATE_ROSTER:
+        if center is None:
+            return 0
+        created = detect_and_reconcile_roster_exceptions(center, source_id)
+        if created:
+            record_exceptions_detected(
+                center.pk,
+                source_type,
+                mode,
+                created,
+            )
+        return created
     source = load_source_instance(source_type, source_id)
     if source is None:
         return 0
     centers = resolve_centers_for_source(source_type, source, center)
     total_created = 0
-    mode = "sync" if sync else "async"
     for scan_center in centers:
         created = scan_source_intervals(source_type, source, scan_center)
         total_created += created
@@ -612,6 +712,19 @@ def get_source_type_for_instance(instance) -> str | None:
     return INSTANCE_SOURCE_TYPE_MAP.get(type(instance))
 
 
+def pick_exception_scan_status(scan_results) -> str | None:
+    statuses = [
+        result["exception_scan"]
+        for result in scan_results
+        if result and result.get("exception_scan")
+    ]
+    if not statuses:
+        return None
+    if "queued" in statuses:
+        return "queued"
+    return statuses[0]
+
+
 def apply_availability_exception_hooks(
     center: Center,
     instance,
@@ -620,8 +733,6 @@ def apply_availability_exception_hooks(
     *,
     created: bool = False,
 ) -> dict | None:
-    from appointments.utils.operations import invalidate_operations_cache
-
     validated_data = validated_data or {}
     if not created and should_resolve_on_patch(validated_data):
         trigger_exception_resolution(source_type, instance.pk)

@@ -202,6 +202,10 @@ Legacy `GET/POST /centers/<id>/operating-hours/` still exists but is not the can
 
 Bulk weekly work hours for an associate at this center. Associate comes from the URL (not the body).
 
+After every successful roster write the API **enqueues** an async exception scan (`exception_scan: "queued"` on the response). The job compares busy appointments for that associate against free windows (`center hours ∩ roster − blocks − leaves − closures`) over the next ~90 days. Appointments that no longer fit get an open `AppointmentException` with `source_type=associate_roster` (source id = associate id). Restoring roster clears those open exceptions with `blocker_cleared`.
+
+Run `uv run manage.py process_appointment_exception_scans` on a short cron (about every minute) so queued scans apply. Without that command, jobs stay `pending`.
+
 ```json
 {
   "entries": [
@@ -458,7 +462,9 @@ Busy (exclusive reservation): `confirmed`, `checked_in`, `in_progress`. Not busy
 - Center timezone defaults to `settings.TIME_ZONE` — no per-center timezone field yet
 - Rooms/equipment base availability = center operating hours (legacy `RoomSchedule` / `EquipmentSchedule` not used)
 - User generates migrations (`makemigrations` not run by agents)
+- Availability write responses may include top-level `exception_scan`: `queued` \| `completed` \| `resolved` \| `skipped` (sibling of `detail` / `data`; `data` shape unchanged)
+- Ops: cron `process_appointment_exception_scans` (~1 min) + optional nightly `reconcile_appointment_exception_flags` + `cleanup_appointment_idempotency_keys`
 
 ---
 
-*Last updated: 2026-09-02*
+*Last updated: 2026-09-03*

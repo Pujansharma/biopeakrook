@@ -25,11 +25,14 @@ class AppointmentExceptionListView(AppointmentExceptionMixin, BaseListAPIView):
     def get_queryset(self):
         center = self.get_center()
         status = self.request.query_params.get("status", ExceptionStatus.OPEN)
+        if status not in ExceptionStatus.values:
+            self.raise_bad_request("Invalid status. Use open or resolved.")
         queryset = (
             AppointmentException.objects.filter(center=center, status=status)
             .select_related(
                 "appointment__customer_profile",
                 "appointment__service",
+                "appointment__care_team",
                 "appointment__room",
                 "appointment__equipment",
             )

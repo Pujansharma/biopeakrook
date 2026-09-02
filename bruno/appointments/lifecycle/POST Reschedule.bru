@@ -45,4 +45,6 @@ docs {
   Allowed from confirmed or checked_in. Lands confirmed. Not from in_progress.
   Send care_team_id XOR associates. Adjust slot to match availability.
   care_team_id: live assignment+role required; stale required members → 400 "Care team does not cover all required service roles."
+  associates[] also require a live center assignment with an active role.
+  Duplicate appointment code IntegrityError → 400 "Appointment code already exists." Overlap → 400 "Slot no longer available."
 }

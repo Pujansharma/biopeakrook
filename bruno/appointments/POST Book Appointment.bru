@@ -52,4 +52,6 @@ docs {
   Books a confirmed appointment. Use Idempotency-Key for safe retries.
   Send care_team_id XOR associates. Adjust start/end to match a slot from POST Find Slots.
   care_team_id uses the same live assignment+role filter as slots; stale required members → 400 "Care team does not cover all required service roles."
+  associates[] also require a live center assignment with an active role.
+  customer_profile_id / service_id must be active at this center. Missing, inactive, or other-center → 400 "Invalid customer profile for this center." / "Invalid service for this center."
 }

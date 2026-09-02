@@ -21,6 +21,7 @@ from appointments.utils.calendar import (
 from appointments.utils.care_teams import (
     apply_care_team_to_resource_pools,
     expand_care_team_for_assignment,
+    live_associate_center_assignments,
 )
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.intervals import (
@@ -155,6 +156,7 @@ def get_eligible_associates_for_role(center, role, modality):
             role=role,
             is_active=True,
             associate__is_active=True,
+            role__is_active=True,
         )
         .select_related("associate", "associate__user")
         .distinct()
@@ -636,13 +638,11 @@ def validate_associate_assignments(center, associates_payload, role_requirements
         provided_role_ids.add(role_id)
         if role_id not in required_role_ids:
             raise ValidationError(f"Unexpected role assignment: {role_id}.")
-        assignment = AssociateCenterAssignment.objects.filter(
-            center=center,
-            associate=associate_id,
-            role=role_id,
-            is_active=True,
-            associate__is_active=True,
-        ).first()
+        assignment = (
+            live_associate_center_assignments(center, [associate_id])
+            .filter(role=role_id)
+            .first()
+        )
         if assignment is None:
             raise ValidationError(
                 "Associate is not assigned to this center with the required role."
