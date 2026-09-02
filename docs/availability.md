@@ -56,13 +56,12 @@ One GET endpoint per resource type. All return the same day-by-day shape.
 | GET | `/centers/<center_id>/availability/associates/<associate_id>/` | Associate at one center |
 | GET | `/centers/<center_id>/availability/rooms/<room_id>/` | Room at center |
 | GET | `/centers/<center_id>/availability/equipment/<equipment_id>/` | Equipment at center |
-| GET | `/associates/<associate_id>/availability/` | Associate across **all** assigned centers |
 
 ### Authentication
 
 - **JWT Bearer** required (`Authorization: Bearer <token>`)
 - **Center-scoped routes**: admin or associate with a valid assignment; associates must send `X-Center-ID` matching the URL center
-- **Aggregate associate route**: any admin or any associate may view any colleague’s cross-center calendar
+- Associate calendar/roster/block/leave routes require the target associate to have an **active center assignment** at the URL center
 
 ### Response envelope
 
@@ -128,24 +127,6 @@ Event types you may see:
 - `associate_block` / `associate_block_recurring`
 - `associate_leave` (includes `scope`: `center` or `all_centers`)
 - `closure`
-
-### Example: aggregate associate calendar
-
-```json
-{
-  "resource_type": "associate_aggregate",
-  "associate_id": "0195a1b2-...",
-  "start": "2026-08-24",
-  "end": "2026-08-30",
-  "granularity": "week",
-  "center_calendars": [
-    { "resource_type": "associate", "center_id": "...", "days": [ ... ] },
-    { "resource_type": "associate", "center_id": "...", "days": [ ... ] }
-  ]
-}
-```
-
-Each entry in `center_calendars` is a full per-center associate calendar for the same date range.
 
 ---
 
@@ -369,14 +350,13 @@ Same as rooms. Equip from URL. Blocks: one-off (`date`+times) or recurring (`day
 
 - **Roster** and **blocks** are always per center
 - **Leaves** can be `scope: "center"` (one center only) or `scope: "all_centers"` (every center)
-- Center-scoped GET calendars only show that center’s context
-- Aggregate GET (`/associates/<id>/availability/`) returns one calendar per assigned center in `center_calendars`
+- Associate availability is always queried per center (`/centers/<center_id>/availability/associates/<associate_id>/`)
 
 ---
 
 ## Bruno collection
 
-Requests live in `bruno/centers/availability/` (center routes) and `bruno/associates/` (aggregate calendar).
+Requests live in `bruno/availability/` (center-scoped calendar and write routes).
 
 Subfolders under availability (suggested test order):
 
