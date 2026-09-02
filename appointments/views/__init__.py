@@ -1,7 +1,6 @@
 from django.db import models
 from rest_framework.response import Response
 
-from accounts.associates.models import Associate
 from accounts.centers.models import CenterClosure, CenterOperatingHour
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from appointments.mixins import CenterAvailabilityMixin, AvailabilityExceptionHooksMixin
@@ -32,7 +31,6 @@ from appointments.serializers import (
     RoomDowntimeSerializer,
 )
 from appointments.utils.calendar import (
-    compute_associate_aggregate_calendar,
     compute_associate_center_calendar,
     compute_center_calendar,
     compute_equipment_calendar,
@@ -71,11 +69,7 @@ class AssociateCenterAvailabilityCalendarView(
 
     def get(self, request, *args, **kwargs):
         center = self.get_center()
-        associate = get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["associate_id"],
-        )
+        associate = self.get_associate()
         start_date, granularity = parse_calendar_query_params(request)
         if granularity not in AvailabilityGranularity.values:
             self.raise_bad_request("Invalid granularity. Use day, week, or month.")
@@ -119,22 +113,6 @@ class EquipmentAvailabilityCalendarView(CenterAvailabilityMixin, BaseGenericAPIV
         return self.send_response("Equipment availability retrieved.", data)
 
 
-class AssociateAggregateAvailabilityCalendarView(BaseGenericAPIView):
-    permission_classes = [IsAdminUser | IsAssociateUser]
-
-    def get(self, request, *args, **kwargs):
-        associate = get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["pk"],
-        )
-        start_date, granularity = parse_calendar_query_params(request)
-        if granularity not in AvailabilityGranularity.values:
-            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
-        data = compute_associate_aggregate_calendar(associate, start_date, granularity)
-        return self.send_response("Associate aggregate availability retrieved.", data)
-
-
 class AssociateRosterEntryListView(CenterAvailabilityMixin, BaseListAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateRosterEntrySerializer
@@ -157,13 +135,6 @@ class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView)
     permission_classes = [IsAdminUser | IsAssociateUser]
     create_success_message = "Associate roster entries upserted."
     update_success_message = "Associate roster entries updated."
-
-    def get_associate(self):
-        return get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["associate_id"],
-        )
 
     def post(self, request, *args, **kwargs):
         return self.upsert_roster(request, replace_unlisted=False)
@@ -199,13 +170,6 @@ class AssociateAvailabilityBlockListCreateView(
             return AssociateAvailabilityBlockCreateSerializer
         return AssociateAvailabilityBlockSerializer
 
-    def get_associate(self):
-        return get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["associate_id"],
-        )
-
     def get_queryset(self):
         center = self.get_center()
         associate = self.get_associate()
@@ -238,13 +202,6 @@ class AssociateAvailabilityBlockDetailView(
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateAvailabilityBlockSerializer
 
-    def get_associate(self):
-        return get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["associate_id"],
-        )
-
     def get_queryset(self):
         center = self.get_center()
         associate = self.get_associate()
@@ -258,13 +215,6 @@ class AssociateLeaveListCreateView(
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateLeaveSerializer
-
-    def get_associate(self):
-        return get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["associate_id"],
-        )
 
     def get_queryset(self):
         center = self.get_center()
@@ -308,13 +258,6 @@ class AssociateLeaveDetailView(
 ):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = AssociateLeaveSerializer
-
-    def get_associate(self):
-        return get_object_or_404(
-            Associate.objects.filter(is_active=True),
-            "Associate not found.",
-            pk=self.kwargs["associate_id"],
-        )
 
     def get_queryset(self):
         center = self.get_center()

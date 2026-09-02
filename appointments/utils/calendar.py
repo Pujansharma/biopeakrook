@@ -4,7 +4,6 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from accounts.associates.models import AssociateCenterAssignment
 from accounts.centers.models import CenterClosure, CenterOperatingHour
 from appointments.models import (
     AssociateAvailabilityBlock,
@@ -742,33 +741,6 @@ def compute_equipment_calendar(center, equipment, start_date, granularity):
         "end": query_end.isoformat(),
         "granularity": granularity,
         "days": days,
-    }
-
-
-def compute_associate_aggregate_calendar(associate, start_date, granularity):
-    assignments = AssociateCenterAssignment.objects.filter(
-        associate=associate,
-        is_active=True,
-        center__is_active=True,
-    ).select_related("center")
-    center_calendars = []
-    for assignment in assignments:
-        center_calendars.append(
-            compute_associate_center_calendar(
-                assignment.center,
-                associate,
-                start_date,
-                granularity,
-            )
-        )
-    query_start, query_end = resolve_query_date_range(start_date, granularity)
-    return {
-        "resource_type": "associate_aggregate",
-        "associate_id": str(associate.pk),
-        "start": query_start.isoformat(),
-        "end": query_end.isoformat(),
-        "granularity": granularity,
-        "center_calendars": center_calendars,
     }
 
 

@@ -1,4 +1,4 @@
-from accounts.associates.models import AssociateCenterAssignment
+from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.centers.models import Center
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
@@ -45,6 +45,18 @@ class CenterAvailabilityMixin:
         else:
             filter_kwargs["is_active"] = True
         return filter_kwargs
+
+    def get_associate(self):
+        center = self.get_center()
+        return get_object_or_404(
+            Associate.objects.filter(
+                is_active=True,
+                center_assignments__center=center,
+                center_assignments__is_active=True,
+            ).distinct(),
+            "Associate not found.",
+            pk=self.kwargs["associate_id"],
+        )
 
 
 class CenterAppointmentsMixin:
