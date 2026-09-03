@@ -412,8 +412,6 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             "modality_code",
             "required_room_type_id",
             "required_room_type",
-            "required_equipment_type_id",
-            "required_equipment_type",
             "required_role_ids",
             "required_roles",
             "is_active",
@@ -422,22 +420,16 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
         ]
         extra_kwargs = {
             "required_room_type": {"read_only": True},
-            "required_equipment_type": {"read_only": True},
         }
 
     def get_fields(self):
         fields = super().get_fields()
         center = self.context.get("center")
         room_type_queryset = RoomType.objects.none()
-        equipment_type_queryset = EquipmentType.objects.none()
         if center is not None:
             room_type_queryset = RoomType.objects.filter_active(center=center)
-            equipment_type_queryset = EquipmentType.objects.filter_active(
-                center=center
-            )
 
         fields["required_room_type"] = RoomTypeNestedSerializer(read_only=True)
-        fields["required_equipment_type"] = EquipmentTypeNestedSerializer(read_only=True)
         fields["required_room_type_id"] = serializers.PrimaryKeyRelatedField(
             source="required_room_type",
             queryset=room_type_queryset,
@@ -446,18 +438,6 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             allow_null=True,
             error_messages={
                 "does_not_exist": "Invalid or inactive room type for this center."
-            },
-        )
-        fields["required_equipment_type_id"] = serializers.PrimaryKeyRelatedField(
-            source="required_equipment_type",
-            queryset=equipment_type_queryset,
-            write_only=True,
-            required=False,
-            allow_null=True,
-            error_messages={
-                "does_not_exist": (
-                    "Invalid or inactive equipment type for this center."
-                )
             },
         )
         return fields

@@ -26,7 +26,6 @@ body:json {
     "buffer_after": 10,
     "modality": "in_person",
     "required_room_type_id": null,
-    "required_equipment_type_id":null,
     "required_role_ids": []
   }
 }
@@ -43,18 +42,16 @@ docs {
   
   All resource fields optional (omit = leave unchanged):
   - required_room_type_id — UUID | null (null clears)
-  - required_equipment_type_id — UUID | null (null clears)
   - required_role_ids — UUID[] | null | [] (null/[] clears). Response always includes required_role_ids ([] when none) + nested required_roles.
   
   Example with resources:
   {
     "duration": 30,
     "required_room_type_id": "01a03557-a6fd-74ea-a74a-e7db599aefa1",
-    "required_equipment_type_id": "01a035af-2065-735c-b28d-9d54ce1d533d",
     "required_role_ids": []
   }
   
-  Type UUIDs from GET room-types / equipment-types (not rooms/equipments).
-  required_room_type_id, required_equipment_type_id, required_role_ids must be active; inactive → 400.
+  Type UUID from GET room-types (not rooms). No equipment type on assignment.
+  required_room_type_id, required_role_ids must be active; inactive → 400.
   Set env service_id first.
 }

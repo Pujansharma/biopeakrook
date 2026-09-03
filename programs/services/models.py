@@ -66,13 +66,6 @@ class CenterServiceAssignment(BaseUUIDModel):
         blank=True,
         related_name="service_assignments",
     )
-    required_equipment_type = models.ForeignKey(
-        "inventory.EquipmentType",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="service_assignments",
-    )
 
     class Meta:
         ordering = ["-created_at"]

@@ -32,7 +32,7 @@ from appointments.utils.intervals import (
     subtract_intervals,
 )
 from core.utils.constants import AppointmentModes
-from inventory.models import Equipment, Room
+from inventory.models import Room
 from programs.services.models import CenterServiceAssignment
 
 SLOT_CAP_PER_DAY = 200
@@ -130,7 +130,7 @@ def get_center_service_assignment(center, service):
             is_active=True,
         )
         .prefetch_related("role_requirements__role")
-        .select_related("required_room_type", "required_equipment_type")
+        .select_related("required_room_type")
         .first()
     )
 
@@ -183,26 +183,18 @@ def build_service_resource_pools(center, assignment, modality):
             }
         )
     rooms = []
-    equipment = []
     if modality == AppointmentModes.IN_PERSON:
         if assignment.required_room_type is not None:
             rooms = list(
                 Room.objects.filter_active(
                     center=center,
-                    room_type=assignment.required_room_type,
-                )
-            )
-        if assignment.required_equipment_type is not None:
-            equipment = list(
-                Equipment.objects.filter_active(
-                    center=center,
-                    equipment_type=assignment.required_equipment_type,
+                    room_type_ref=assignment.required_room_type,
                 )
             )
     return {
         "roles": role_pools,
         "rooms": rooms,
-        "equipment": equipment,
+        "equipment": [],
     }
 
 
@@ -210,16 +202,15 @@ def validate_service_bookable(assignment, modality, resource_pools):
     role_pools = resource_pools["roles"]
     has_roles = len(role_pools) > 0
     has_room_type = assignment.required_room_type is not None
-    has_equipment_type = assignment.required_equipment_type is not None
     if not has_roles and modality == AppointmentModes.VIRTUAL:
         return
     if (
         not has_roles
         and modality == AppointmentModes.IN_PERSON
-        and (has_room_type or has_equipment_type)
+        and has_room_type
     ):
         return
-    if not has_roles and not has_room_type and not has_equipment_type:
+    if not has_roles and not has_room_type:
         raise ValidationError("Service is not bookable at this center.")
 
 
@@ -430,23 +421,6 @@ def filter_free_rooms(
     return available
 
 
-def filter_free_equipment(
-    equipment_list,
-    exclusive_start,
-    exclusive_end,
-    free_window_cache,
-):
-    available = []
-    for equipment in equipment_list:
-        equipment_key = str(equipment.pk)
-        windows = free_window_cache["equipment"].get(equipment_key, [])
-        if is_interval_contained_in_windows(
-            exclusive_start, exclusive_end, windows
-        ):
-            available.append(equipment)
-    return available
-
-
 def serialize_associate_candidate(associate):
     return {
         "id": str(associate.pk),
@@ -456,10 +430,6 @@ def serialize_associate_candidate(associate):
 
 def serialize_room_candidate(room):
     return {"id": str(room.pk), "name": room.name}
-
-
-def serialize_equipment_candidate(equipment):
-    return {"id": str(equipment.pk), "name": equipment.name}
 
 
 def find_appointment_slots(
@@ -529,10 +499,6 @@ def find_appointment_slots(
         modality == AppointmentModes.IN_PERSON
         and assignment.required_room_type is not None
     )
-    requires_equipment = (
-        modality == AppointmentModes.IN_PERSON
-        and assignment.required_equipment_type is not None
-    )
 
     for slot_start, slot_end in candidate_slots:
         exclusive_start, exclusive_end = compute_exclusive_bounds(
@@ -587,20 +553,6 @@ def find_appointment_slots(
                 serialize_room_candidate(room) for room in free_rooms
             ]
 
-        equipment_candidates = []
-        if requires_equipment:
-            free_equipment = filter_free_equipment(
-                resource_pools["equipment"],
-                exclusive_start,
-                exclusive_end,
-                free_window_cache,
-            )
-            if not free_equipment:
-                continue
-            equipment_candidates = [
-                serialize_equipment_candidate(item) for item in free_equipment
-            ]
-
         slot_payload = {
             "start": slot_start.isoformat(),
             "end": slot_end.isoformat(),
@@ -609,8 +561,6 @@ def find_appointment_slots(
         if modality == AppointmentModes.IN_PERSON:
             if requires_room:
                 slot_payload["rooms"] = room_candidates
-            if requires_equipment:
-                slot_payload["equipment"] = equipment_candidates
         slots.append(slot_payload)
 
         if len(slots) >= SLOT_CAP_PER_DAY:
@@ -690,8 +640,6 @@ def validate_appointment_allocation(
     if modality == AppointmentModes.IN_PERSON:
         if assignment.required_room_type is not None and room is None:
             raise ValidationError("A room is required for this service.")
-        if assignment.required_equipment_type is not None and equipment is None:
-            raise ValidationError("Equipment is required for this service.")
         if room is not None and room.center.pk != center.pk:
             raise ValidationError("Room does not belong to this center.")
         if equipment is not None and equipment.center.pk != center.pk:
@@ -699,22 +647,20 @@ def validate_appointment_allocation(
         if (
             room is not None
             and assignment.required_room_type is not None
-            and room.room_type.pk != assignment.required_room_type.pk
+            and (
+                room.room_type_ref is None
+                or room.room_type_ref.pk != assignment.required_room_type.pk
+            )
         ):
             raise ValidationError("Room type does not match service requirements.")
-        if (
-            equipment is not None
-            and assignment.required_equipment_type is not None
-            and equipment.equipment_type.pk != assignment.required_equipment_type.pk
-        ):
-            raise ValidationError(
-                "Equipment type does not match service requirements."
-            )
     else:
         if room is not None or equipment is not None:
             raise ValidationError(
                 "Room and equipment must not be set for virtual appointments."
             )
+
+    if equipment is not None:
+        resource_pools["equipment"] = [equipment]
 
     buffer_before = assignment.buffer_before
     buffer_after = assignment.buffer_after

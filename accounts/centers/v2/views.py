@@ -1,6 +1,6 @@
 import re
 
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
 
 from accounts.centers.v2.mixins import CenterV2Mixin
 from accounts.centers.v2.serializers import (
@@ -12,6 +12,7 @@ from accounts.centers.v2.serializers import (
     RoomV2Serializer,
 )
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from core.utils.constants import AppointmentModes
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
     BaseListAPIView,
@@ -20,7 +21,11 @@ from core.utils.views.main import (
 )
 from inventory.models import Equipment, EquipmentType, Room, RoomType
 from inventory.utils.constants import EquipmentOperationalStatus
-from programs.services.models import CenterServiceAssignment, Service
+from programs.services.models import (
+    CenterServiceAssignment,
+    CenterServiceRoleRequirement,
+    Service,
+)
 
 UUID_QUERY_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -268,7 +273,7 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
             "center_assignments",
             queryset=CenterServiceAssignment.objects.filter(**assignment_filter)
             .prefetch_related("role_requirements__role")
-            .select_related("required_room_type", "required_equipment_type"),
+            .select_related("required_room_type"),
         )
 
     def get_queryset(self):
@@ -286,8 +291,76 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
 
+        min_duration_met_query = self.request.query_params.get("min_duration_met")
+        min_duration_met_filters = {
+            "1": Exists(
+                CenterServiceAssignment.objects.filter(
+                    service_id=OuterRef("pk"),
+                    center=center,
+                    duration__gte=30,
+                )
+            ),
+            "0": Exists(
+                CenterServiceAssignment.objects.filter(
+                    Q(duration__isnull=True) | Q(duration__lt=30),
+                    service_id=OuterRef("pk"),
+                    center=center,
+                )
+            ),
+        }
+        min_duration_met_filter = min_duration_met_filters.get(
+            min_duration_met_query, Q()
+        )
+
+        has_active_role = Exists(
+            CenterServiceRoleRequirement.objects.filter(
+                assignment__service_id=OuterRef("pk"),
+                assignment__center=center,
+                is_active=True,
+                role__is_active=True,
+            )
+        )
+        has_live_room = Exists(
+            CenterServiceAssignment.objects.filter(
+                service_id=OuterRef("pk"),
+                center=center,
+                required_room_type__isnull=False,
+                required_room_type__is_active=True,
+            )
+        )
+        is_virtual_assignment = Exists(
+            CenterServiceAssignment.objects.filter(
+                service_id=OuterRef("pk"),
+                center=center,
+                modality=AppointmentModes.VIRTUAL,
+            )
+        )
+        resource_ready = Q(is_virtual_assignment=True, has_active_role=True) | (
+            Q(is_virtual_assignment=False)
+            & Q(has_active_role=True)
+            & Q(has_live_room=True)
+        )
+        resource_active_filters = {
+            "1": resource_ready,
+            "0": ~resource_ready,
+        }
+        resource_active_query = self.request.query_params.get("resource_active")
+        resource_active_filter = resource_active_filters.get(
+            resource_active_query, Q()
+        )
+
         return (
-            Service.objects.filter(search, **assignment_filter)
+            Service.objects.annotate(
+                has_active_role=has_active_role,
+                has_live_room=has_live_room,
+                is_virtual_assignment=is_virtual_assignment,
+            )
+            .filter(
+                search,
+                min_duration_met_filter,
+                resource_active_filter,
+                **assignment_filter,
+            )
             .prefetch_related(self._assignment_prefetch(center))
             .distinct()
             .order_by("-created_at")
@@ -313,7 +386,7 @@ class CenterServiceV2DetailView(CenterV2Mixin, BaseRetrieveUpdateAPIView):
                     "center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(center=center)
                     .prefetch_related("role_requirements__role")
-                    .select_related("required_room_type", "required_equipment_type"),
+                    .select_related("required_room_type"),
                 )
             )
             .distinct()
@@ -333,7 +406,7 @@ class CenterServiceV2DetailView(CenterV2Mixin, BaseRetrieveUpdateAPIView):
         assignment = (
             CenterServiceAssignment.objects.filter(center=center, service=service)
             .prefetch_related("role_requirements__role")
-            .select_related("required_room_type", "required_equipment_type")
+            .select_related("required_room_type")
             .first()
         )
         if not assignment:

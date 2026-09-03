@@ -13,7 +13,9 @@ get {
 params:query {
   page: 1
   limit: 10
-  search: 
+  search:
+  min_duration_met:
+  resource_active:
 }
 
 headers {
@@ -30,8 +32,13 @@ settings {
 }
 
 docs {
-  Assigned services + nested assignment config (duration, buffers, modality, required types/roles).
-  required_room_type / required_equipment_type / required_roles may be null or empty — not mandatory.
+  Assigned services + nested assignment config (duration, buffers, modality, required room type/roles).
+  required_room_type / required_roles may be null or empty — not mandatory. No equipment type on assignment.
   Query: optional active=0|1 (omit = active + inactive).
+  min_duration_met=0|1 (1 = assignment duration >= 30; 0 = duration null or < 30; omit = no duration filter).
+  resource_active=0|1. Independent AND with min_duration_met. Omit / junk = no that filter.
+  resource_active=1: virtual = >=1 live assigned role; both/in_person = live role AND live required room type.
+  resource_active=0 = inverse. Role live = requirement is_active and AssociateRole.is_active.
+  Room live = required_room_type set and RoomType.is_active. Separate from service active=.
   v1 GET /centers/{{center_id}}/services/ unchanged.
 }
