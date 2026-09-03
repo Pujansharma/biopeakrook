@@ -155,7 +155,7 @@ def get_eligible_associates_for_role(center, role, modality):
             center=center,
             role=role,
             is_active=True,
-            associate__is_active=True,
+            associate__user__is_active=True,
             role__is_active=True,
         )
         .select_related("associate", "associate__user")

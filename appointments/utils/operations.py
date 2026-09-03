@@ -322,7 +322,7 @@ def build_operations_staff(center, start_date, end_date) -> list:
     associate_ids = AssociateCenterAssignment.objects.filter(
         center=center,
         is_active=True,
-        associate__is_active=True,
+        associate__user__is_active=True,
     ).values_list("associate_id", flat=True)
     associates = Associate.objects.filter(pk__in=associate_ids, is_active=True)
     return [

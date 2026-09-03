@@ -37,7 +37,7 @@ def live_associate_center_assignments(center, associate_ids):
     return AssociateCenterAssignment.objects.filter(
         center=center,
         is_active=True,
-        associate__is_active=True,
+        associate__user__is_active=True,
         role__is_active=True,
         associate__pk__in=associate_ids,
     ).select_related("associate", "role")

@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10&search&type_active=1&room_allotted=1&operational_status=operational&active=1
   body: none
   auth: bearer
 }
@@ -13,12 +13,13 @@ get {
 params:query {
   page: 1
   limit: 10
-  search:
-  type_active:
-  room_allotted:
+  search: 
+  type_active: 1
+  room_allotted: 1
+  operational_status: operational
+  active: 1
   ~equipment_type_id: {{equipment_type_id}}
   ~room_id: {{room_id}}
-  operational_status:
 }
 
 headers {
