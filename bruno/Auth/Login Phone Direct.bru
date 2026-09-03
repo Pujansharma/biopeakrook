@@ -26,6 +26,7 @@ script:post-response {
   const refresh = data.refresh;
 
   if (access) {
+    bru.deleteVar('access_token');
     bru.setVar('access_token', access);
     bru.setCollectionVar('access_token', access);
     bru.setCollectionVar('customer_access_token', access);
@@ -35,6 +36,7 @@ script:post-response {
     }
   }
   if (refresh) {
+    bru.deleteVar('refresh_token');
     bru.setVar('refresh_token', refresh);
     bru.setCollectionVar('refresh_token', refresh);
     if (bru.getEnvName()) {

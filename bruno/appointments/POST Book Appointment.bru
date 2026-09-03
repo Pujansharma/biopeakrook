@@ -26,6 +26,9 @@ body:json {
     "modality": "in_person",
     "start": "2026-09-05T04:00:00Z",
     "end": "2026-09-05T04:40:00Z",
+    "preferred": {
+      "room_id": "{{room_id}}"
+    },
     "associates": [
       {
         "role_id": "{{role_id}}",
@@ -50,8 +53,10 @@ settings {
 
 docs {
   Books a confirmed appointment. Use Idempotency-Key for safe retries.
-  Send care_team_id XOR associates. Adjust start/end to match a slot from POST Find Slots.
-  care_team_id uses the same live assignment+role filter as slots; stale required members → 400 "Care team does not cover all required service roles."
-  associates[] also require a live center assignment with an active role.
-  customer_profile_id / service_id must be active at this center. Missing, inactive, or other-center → 400 "Invalid customer profile for this center." / "Invalid service for this center."
+  Prefer pin from POST Find Slots (associates + room_id + equipment_id) — server validates free, does not re-pick.
+  If pin omitted, send preferred; server resolves combo then validates.
+  preferred.care_team_id XOR doctor_id/health_coach_id; room_id optional with either.
+  Top-level care_team_id removed — use preferred.care_team_id.
+  Adjust start/end to match a slot. Overlap → 400 "Slot no longer available."
+  customer_profile_id / service_id must be active at this center.
 }

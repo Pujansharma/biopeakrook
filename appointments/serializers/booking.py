@@ -198,37 +198,41 @@ class AppointmentSlotFindSerializer(BaseSerializer):
         attrs["customer_profile"] = customer_profile
         attrs["service"] = service
         attrs["center"] = center
-        preferred = attrs.get("preferred") or {}
-        normalized_preferred = {}
-        for key, value in preferred.items():
-            if value is not None:
-                normalized_preferred[key] = str(value)
-        if normalized_preferred.get("care_team_id") and (
-            normalized_preferred.get("doctor_id")
-            or normalized_preferred.get("health_coach_id")
-        ):
-            raise serializers.ValidationError(
-                {
-                    "preferred": [
-                        "care_team_id cannot be combined with doctor_id or health_coach_id."
-                    ]
-                }
-            )
-        attrs["preferred"] = normalized_preferred or None
+        attrs["preferred"] = normalize_preferred(attrs.get("preferred"))
         return attrs
-
-
-class AppointmentSlotSerializer(BaseSerializer):
-    start = serializers.CharField()
-    end = serializers.CharField()
-    associates_by_role = serializers.DictField()
-    rooms = serializers.ListField(required=False)
-    equipment = serializers.ListField(required=False)
 
 
 class AppointmentAssociateInputSerializer(BaseSerializer):
     role_id = serializers.UUIDField()
     associate_id = serializers.UUIDField()
+
+
+class AppointmentSlotSerializer(BaseSerializer):
+    start = serializers.CharField()
+    end = serializers.CharField()
+    associates = AppointmentAssociateInputSerializer(many=True)
+    room_id = serializers.UUIDField(allow_null=True)
+    equipment_id = serializers.UUIDField(allow_null=True)
+
+
+def normalize_preferred(preferred):
+    preferred = preferred or {}
+    normalized_preferred = {}
+    for key, value in preferred.items():
+        if value is not None:
+            normalized_preferred[key] = str(value)
+    if normalized_preferred.get("care_team_id") and (
+        normalized_preferred.get("doctor_id")
+        or normalized_preferred.get("health_coach_id")
+    ):
+        raise serializers.ValidationError(
+            {
+                "preferred": [
+                    "care_team_id cannot be combined with doctor_id or health_coach_id."
+                ]
+            }
+        )
+    return normalized_preferred or None
 
 
 class AppointmentBookSerializer(BaseSerializer):
@@ -237,8 +241,8 @@ class AppointmentBookSerializer(BaseSerializer):
     modality = serializers.ChoiceField(choices=AppointmentModes.choices)
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()
+    preferred = AppointmentPreferredSerializer(required=False)
     associates = AppointmentAssociateInputSerializer(many=True, required=False)
-    care_team_id = serializers.UUIDField(required=False)
     room_id = serializers.UUIDField(required=False, allow_null=True)
     equipment_id = serializers.UUIDField(required=False, allow_null=True)
 
@@ -259,29 +263,21 @@ class AppointmentBookSerializer(BaseSerializer):
         attrs["service"] = service
         attrs["center"] = center
         attrs["associates"] = attrs.get("associates") or []
-        care_team_id = attrs.get("care_team_id")
-        has_care_team = bool(care_team_id)
-        has_associates = bool(attrs["associates"])
-        if has_care_team and has_associates:
-            raise serializers.ValidationError(
-                "Send care_team_id or associates, not both."
-            )
+        attrs["preferred"] = normalize_preferred(attrs.get("preferred"))
         assignment = get_center_service_assignment(center, service)
         if assignment is None:
             raise serializers.ValidationError(
                 "Service is not available at this center."
             )
+        has_pin = bool(attrs["associates"])
+        has_preferred = bool(attrs["preferred"])
         has_role_requirements = any(
             requirement.is_active
             for requirement in assignment.role_requirements.all()
         )
-        if has_care_team and not has_role_requirements:
+        if has_role_requirements and not has_pin and not has_preferred:
             raise serializers.ValidationError(
-                "Care team allocation is only valid when the service requires staff."
-            )
-        if has_role_requirements and not has_care_team and not has_associates:
-            raise serializers.ValidationError(
-                "Send care_team_id or associates."
+                "Send preferred resources or a pinned associates list."
             )
         attrs["assignment"] = assignment
         return attrs
@@ -295,6 +291,12 @@ class AppointmentBookSerializer(BaseSerializer):
         actor = validated_data.pop("actor")
         idempotency_key = validated_data.pop("idempotency_key", None)
         payload_hash = validated_data.pop("payload_hash", None)
+        validated_data.pop("preferred", None)
+        validated_data.pop("associates", None)
+        validated_data.pop("room_id", None)
+        validated_data.pop("equipment_id", None)
+        validated_data.pop("customer_profile_id", None)
+        validated_data.pop("service_id", None)
         center = self.context["center"]
         with transaction.atomic():
             appointment = create_appointment_record(
@@ -481,6 +483,12 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         associates_payload = validated_data.pop("associates_payload")
         care_team = validated_data.pop("care_team")
         actor = validated_data.pop("actor")
+        validated_data.pop("preferred", None)
+        validated_data.pop("associates", None)
+        validated_data.pop("room_id", None)
+        validated_data.pop("equipment_id", None)
+        validated_data.pop("customer_profile_id", None)
+        validated_data.pop("service_id", None)
         buffer_before = assignment.buffer_before
         buffer_after = assignment.buffer_after
         exclusive_start, exclusive_end = compute_exclusive_bounds(

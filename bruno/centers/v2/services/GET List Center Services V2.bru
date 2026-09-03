@@ -5,25 +5,34 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/v2/services/?page=1&limit=10&search=
+  url: {{baseURL}}/centers/{{center_id}}/v2/services/?page=1&limit=10
   body: none
-  auth: bearer
+  auth: none
 }
 
 params:query {
   page: 1
   limit: 10
-  search:
-  min_duration_met:
-  resource_active:
+  ~search:
+  ~active:
+  ~min_duration_met:
+  ~resource_active:
 }
 
 headers {
   X-Center-ID: {{center_id}}
 }
 
-auth:bearer {
-  token: {{access_token}}
+script:pre-request {
+  const token =
+    bru.getEnvVar('access_token') ||
+    bru.getCollectionVar('access_token') ||
+    bru.getVar('access_token') ||
+    '';
+  if (!token) {
+    throw new Error('access_token missing — run Auth → Login Phone Direct (Development env)');
+  }
+  req.setHeader('Authorization', `Bearer ${token}`);
 }
 
 settings {
@@ -41,4 +50,5 @@ docs {
   resource_active=0 = inverse. Role live = requirement is_active and AssociateRole.is_active.
   Room live = required_room_type set and RoomType.is_active. Separate from service active=.
   v1 GET /centers/{{center_id}}/services/ unchanged.
+  Auth: pre-request sets Authorization from env/collection access_token (auth none — avoids empty Bearer). Run Login Phone Direct first.
 }

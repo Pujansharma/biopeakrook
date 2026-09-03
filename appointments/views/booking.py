@@ -20,10 +20,6 @@ from appointments.serializers.booking import (
     AppointmentRescheduleSerializer,
     AppointmentSlotFindSerializer,
 )
-from appointments.utils.care_teams import (
-    care_team_associates_payload,
-    expand_care_team_for_assignment,
-)
 from appointments.utils.calendar import get_center_timezone_name, parse_calendar_query_params
 from appointments.utils.constants import AvailabilityGranularity
 from appointments.utils.operations import invalidate_operations_cache
@@ -36,8 +32,7 @@ from appointments.utils.metrics import (
 )
 from appointments.utils.scheduling import (
     find_appointment_slots,
-    get_center_service_assignment,
-    validate_appointment_allocation,
+    resolve_booking_combo,
 )
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView, BaseRetrieveAPIView
@@ -130,16 +125,6 @@ def build_associate_payload(raw_associates):
     return payload
 
 
-def resolve_booking_associates(center, assignment, validated):
-    care_team_id = validated.get("care_team_id")
-    if care_team_id:
-        members = expand_care_team_for_assignment(
-            center, care_team_id, assignment
-        )
-        return care_team_associates_payload(members), members[0].care_team
-    return build_associate_payload(validated["associates"]), None
-
-
 def dispatch_to_view(view_class, request, *args, **kwargs):
     """Run a sibling view handler without wrapping the DRF request twice."""
     view = view_class()
@@ -198,14 +183,27 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         assignment = validated["assignment"]
-        room = resolve_room(center, validated.get("room_id"))
-        equipment = resolve_equipment(center, validated.get("equipment_id"))
         try:
-            associates_payload, care_team = resolve_booking_associates(
-                center, assignment, validated
+            combo = resolve_booking_combo(
+                center=center,
+                assignment=assignment,
+                modality=validated["modality"],
+                preferred=validated.get("preferred"),
+                start=validated["start"],
+                end=validated["end"],
+                associates=build_associate_payload(validated.get("associates") or []),
+                room=resolve_room(center, validated.get("room_id")),
+                equipment=resolve_equipment(center, validated.get("equipment_id")),
+                customer_profile=validated["customer_profile"],
             )
         except DjangoValidationError as exc:
+            record_book_outcome(center.pk, "validation_error")
             self.raise_bad_request(exc.messages[0])
+
+        associates_payload = combo["associates"]
+        room = combo["room"]
+        equipment = combo["equipment"]
+        care_team = combo["care_team"]
 
         idempotency_key = request.headers.get("Idempotency-Key")
         payload_hash = canonical_payload_hash(request.data)
@@ -223,22 +221,6 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
                     detail,
                     status=200,
                 )
-
-        try:
-            validate_appointment_allocation(
-                center=center,
-                assignment=assignment,
-                modality=validated["modality"],
-                start=validated["start"],
-                end=validated["end"],
-                associates=associates_payload,
-                room=room,
-                equipment=equipment,
-                customer_profile=validated["customer_profile"],
-            )
-        except DjangoValidationError as exc:
-            record_book_outcome(center.pk, "validation_error")
-            self.raise_bad_request(exc.messages[0])
 
         try:
             serializer.save(
@@ -503,25 +485,17 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         assignment = validated["assignment"]
-        room = resolve_room(center, validated.get("room_id"))
-        equipment = resolve_equipment(center, validated.get("equipment_id"))
         try:
-            associates_payload, care_team = resolve_booking_associates(
-                center, assignment, validated
-            )
-        except DjangoValidationError as exc:
-            self.raise_bad_request(exc.messages[0])
-
-        try:
-            validate_appointment_allocation(
+            combo = resolve_booking_combo(
                 center=center,
                 assignment=assignment,
                 modality=validated["modality"],
+                preferred=validated.get("preferred"),
                 start=validated["start"],
                 end=validated["end"],
-                associates=associates_payload,
-                room=room,
-                equipment=equipment,
+                associates=build_associate_payload(validated.get("associates") or []),
+                room=resolve_room(center, validated.get("room_id")),
+                equipment=resolve_equipment(center, validated.get("equipment_id")),
                 customer_profile=validated["customer_profile"],
                 exclude_appointment=appointment,
             )
@@ -531,10 +505,10 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
         try:
             serializer.save(
                 assignment=assignment,
-                room=room,
-                equipment=equipment,
-                associates_payload=associates_payload,
-                care_team=care_team,
+                room=combo["room"],
+                equipment=combo["equipment"],
+                associates_payload=combo["associates"],
+                care_team=combo["care_team"],
                 actor=request.user,
             )
         except IntegrityError as error:

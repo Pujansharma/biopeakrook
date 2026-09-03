@@ -416,10 +416,9 @@ class Appointment(BaseUUIDModel):
                 ),
             ),
             ExclusionConstraint(
-                name="appointment_customer_center_no_overlap",
+                name="appointment_customer_no_overlap",
                 expressions=[
                     (F("customer_profile_id"), "="),
-                    (F("center_id"), "="),
                     (_exclusive_range_expression(), "&&"),
                 ],
                 condition=Q(status__in=_BUSY_STATUS_VALUES),

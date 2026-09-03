@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
-from accounts.customers.models import CustomerCenterAssignment, CustomerProfile
-from appointments.models import Appointment
+from accounts.customers.models import CustomerCenterAssignment
+from appointments.models import Appointment, CenterCareTeam
 from appointments.utils.calendar import (
     collect_associate_block_events,
     collect_associate_leave_events,
@@ -19,7 +19,6 @@ from appointments.utils.calendar import (
     get_center_timezone_name,
 )
 from appointments.utils.care_teams import (
-    apply_care_team_to_resource_pools,
     expand_care_team_for_assignment,
     live_associate_center_assignments,
 )
@@ -32,7 +31,7 @@ from appointments.utils.intervals import (
     subtract_intervals,
 )
 from core.utils.constants import AppointmentModes
-from inventory.models import Room
+from inventory.models import Equipment, Room
 from programs.services.models import CenterServiceAssignment
 
 SLOT_CAP_PER_DAY = 200
@@ -83,6 +82,10 @@ def get_customer_profile_display_name(customer_profile):
     return name or str(customer_profile.pk)
 
 
+def busy_load_count(busy_map, resource_id):
+    return len(busy_map.get(str(resource_id), []))
+
+
 def load_busy_interval_maps(center, range_start, range_end):
     appointments = (
         Appointment.objects.filter(
@@ -97,14 +100,11 @@ def load_busy_interval_maps(center, range_start, range_end):
     associate_map = {}
     room_map = {}
     equipment_map = {}
-    customer_map = {}
     for appointment in appointments:
         exclusive_interval = (
             appointment.exclusive_start_datetime,
             appointment.exclusive_end_datetime,
         )
-        customer_key = str(appointment.customer_profile_id)
-        customer_map.setdefault(customer_key, []).append(exclusive_interval)
         if appointment.room_id:
             room_key = str(appointment.room_id)
             room_map.setdefault(room_key, []).append(exclusive_interval)
@@ -118,8 +118,25 @@ def load_busy_interval_maps(center, range_start, range_end):
         "associate": associate_map,
         "room": room_map,
         "equipment": equipment_map,
-        "customer": customer_map,
     }
+
+
+def load_customer_busy_intervals(customer_profile, range_start, range_end):
+    appointments = Appointment.objects.filter(
+        customer_profile=customer_profile,
+        status__in=BUSY_APPOINTMENT_STATUSES,
+        start_datetime__lt=range_end,
+        end_datetime__gt=range_start,
+    )
+    intervals = []
+    for appointment in appointments:
+        intervals.append(
+            (
+                appointment.exclusive_start_datetime,
+                appointment.exclusive_end_datetime,
+            )
+        )
+    return intervals
 
 
 def get_center_service_assignment(center, service):
@@ -159,6 +176,7 @@ def get_eligible_associates_for_role(center, role, modality):
             role__is_active=True,
         )
         .select_related("associate", "associate__user")
+        .order_by("associate__created_at", "associate__pk")
         .distinct()
     )
     associates = []
@@ -189,7 +207,7 @@ def build_service_resource_pools(center, assignment, modality):
                 Room.objects.filter_active(
                     center=center,
                     room_type_ref=assignment.required_room_type,
-                )
+                ).order_by("code", "pk")
             )
     return {
         "roles": role_pools,
@@ -209,6 +227,8 @@ def validate_service_bookable(assignment, modality, resource_pools):
         and modality == AppointmentModes.IN_PERSON
         and has_room_type
     ):
+        return
+    if modality == AppointmentModes.IN_PERSON:
         return
     if not has_roles and not has_room_type:
         raise ValidationError("Service is not bookable at this center.")
@@ -320,6 +340,17 @@ def build_resource_free_window_cache(
                     timezone_name,
                     appointment_busy_map["associate"],
                 )
+    for associate in resource_pools.get("extra_associates", []):
+        associate_key = str(associate.pk)
+        if associate_key not in associate_windows:
+            associate_windows[associate_key] = compute_associate_free_windows(
+                center,
+                associate,
+                query_start,
+                query_end,
+                timezone_name,
+                appointment_busy_map["associate"],
+            )
     room_windows = {}
     for room in resource_pools["rooms"]:
         room_windows[str(room.pk)] = compute_room_free_windows(
@@ -373,63 +404,438 @@ def preferred_room_id(preferred):
     return preferred.get("room_id")
 
 
-def filter_free_associates_for_role(
-    role_pool,
+def first_active_equipment_for_room(room):
+    return (
+        Equipment.objects.filter(room=room, is_active=True, center=room.center)
+        .order_by("created_at", "pk")
+        .first()
+    )
+
+
+def resource_is_free(resource_type, resource_id, exclusive_start, exclusive_end, free_window_cache):
+    windows = free_window_cache[resource_type].get(str(resource_id), [])
+    return is_interval_contained_in_windows(
+        exclusive_start, exclusive_end, windows
+    )
+
+
+def pick_associate_by_load(associates, associate_busy_map):
+    return min(
+        associates,
+        key=lambda associate: (
+            busy_load_count(associate_busy_map, associate.pk),
+            associate.created_at,
+            str(associate.pk),
+        ),
+    )
+
+
+def pick_room_by_load(rooms, room_busy_map):
+    return min(
+        rooms,
+        key=lambda room: (
+            busy_load_count(room_busy_map, room.pk),
+            room.code or "",
+            str(room.pk),
+        ),
+    )
+
+
+def get_live_assignment_for_associate(center, associate_id, modality):
+    assignment = (
+        live_associate_center_assignments(center, [associate_id])
+        .select_related("associate", "associate__user", "role")
+        .first()
+    )
+    if assignment is None:
+        raise ValidationError(
+            "Associate is not assigned to this center with an active role."
+        )
+    if not associate_modality_compatible(assignment.mode, modality):
+        raise ValidationError("Associate modality is not compatible.")
+    return assignment
+
+
+def ensure_associate_free(
+    associate,
     exclusive_start,
     exclusive_end,
     free_window_cache,
-    preferred,
+    soft=False,
 ):
-    available = []
-    preferred_id = preferred_associate_id_for_role(role_pool["role"], preferred)
-    for associate in role_pool["associates"]:
-        associate_key = str(associate.pk)
-        windows = free_window_cache["associate"].get(associate_key, [])
-        if not is_interval_contained_in_windows(
-            exclusive_start, exclusive_end, windows
-        ):
-            continue
-        if preferred_id and str(associate.pk) != str(preferred_id):
-            continue
-        available.append(associate)
-    if preferred_id and not available:
-        return None
-    return available
+    if resource_is_free(
+        "associate",
+        associate.pk,
+        exclusive_start,
+        exclusive_end,
+        free_window_cache,
+    ):
+        return True
+    if soft:
+        return False
+    raise ValidationError("Selected associate is not available.")
 
 
-def filter_free_rooms(
-    rooms,
-    exclusive_start,
-    exclusive_end,
-    free_window_cache,
-    preferred,
-):
-    available = []
+def collect_preferred_person_ids(preferred):
+    if not preferred:
+        return []
+    person_ids = []
+    for key in ("doctor_id", "health_coach_id"):
+        value = preferred.get(key)
+        if value:
+            person_ids.append(str(value))
+    return person_ids
+
+
+def build_resolve_resource_pools(center, assignment, modality, preferred):
+    preferred = preferred or {}
+    resource_pools = build_service_resource_pools(center, assignment, modality)
+    validate_service_bookable(assignment, modality, resource_pools)
+    extra_associates = []
+    care_team = None
+    care_team_members = []
+
+    care_team_id = preferred.get("care_team_id")
+    if care_team_id:
+        care_team_members = expand_care_team_for_assignment(
+            center, care_team_id, assignment
+        )
+        if care_team_members:
+            care_team = care_team_members[0].care_team
+        for member in care_team_members:
+            extra_associates.append(member.associate)
+            for role_pool in resource_pools["roles"]:
+                if role_pool["role_id"] == str(member.role.pk):
+                    if member.associate not in role_pool["associates"]:
+                        role_pool["associates"] = [
+                            member.associate
+                        ] + [
+                            associate
+                            for associate in role_pool["associates"]
+                            if associate.pk != member.associate.pk
+                        ]
+
+    for person_id in collect_preferred_person_ids(preferred):
+        center_assignment = get_live_assignment_for_associate(
+            center, person_id, modality
+        )
+        associate = center_assignment.associate
+        extra_associates.append(associate)
+        matched_pool = False
+        for role_pool in resource_pools["roles"]:
+            preferred_id = preferred_associate_id_for_role(
+                role_pool["role"], preferred
+            )
+            if preferred_id and str(preferred_id) == str(associate.pk):
+                matched_pool = True
+                if associate not in role_pool["associates"]:
+                    if str(center_assignment.role.pk) != role_pool["role_id"]:
+                        raise ValidationError(
+                            "Preferred associate does not hold the required role."
+                        )
+                    role_pool["associates"] = [associate] + [
+                        item
+                        for item in role_pool["associates"]
+                        if item.pk != associate.pk
+                    ]
+        if not matched_pool:
+            # Prefer person outside service roles — still tracked as extra.
+            pass
+
     preferred_id = preferred_room_id(preferred)
-    for room in rooms:
+    if modality == AppointmentModes.IN_PERSON and preferred_id:
+        preferred_room = (
+            Room.objects.filter_active(center=center, pk=preferred_id).first()
+        )
+        if preferred_room is None:
+            raise ValidationError("Preferred room is invalid or inactive.")
+        resource_pools["rooms"] = [preferred_room]
+    elif modality == AppointmentModes.IN_PERSON and not resource_pools["rooms"]:
+        if assignment.required_room_type is None and not preferred_id:
+            pass
+
+    equipment_list = []
+    for room in resource_pools["rooms"]:
+        equipment = first_active_equipment_for_room(room)
+        if equipment is not None:
+            equipment_list.append(equipment)
+    resource_pools["equipment"] = equipment_list
+    resource_pools["extra_associates"] = extra_associates
+    resource_pools["care_team"] = care_team
+    resource_pools["care_team_members"] = care_team_members
+    return resource_pools
+
+
+def ensure_free_windows_for_pools(
+    center,
+    resource_pools,
+    query_start,
+    query_end,
+    timezone_name,
+    appointment_busy_map,
+    free_window_cache,
+):
+    for associate in resource_pools.get("extra_associates", []):
+        associate_key = str(associate.pk)
+        if associate_key not in free_window_cache["associate"]:
+            free_window_cache["associate"][associate_key] = (
+                compute_associate_free_windows(
+                    center,
+                    associate,
+                    query_start,
+                    query_end,
+                    timezone_name,
+                    appointment_busy_map["associate"],
+                )
+            )
+    for room in resource_pools["rooms"]:
         room_key = str(room.pk)
-        windows = free_window_cache["room"].get(room_key, [])
-        if not is_interval_contained_in_windows(
-            exclusive_start, exclusive_end, windows
+        if room_key not in free_window_cache["room"]:
+            free_window_cache["room"][room_key] = compute_room_free_windows(
+                center,
+                room,
+                query_start,
+                query_end,
+                timezone_name,
+                appointment_busy_map["room"],
+            )
+    for equipment in resource_pools["equipment"]:
+        equipment_key = str(equipment.pk)
+        if equipment_key not in free_window_cache["equipment"]:
+            free_window_cache["equipment"][equipment_key] = (
+                compute_equipment_free_windows(
+                    center,
+                    equipment,
+                    query_start,
+                    query_end,
+                    timezone_name,
+                    appointment_busy_map["equipment"],
+                )
+            )
+
+
+def resolve_appointment_combo(
+    center,
+    assignment,
+    modality,
+    preferred,
+    exclusive_start,
+    exclusive_end,
+    free_window_cache,
+    appointment_busy_map,
+    resource_pools=None,
+    query_start=None,
+    query_end=None,
+    timezone_name=None,
+    soft=False,
+):
+    preferred = preferred or {}
+    if resource_pools is None:
+        resource_pools = build_resolve_resource_pools(
+            center, assignment, modality, preferred
+        )
+    if query_start is not None and timezone_name is not None:
+        ensure_free_windows_for_pools(
+            center,
+            resource_pools,
+            query_start,
+            query_end,
+            timezone_name,
+            appointment_busy_map,
+            free_window_cache,
+        )
+
+    filled_by_role = {}
+    extras = []
+    used_associate_ids = set()
+    care_team = resource_pools.get("care_team")
+    care_team_members = resource_pools.get("care_team_members") or []
+    required_role_ids = {role_pool["role_id"] for role_pool in resource_pools["roles"]}
+
+    for member in care_team_members:
+        if not ensure_associate_free(
+            member.associate,
+            exclusive_start,
+            exclusive_end,
+            free_window_cache,
+            soft=soft,
         ):
-            continue
-        if preferred_id and str(room.pk) != str(preferred_id):
-            continue
-        available.append(room)
-    if preferred_id and not available:
-        return None
-    return available
+            return None
+        role_id = str(member.role.pk)
+        associate_id = str(member.associate.pk)
+        if role_id in required_role_ids and role_id not in filled_by_role:
+            filled_by_role[role_id] = member.associate
+            used_associate_ids.add(associate_id)
+        elif role_id not in required_role_ids:
+            extras.append(
+                {
+                    "role_id": role_id,
+                    "associate_id": member.associate.pk,
+                }
+            )
+            used_associate_ids.add(associate_id)
 
+    for person_id in collect_preferred_person_ids(preferred):
+        if person_id in used_associate_ids:
+            continue
+        center_assignment = get_live_assignment_for_associate(
+            center, person_id, modality
+        )
+        associate = center_assignment.associate
+        if not ensure_associate_free(
+            associate,
+            exclusive_start,
+            exclusive_end,
+            free_window_cache,
+            soft=soft,
+        ):
+            return None
+        matched_role_id = None
+        for role_pool in resource_pools["roles"]:
+            preferred_id = preferred_associate_id_for_role(
+                role_pool["role"], preferred
+            )
+            if preferred_id and str(preferred_id) == str(associate.pk):
+                if str(center_assignment.role.pk) != role_pool["role_id"]:
+                    if soft:
+                        return None
+                    raise ValidationError(
+                        "Preferred associate does not hold the required role."
+                    )
+                matched_role_id = role_pool["role_id"]
+                break
+        if matched_role_id:
+            if matched_role_id not in filled_by_role:
+                filled_by_role[matched_role_id] = associate
+            used_associate_ids.add(str(associate.pk))
+        else:
+            extras.append(
+                {
+                    "role_id": str(center_assignment.role.pk),
+                    "associate_id": associate.pk,
+                }
+            )
+            used_associate_ids.add(str(associate.pk))
 
-def serialize_associate_candidate(associate):
+    for role_pool in resource_pools["roles"]:
+        role_id = role_pool["role_id"]
+        if role_id in filled_by_role:
+            continue
+        free_associates = []
+        for associate in role_pool["associates"]:
+            if str(associate.pk) in used_associate_ids:
+                continue
+            if resource_is_free(
+                "associate",
+                associate.pk,
+                exclusive_start,
+                exclusive_end,
+                free_window_cache,
+            ):
+                free_associates.append(associate)
+        if not free_associates:
+            if soft:
+                return None
+            raise ValidationError(
+                f"No available associate for role {role_id}."
+            )
+        chosen = pick_associate_by_load(
+            free_associates, appointment_busy_map["associate"]
+        )
+        filled_by_role[role_id] = chosen
+        used_associate_ids.add(str(chosen.pk))
+
+    room = None
+    equipment = None
+    if modality == AppointmentModes.IN_PERSON:
+        preferred_id = preferred_room_id(preferred)
+        free_rooms = []
+        for candidate in resource_pools["rooms"]:
+            if resource_is_free(
+                "room",
+                candidate.pk,
+                exclusive_start,
+                exclusive_end,
+                free_window_cache,
+            ):
+                free_rooms.append(candidate)
+        if preferred_id:
+            preferred_room = next(
+                (
+                    candidate
+                    for candidate in free_rooms
+                    if str(candidate.pk) == str(preferred_id)
+                ),
+                None,
+            )
+            if preferred_room is None:
+                if soft:
+                    return None
+                raise ValidationError("Selected room is not available.")
+            room = preferred_room
+        elif free_rooms:
+            room = pick_room_by_load(free_rooms, appointment_busy_map["room"])
+        else:
+            if soft:
+                return None
+            raise ValidationError(
+                "A room is required for in-person appointments."
+            )
+
+        equipment = first_active_equipment_for_room(room)
+        if equipment is not None:
+            if not resource_is_free(
+                "equipment",
+                equipment.pk,
+                exclusive_start,
+                exclusive_end,
+                free_window_cache,
+            ):
+                if soft:
+                    return None
+                raise ValidationError("Selected equipment is not available.")
+    else:
+        if preferred_room_id(preferred):
+            if soft:
+                return None
+            raise ValidationError(
+                "Room and equipment must not be set for virtual appointments."
+            )
+
+    associates_payload = []
+    for role_pool in resource_pools["roles"]:
+        associate = filled_by_role[role_pool["role_id"]]
+        associates_payload.append(
+            {
+                "role_id": role_pool["role_id"],
+                "associate_id": associate.pk,
+            }
+        )
+    associates_payload.extend(extras)
     return {
-        "id": str(associate.pk),
-        "name": get_associate_display_name(associate),
+        "associates": associates_payload,
+        "room": room,
+        "equipment": equipment,
+        "care_team": care_team,
     }
 
 
-def serialize_room_candidate(room):
-    return {"id": str(room.pk), "name": room.name}
+def serialize_pinned_slot(slot_start, slot_end, combo):
+    room = combo["room"]
+    equipment = combo["equipment"]
+    return {
+        "start": slot_start.isoformat(),
+        "end": slot_end.isoformat(),
+        "associates": [
+            {
+                "role_id": str(entry["role_id"]),
+                "associate_id": str(entry["associate_id"]),
+            }
+            for entry in combo["associates"]
+        ],
+        "room_id": str(room.pk) if room is not None else None,
+        "equipment_id": str(equipment.pk) if equipment is not None else None,
+    }
 
 
 def find_appointment_slots(
@@ -449,15 +855,19 @@ def find_appointment_slots(
     if not assignment.duration:
         raise ValidationError("Service duration is not configured for this center.")
 
-    resource_pools = build_service_resource_pools(center, assignment, modality)
-    validate_service_bookable(assignment, modality, resource_pools)
     preferred = preferred or {}
-    care_team_id = preferred.get("care_team_id")
-    if care_team_id:
-        team_members = expand_care_team_for_assignment(
-            center, care_team_id, assignment
+    if (
+        modality == AppointmentModes.IN_PERSON
+        and assignment.required_room_type is None
+        and not preferred_room_id(preferred)
+    ):
+        raise ValidationError(
+            "A room is required for in-person appointments."
         )
-        apply_care_team_to_resource_pools(resource_pools, team_members)
+
+    resource_pools = build_resolve_resource_pools(
+        center, assignment, modality, preferred
+    )
 
     timezone_name = get_center_timezone_name(center)
     query_start = slot_date
@@ -466,7 +876,9 @@ def find_appointment_slots(
         query_start, query_end, timezone_name
     )
     busy_maps = load_busy_interval_maps(center, range_start, range_end)
-    customer_busy = busy_maps["customer"].get(str(customer_profile.pk), [])
+    customer_busy = load_customer_busy_intervals(
+        customer_profile, range_start, range_end
+    )
 
     free_window_cache = build_resource_free_window_cache(
         center,
@@ -495,11 +907,6 @@ def find_appointment_slots(
 
     slots = []
     truncated = False
-    requires_room = (
-        modality == AppointmentModes.IN_PERSON
-        and assignment.required_room_type is not None
-    )
-
     for slot_start, slot_end in candidate_slots:
         exclusive_start, exclusive_end = compute_exclusive_bounds(
             slot_start,
@@ -513,56 +920,24 @@ def find_appointment_slots(
             exclusive_start, exclusive_end, base_windows
         ):
             continue
-
-        associates_by_role = {}
-        slot_valid = True
-        for role_pool in resource_pools["roles"]:
-            role_candidates = filter_free_associates_for_role(
-                role_pool,
-                exclusive_start,
-                exclusive_end,
-                free_window_cache,
-                preferred,
-            )
-            if role_candidates is None:
-                slot_valid = False
-                break
-            if not role_candidates:
-                slot_valid = False
-                break
-            associates_by_role[role_pool["role_id"]] = [
-                serialize_associate_candidate(associate)
-                for associate in role_candidates
-            ]
-
-        if not slot_valid:
+        combo = resolve_appointment_combo(
+            center,
+            assignment,
+            modality,
+            preferred,
+            exclusive_start,
+            exclusive_end,
+            free_window_cache,
+            busy_maps,
+            resource_pools=resource_pools,
+            query_start=query_start,
+            query_end=query_end,
+            timezone_name=timezone_name,
+            soft=True,
+        )
+        if combo is None:
             continue
-
-        room_candidates = []
-        if requires_room:
-            free_rooms = filter_free_rooms(
-                resource_pools["rooms"],
-                exclusive_start,
-                exclusive_end,
-                free_window_cache,
-                preferred,
-            )
-            if free_rooms is None or not free_rooms:
-                continue
-            room_candidates = [
-                serialize_room_candidate(room) for room in free_rooms
-            ]
-
-        slot_payload = {
-            "start": slot_start.isoformat(),
-            "end": slot_end.isoformat(),
-            "associates_by_role": associates_by_role,
-        }
-        if modality == AppointmentModes.IN_PERSON:
-            if requires_room:
-                slot_payload["rooms"] = room_candidates
-        slots.append(slot_payload)
-
+        slots.append(serialize_pinned_slot(slot_start, slot_end, combo))
         if len(slots) >= SLOT_CAP_PER_DAY:
             if len(candidate_slots) > len(slots):
                 truncated = True
@@ -586,8 +961,6 @@ def validate_associate_assignments(center, associates_payload, role_requirements
         role_id = str(entry["role_id"])
         associate_id = entry["associate_id"]
         provided_role_ids.add(role_id)
-        if role_id not in required_role_ids:
-            raise ValidationError(f"Unexpected role assignment: {role_id}.")
         assignment = (
             live_associate_center_assignments(center, [associate_id])
             .filter(role=role_id)
@@ -597,7 +970,8 @@ def validate_associate_assignments(center, associates_payload, role_requirements
             raise ValidationError(
                 "Associate is not assigned to this center with the required role."
             )
-    if provided_role_ids != required_role_ids:
+    missing = required_role_ids - provided_role_ids
+    if missing:
         raise ValidationError(
             "Exactly one associate is required for each service role."
         )
@@ -638,27 +1012,38 @@ def validate_appointment_allocation(
     validate_service_bookable(assignment, modality, resource_pools)
 
     if modality == AppointmentModes.IN_PERSON:
-        if assignment.required_room_type is not None and room is None:
-            raise ValidationError("A room is required for this service.")
-        if room is not None and room.center.pk != center.pk:
+        if room is None:
+            raise ValidationError(
+                "A room is required for in-person appointments."
+            )
+        if room.center.pk != center.pk:
             raise ValidationError("Room does not belong to this center.")
         if equipment is not None and equipment.center.pk != center.pk:
             raise ValidationError("Equipment does not belong to this center.")
-        if (
-            room is not None
-            and assignment.required_room_type is not None
-            and (
-                room.room_type_ref is None
-                or room.room_type_ref.pk != assignment.required_room_type.pk
-            )
-        ):
-            raise ValidationError("Room type does not match service requirements.")
+        expected_equipment = first_active_equipment_for_room(room)
+        if expected_equipment is None and equipment is not None:
+            raise ValidationError("Equipment does not belong to the selected room.")
+        if expected_equipment is not None:
+            if equipment is None:
+                raise ValidationError("Equipment is required for this room.")
+            if equipment.pk != expected_equipment.pk:
+                raise ValidationError(
+                    "Equipment does not match the room's primary equipment."
+                )
     else:
         if room is not None or equipment is not None:
             raise ValidationError(
                 "Room and equipment must not be set for virtual appointments."
             )
 
+    if associates:
+        resource_pools["extra_associates"] = []
+        for entry in associates:
+            associate = Associate.objects.filter(pk=entry["associate_id"]).first()
+            if associate is not None:
+                resource_pools["extra_associates"].append(associate)
+    if room is not None and room not in resource_pools["rooms"]:
+        resource_pools["rooms"] = list(resource_pools["rooms"]) + [room]
     if equipment is not None:
         resource_pools["equipment"] = [equipment]
 
@@ -688,23 +1073,24 @@ def validate_appointment_allocation(
     )
 
     if customer_profile is not None:
-        customer_busy = busy_maps["customer"].get(str(customer_profile.pk), [])
+        customer_busy = load_customer_busy_intervals(
+            customer_profile, exclusive_start, exclusive_end
+        )
+        if exclude_appointment is not None:
+            exclusive_interval = (
+                exclude_appointment.exclusive_start_datetime,
+                exclude_appointment.exclusive_end_datetime,
+            )
+            customer_busy = [
+                item for item in customer_busy if item != exclusive_interval
+            ]
         if interval_overlaps_any(exclusive_start, exclusive_end, customer_busy):
             raise ValidationError(
                 "Customer already has an appointment during this time."
             )
 
-    for role_pool in resource_pools["roles"]:
-        selected_associate = None
-        for entry in associates or []:
-            if str(entry["role_id"]) == role_pool["role_id"]:
-                selected_associate = entry["associate_id"]
-                break
-        if selected_associate is None:
-            raise ValidationError(
-                f"Missing associate for role {role_pool['role_id']}."
-            )
-        associate_key = str(selected_associate)
+    for entry in associates or []:
+        associate_key = str(entry["associate_id"])
         windows = free_window_cache["associate"].get(associate_key, [])
         if not is_interval_contained_in_windows(
             exclusive_start, exclusive_end, windows
@@ -728,23 +1114,112 @@ def validate_appointment_allocation(
             raise ValidationError("Selected equipment is not available.")
 
 
+def resolve_booking_combo(
+    center,
+    assignment,
+    modality,
+    preferred,
+    start,
+    end,
+    associates=None,
+    room=None,
+    equipment=None,
+    customer_profile=None,
+    exclude_appointment=None,
+):
+    """
+    Pin path: associates (+ room for in_person) provided → validate only.
+    Else resolve from preferred, then validate.
+    """
+    preferred = preferred or {}
+    buffer_before = assignment.buffer_before
+    buffer_after = assignment.buffer_after
+    exclusive_start, exclusive_end = compute_exclusive_bounds(
+        start, end, buffer_before, buffer_after
+    )
+    timezone_name = get_center_timezone_name(center)
+    slot_date = start.astimezone(ZoneInfo(timezone_name)).date()
+
+    has_pin = bool(associates)
+    if modality == AppointmentModes.IN_PERSON:
+        has_pin = has_pin and room is not None
+
+    care_team = None
+    if not has_pin:
+        busy_maps = load_busy_interval_maps(center, exclusive_start, exclusive_end)
+        if exclude_appointment is not None:
+            busy_maps = _subtract_appointment_from_busy_maps(
+                busy_maps, exclude_appointment
+            )
+        resource_pools = build_resolve_resource_pools(
+            center, assignment, modality, preferred
+        )
+        free_window_cache = build_resource_free_window_cache(
+            center,
+            resource_pools,
+            slot_date,
+            slot_date,
+            timezone_name,
+            busy_maps,
+        )
+        combo = resolve_appointment_combo(
+            center,
+            assignment,
+            modality,
+            preferred,
+            exclusive_start,
+            exclusive_end,
+            free_window_cache,
+            busy_maps,
+            resource_pools=resource_pools,
+            query_start=slot_date,
+            query_end=slot_date,
+            timezone_name=timezone_name,
+            soft=False,
+        )
+        associates = combo["associates"]
+        room = combo["room"]
+        equipment = combo["equipment"]
+        care_team = combo["care_team"]
+    else:
+        care_team_id = preferred.get("care_team_id")
+        if care_team_id:
+            care_team = CenterCareTeam.objects.filter(
+                pk=care_team_id,
+                center=center,
+                is_active=True,
+            ).first()
+
+    validate_appointment_allocation(
+        center=center,
+        assignment=assignment,
+        modality=modality,
+        start=start,
+        end=end,
+        associates=associates,
+        room=room,
+        equipment=equipment,
+        customer_profile=customer_profile,
+        exclude_appointment=exclude_appointment,
+    )
+    return {
+        "associates": associates,
+        "room": room,
+        "equipment": equipment,
+        "care_team": care_team,
+    }
+
+
 def _subtract_appointment_from_busy_maps(busy_maps, appointment):
     exclusive_interval = (
         appointment.exclusive_start_datetime,
         appointment.exclusive_end_datetime,
     )
-    customer_key = str(appointment.customer_profile_id)
     updated = {
         "associate": dict(busy_maps["associate"]),
         "room": dict(busy_maps["room"]),
         "equipment": dict(busy_maps["equipment"]),
-        "customer": dict(busy_maps["customer"]),
     }
-    updated["customer"][customer_key] = [
-        item
-        for item in updated["customer"].get(customer_key, [])
-        if item != exclusive_interval
-    ]
     if appointment.room_id:
         room_key = str(appointment.room_id)
         updated["room"][room_key] = [

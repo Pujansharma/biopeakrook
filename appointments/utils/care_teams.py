@@ -63,26 +63,18 @@ def members_with_live_center_role(center, members):
 
 
 def expand_care_team_for_assignment(center, care_team_id, assignment):
+    """
+    Return all live care-team members at this center.
+
+    Members matching service roles fill those seats; others are extras.
+    Missing service roles are filled later by associate search — not a 400 here.
+    `assignment` kept for call-site compatibility.
+    """
+    del assignment
     team = load_active_center_care_team(center, care_team_id)
-    role_requirements = list(
-        assignment.role_requirements.filter(is_active=True)
-    )
-    if not role_requirements:
-        raise ValidationError(
-            "Care team allocation is only valid when the service requires staff."
-        )
-    required_role_ids = {requirement.role.pk for requirement in role_requirements}
     members = members_with_live_center_role(center, list(team.members.all()))
-    team_role_ids = {member.role.pk for member in members}
-    if required_role_ids - team_role_ids:
-        raise ValidationError(
-            "Care team does not cover all required service roles."
-        )
-    required_members = [
-        member for member in members if member.role.pk in required_role_ids
-    ]
-    required_members.sort(key=care_team_member_role_sort_key)
-    return required_members
+    members.sort(key=care_team_member_role_sort_key)
+    return members
 
 
 def care_team_associates_payload(members):
