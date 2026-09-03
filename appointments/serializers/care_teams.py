@@ -11,6 +11,7 @@ from core.utils.serializers import BaseModelSerializer, BaseSerializer
 class CareTeamAssociateNestedSerializer(BaseSerializer):
     id = serializers.UUIDField(source="pk")
     name = serializers.SerializerMethodField()
+    is_active = serializers.BooleanField()
 
     def get_name(self, obj):
         return get_associate_display_name(obj)
@@ -19,6 +20,7 @@ class CareTeamAssociateNestedSerializer(BaseSerializer):
 class CareTeamRoleNestedSerializer(BaseSerializer):
     id = serializers.UUIDField(source="pk")
     name = serializers.CharField()
+    is_active = serializers.BooleanField()
 
 
 class CenterCareTeamMemberNestedSerializer(BaseModelSerializer):
