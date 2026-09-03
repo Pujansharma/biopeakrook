@@ -1,3 +1,5 @@
+import re
+
 from django.db.models import Prefetch, Q
 
 from accounts.centers.v2.mixins import CenterV2Mixin
@@ -19,6 +21,10 @@ from core.utils.views.main import (
 from inventory.models import Equipment, EquipmentType, Room, RoomType
 from inventory.utils.constants import EquipmentOperationalStatus
 from programs.services.models import CenterServiceAssignment, Service
+
+UUID_QUERY_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 
 class RoomTypeListCreateView(CenterV2Mixin, BaseListCreateAPIView):
@@ -121,14 +127,29 @@ class RoomListCreateView(CenterV2Mixin, BaseListCreateAPIView):
         filter_kwargs = self.get_active_query_filter()
         search = Q()
         search_params = self.request.query_params.get("search", "").strip()
-        room_type_id = self.request.query_params.get("room_type_id")
+        room_type_id = (self.request.query_params.get("room_type_id") or "").strip()
         if room_type_id:
+            if UUID_QUERY_PATTERN.fullmatch(room_type_id) is None:
+                self.raise_bad_request("Invalid room_type_id.")
             filter_kwargs["room_type_ref"] = room_type_id
         if search_params:
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
+
+        type_active_query = self.request.query_params.get("type_active")
+        type_active_filters = {
+            "1": Q(room_type_ref__isnull=False, room_type_ref__is_active=True),
+            "0": Q(room_type_ref__isnull=True) | Q(room_type_ref__is_active=False),
+        }
+        type_active_filter = type_active_filters.get(type_active_query, Q())
+
         return (
-            Room.objects.filter(search, center=center, **filter_kwargs)
+            Room.objects.filter(
+                search,
+                type_active_filter,
+                center=center,
+                **filter_kwargs,
+            )
             .select_related("room_type_ref", "created_by")
             .prefetch_related("equipments")
             .order_by("-created_at")
@@ -181,8 +202,29 @@ class EquipmentListCreateView(CenterV2Mixin, BaseListCreateAPIView):
         if search_params:
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
+
+        type_active_query = self.request.query_params.get("type_active")
+        type_active_filters = {
+            "1": Q(equipment_type__isnull=False, equipment_type__is_active=True),
+            "0": Q(equipment_type__isnull=True) | Q(equipment_type__is_active=False),
+        }
+        type_active_filter = type_active_filters.get(type_active_query, Q())
+
+        room_allotted_query = self.request.query_params.get("room_allotted")
+        room_allotted_filters = {
+            "1": Q(room__isnull=False, room__is_active=True),
+            "0": Q(room__isnull=True) | Q(room__is_active=False),
+        }
+        room_allotted_filter = room_allotted_filters.get(room_allotted_query, Q())
+
         return (
-            Equipment.objects.filter(search, center=center, **filter_kwargs)
+            Equipment.objects.filter(
+                search,
+                type_active_filter,
+                room_allotted_filter,
+                center=center,
+                **filter_kwargs,
+            )
             .select_related("equipment_type", "room", "created_by")
             .order_by("-created_at")
         )
