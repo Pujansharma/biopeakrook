@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.customers.models import CustomerCenterAssignment
-from appointments.models import Appointment, CenterCareTeam
+from appointments.models import Appointment
 from appointments.utils.calendar import (
     collect_associate_block_events,
     collect_associate_leave_events,
@@ -21,6 +21,7 @@ from appointments.utils.calendar import (
 from appointments.utils.care_teams import (
     expand_care_team_for_assignment,
     live_associate_center_assignments,
+    load_active_center_care_team,
 )
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.intervals import (
@@ -86,13 +87,30 @@ def busy_load_count(busy_map, resource_id):
     return len(busy_map.get(str(resource_id), []))
 
 
+def booking_has_complete_pin(modality, associates, room):
+    """Pin = associates list; in_person also requires room."""
+    if not associates:
+        return False
+    if modality == AppointmentModes.IN_PERSON and room is None:
+        return False
+    return True
+
+
+def assert_booking_pin_shape(modality, associates, room):
+    """Reject partial pin (associates without room) so we never silently re-resolve."""
+    if associates and modality == AppointmentModes.IN_PERSON and room is None:
+        raise ValidationError(
+            "Pin requires room_id for in-person appointments."
+        )
+
+
 def load_busy_interval_maps(center, range_start, range_end):
     appointments = (
         Appointment.objects.filter(
             center=center,
             status__in=BUSY_APPOINTMENT_STATUSES,
-            start_datetime__lt=range_end,
-            end_datetime__gt=range_start,
+            exclusive_start_datetime__lt=range_end,
+            exclusive_end_datetime__gt=range_start,
         )
         .prefetch_related("associate_links")
         .select_related("room", "equipment")
@@ -125,8 +143,8 @@ def load_customer_busy_intervals(customer_profile, range_start, range_end):
     appointments = Appointment.objects.filter(
         customer_profile=customer_profile,
         status__in=BUSY_APPOINTMENT_STATUSES,
-        start_datetime__lt=range_end,
-        end_datetime__gt=range_start,
+        exclusive_start_datetime__lt=range_end,
+        exclusive_end_datetime__gt=range_start,
     )
     intervals = []
     for appointment in appointments:
@@ -217,19 +235,16 @@ def build_service_resource_pools(center, assignment, modality):
 
 
 def validate_service_bookable(assignment, modality, resource_pools):
+    """
+    Config-level bookability. Virtual and in-person stay open here:
+    zero-role virtual (preferred doctor) and preferred-room-only in-person
+    are valid; find/resolve enforce room when needed.
+    """
+    if modality in (AppointmentModes.VIRTUAL, AppointmentModes.IN_PERSON):
+        return
     role_pools = resource_pools["roles"]
     has_roles = len(role_pools) > 0
     has_room_type = assignment.required_room_type is not None
-    if not has_roles and modality == AppointmentModes.VIRTUAL:
-        return
-    if (
-        not has_roles
-        and modality == AppointmentModes.IN_PERSON
-        and has_room_type
-    ):
-        return
-    if modality == AppointmentModes.IN_PERSON:
-        return
     if not has_roles and not has_room_type:
         raise ValidationError("Service is not bookable at this center.")
 
@@ -954,15 +969,23 @@ def find_appointment_slots(
     }
 
 
-def validate_associate_assignments(center, associates_payload, role_requirements):
+def validate_associate_assignments(
+    center, associates_payload, role_requirements, modality
+):
     required_role_ids = {str(item.role.pk) for item in role_requirements}
     provided_role_ids = set()
+    seen_associate_ids = set()
     for entry in associates_payload:
         role_id = str(entry["role_id"])
-        associate_id = entry["associate_id"]
+        associate_id = str(entry["associate_id"])
+        if role_id in provided_role_ids:
+            raise ValidationError("Duplicate role in associates pin.")
+        if associate_id in seen_associate_ids:
+            raise ValidationError("Duplicate associate in associates pin.")
         provided_role_ids.add(role_id)
+        seen_associate_ids.add(associate_id)
         assignment = (
-            live_associate_center_assignments(center, [associate_id])
+            live_associate_center_assignments(center, [entry["associate_id"]])
             .filter(role=role_id)
             .first()
         )
@@ -970,6 +993,8 @@ def validate_associate_assignments(center, associates_payload, role_requirements
             raise ValidationError(
                 "Associate is not assigned to this center with the required role."
             )
+        if not associate_modality_compatible(assignment.mode, modality):
+            raise ValidationError("Associate modality is not compatible.")
     missing = required_role_ids - provided_role_ids
     if missing:
         raise ValidationError(
@@ -1006,7 +1031,9 @@ def validate_appointment_allocation(
         assignment.role_requirements.filter(is_active=True).select_related("role")
     )
     if associates:
-        validate_associate_assignments(center, associates, role_requirements)
+        validate_associate_assignments(
+            center, associates, role_requirements, modality
+        )
 
     resource_pools = build_service_resource_pools(center, assignment, modality)
     validate_service_bookable(assignment, modality, resource_pools)
@@ -1114,6 +1141,25 @@ def validate_appointment_allocation(
             raise ValidationError("Selected equipment is not available.")
 
 
+def resolve_pinned_care_team(center, care_team_id, assignment, associates):
+    """
+    Stamp care_team on pin path only when every live team member appears in the pin.
+    Extra pin rows (filled missing service roles) are allowed.
+    """
+    team = load_active_center_care_team(center, care_team_id)
+    members = expand_care_team_for_assignment(center, care_team_id, assignment)
+    pinned_pairs = {
+        (str(entry["role_id"]), str(entry["associate_id"])) for entry in associates
+    }
+    for member in members:
+        member_pair = (str(member.role.pk), str(member.associate.pk))
+        if member_pair not in pinned_pairs:
+            raise ValidationError(
+                "Pinned associates do not match the preferred care team."
+            )
+    return team
+
+
 def resolve_booking_combo(
     center,
     assignment,
@@ -1132,6 +1178,8 @@ def resolve_booking_combo(
     Else resolve from preferred, then validate.
     """
     preferred = preferred or {}
+    associates = associates or []
+    assert_booking_pin_shape(modality, associates, room)
     buffer_before = assignment.buffer_before
     buffer_after = assignment.buffer_after
     exclusive_start, exclusive_end = compute_exclusive_bounds(
@@ -1140,9 +1188,7 @@ def resolve_booking_combo(
     timezone_name = get_center_timezone_name(center)
     slot_date = start.astimezone(ZoneInfo(timezone_name)).date()
 
-    has_pin = bool(associates)
-    if modality == AppointmentModes.IN_PERSON:
-        has_pin = has_pin and room is not None
+    has_pin = booking_has_complete_pin(modality, associates, room)
 
     care_team = None
     if not has_pin:
@@ -1184,11 +1230,9 @@ def resolve_booking_combo(
     else:
         care_team_id = preferred.get("care_team_id")
         if care_team_id:
-            care_team = CenterCareTeam.objects.filter(
-                pk=care_team_id,
-                center=center,
-                is_active=True,
-            ).first()
+            care_team = resolve_pinned_care_team(
+                center, care_team_id, assignment, associates
+            )
 
     validate_appointment_allocation(
         center=center,

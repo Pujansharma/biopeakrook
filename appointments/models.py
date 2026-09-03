@@ -10,7 +10,6 @@ from accounts.utils import get_user_model
 from appointments.utils.constants import (
     AppointmentAuditAction,
     AppointmentStatus,
-    BUSY_APPOINTMENT_STATUSES,
     ExceptionResolution,
     ExceptionScanJobStatus,
     ExceptionSourceType,
@@ -24,7 +23,8 @@ from programs.services.models import Service
 
 User = get_user_model()
 
-_BUSY_STATUS_VALUES = list(BUSY_APPOINTMENT_STATUSES)
+# Stable order must match ExclusionConstraint migrations (not frozenset hash order).
+_BUSY_STATUS_VALUES = ["confirmed", "checked_in", "in_progress"]
 
 
 def _exclusive_range_expression():

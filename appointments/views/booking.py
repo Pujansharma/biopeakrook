@@ -96,21 +96,21 @@ def raise_idempotency_payload_conflict(existing_key, payload_hash):
 def resolve_room(center, room_id):
     if room_id is None:
         return None
-    return get_object_or_404(
-        Room.objects.filter(center=center, is_active=True),
-        "Room not found.",
-        pk=room_id,
-    )
+    room = Room.objects.filter(center=center, is_active=True, pk=room_id).first()
+    if room is None:
+        raise DjangoValidationError("Invalid room for this center.")
+    return room
 
 
 def resolve_equipment(center, equipment_id):
     if equipment_id is None:
         return None
-    return get_object_or_404(
-        Equipment.objects.filter(center=center, is_active=True),
-        "Equipment not found.",
-        pk=equipment_id,
-    )
+    equipment = Equipment.objects.filter(
+        center=center, is_active=True, pk=equipment_id
+    ).first()
+    if equipment is None:
+        raise DjangoValidationError("Invalid equipment for this center.")
+    return equipment
 
 
 def build_associate_payload(raw_associates):

@@ -24,6 +24,7 @@ from appointments.utils.exceptions import (
     resolve_exceptions_for_appointment,
 )
 from appointments.utils.scheduling import (
+    booking_has_complete_pin,
     compute_exclusive_bounds,
     get_center_service_assignment,
 )
@@ -269,7 +270,18 @@ class AppointmentBookSerializer(BaseSerializer):
             raise serializers.ValidationError(
                 "Service is not available at this center."
             )
-        has_pin = bool(attrs["associates"])
+        associates = attrs["associates"]
+        room_id = attrs.get("room_id")
+        modality = attrs["modality"]
+        if (
+            associates
+            and modality == AppointmentModes.IN_PERSON
+            and room_id is None
+        ):
+            raise serializers.ValidationError(
+                "Pin requires room_id for in-person appointments."
+            )
+        has_pin = booking_has_complete_pin(modality, associates, room_id)
         has_preferred = bool(attrs["preferred"])
         has_role_requirements = any(
             requirement.is_active
