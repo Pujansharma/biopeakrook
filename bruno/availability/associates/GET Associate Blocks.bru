@@ -1,0 +1,34 @@
+meta {
+  name: GET Associate Blocks
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/blocks/?active=1
+  body: none
+  auth: bearer
+}
+
+params:query {
+  active: 1
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List associate blocks for this center + associate. Paginated. active=0|1 (omit → active only).
+  Recurring POST expands to one row per weekday — same times / effective_from / reason.
+  To deactivate a whole series, PATCH is_active=false on every sibling id from this list.
+}

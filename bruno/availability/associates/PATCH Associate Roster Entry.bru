@@ -1,0 +1,50 @@
+meta {
+  name: PATCH Associate Roster Entry
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/roster/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "entries": [
+      {
+        "day_of_week": 0,
+        "start_time": "09:00:00",
+        "end_time": "17:00:00"
+      },
+      {
+        "day_of_week": 2,
+        "start_time": "10:00:00",
+        "end_time": "15:00:00"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Week diff vs current active roster. Listed days upserted (create/update/reactivate).
+  Omitted active days soft-deactivated (is_active=false). Empty entries rejected — cannot wipe the whole week.
+  POST stays additive (omitted days untouched).
+  Same center-hours gate as POST (400 detail.day_errors).
+  Response may include top-level exception_scan: "queued" (async associate_roster scan). Run process_appointment_exception_scans.
+}

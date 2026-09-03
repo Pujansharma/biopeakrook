@@ -26,8 +26,13 @@ Biopeak Nexus is a comprehensive healthcare and wellness operations management p
 - Center-specific scheduling rules
 - Associate availability management
 - Blocked periods (vacations, conferences, emergencies)
-- Appointment lifecycle (pending → confirmed → completed/cancelled)
-- Reschedule history and audit trails
+- Appointment lifecycle (no `pending`): book lands `confirmed`
+  - `confirmed` → `checked_in` → `in_progress` → `completed` (optional `mark-late` while in progress)
+  - `confirmed` → `cancelled` or `no_show`
+  - `confirmed` → `checked_in` → `cancelled`
+  - `confirmed` → `checked_in` → reschedule (lands `confirmed`)
+  - Cancel/reschedule **not** from `in_progress`
+- Reschedule history and appointment-scoped audit trail
 - Booking window restrictions (e.g., 7 days advance booking)
 
 ### 4. **Services Management**

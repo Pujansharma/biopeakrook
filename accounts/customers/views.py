@@ -176,10 +176,10 @@ class CustomerProfilesListView(BaseListAPIView):
 
     def get_queryset(self):
         filter_kwargs = {}
-        is_active_query = self.request.query_params.get("is_active", None)
+        active_query = self.request.query_params.get("active", None)
 
-        if is_active_query is not None:
-            filter_kwargs["is_active"] = bool(int(is_active_query))
+        if active_query is not None:
+            filter_kwargs["is_active"] = bool(int(active_query))
 
         return CustomerProfile.objects.select_related("customer__user").filter(
             customer=self.get_customer_for_user(), **filter_kwargs

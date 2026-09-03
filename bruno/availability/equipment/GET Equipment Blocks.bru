@@ -1,0 +1,34 @@
+meta {
+  name: GET Equipment Blocks
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/equipment-blocks/{{equipment_id}}/?active=1
+  body: none
+  auth: bearer
+}
+
+params:query {
+  active: 1
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List equipment blocks. Paginated. active=0|1 (omit → active only).
+  Recurring POST expands to one row per weekday — same times / effective_from / reason.
+  To deactivate a whole series, PATCH is_active=false on every sibling id from this list.
+}

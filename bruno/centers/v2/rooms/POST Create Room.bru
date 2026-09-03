@@ -1,0 +1,43 @@
+meta {
+  name: POST Create Room
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/v2/rooms/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "Consultation Room 1",
+    "room_type_id": "{{room_type_id}}",
+    "capacity": 1,
+    "floor": "1",
+    "equipment_ids": []
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create room. Set env room_type_id first.
+  Optional: capacity (min 1), floor, equipment_ids (paste UUID strings into the array; empty = none).
+  Do not use Bruno vars inside JSON arrays.
+  Do not send code; server generates RM-{center_code}-{seq} (e.g. RM-CT-0001-0001).
+  room_type_id and equipment_ids must be active for this center; inactive → 400.
+}

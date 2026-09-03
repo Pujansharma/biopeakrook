@@ -1,0 +1,15 @@
+meta {
+  name: equipment
+  type: folder
+  seq: 6
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Equipment blocks and downtimes. Resource id in URL.
+  Blocks: one-off (date + times) or recurring (days_of_week → one row per day). GET list then PATCH each id to drop a series. Downtime: one-off only.
+  Env: equipment_id, equipment_block_id, equipment_downtime_id.
+}

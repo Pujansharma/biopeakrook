@@ -1,0 +1,48 @@
+meta {
+  name: POST Find Slots
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/slots/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "customer_profile_id": "{{customer_profile_id}}",
+    "service_id": "{{service_id}}",
+    "modality": "in_person",
+    "date": "2026-09-05",
+    "preferred": {
+      "room_id": "{{room_id}}"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Returns pinned slots for a service on a given date (one combo per start/end). Cap 200/day with truncated flag.
+  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id}.
+  preferred.care_team_id XOR preferred.doctor_id / health_coach_id. room_id may combine with either.
+  Care team fills matching service roles; missing roles auto-searched; extra members must be free.
+  Load-balance: fewest busy appts that day, then created_at/code/pk. Room equipment = first active on room.
+  in_person always needs a room (preferred or service room type). Else 400 "A room is required for in-person appointments."
+  Customer busy is global across centers.
+  customer_profile_id / service_id must be active at this center. Missing, inactive, or other-center → 400 "Invalid customer profile for this center." / "Invalid service for this center."
+}
+​

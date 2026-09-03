@@ -1,11 +1,83 @@
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from accounts.utils import get_user_model
-from appointments.utils.constants import AppointmentDays
+from core.utils.constants import AppointmentDays
 from core.utils.models import BaseUUIDModel
-from inventory.utils.constants import RoomType, DeviceType
+from inventory.utils.constants import (
+    DeviceType,
+    EquipmentOperationalStatus,
+    EquipmentPortability,
+    RoomType as LegacyRoomTypeChoices,
+)
 
 User = get_user_model()
+
+
+class RoomType(BaseUUIDModel):
+    """Per-center room type catalogue (Phase A)."""
+
+    center = models.ForeignKey(
+        "centers.Center", on_delete=models.CASCADE, related_name="room_types"
+    )
+    name = models.CharField(max_length=100)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_room_types",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["center", "name"], name="uniq_room_type_center_name"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["center", "is_active"], name="room_type_center_active")
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class EquipmentType(BaseUUIDModel):
+    """Per-center equipment type catalogue (Phase A)."""
+
+    center = models.ForeignKey(
+        "centers.Center", on_delete=models.CASCADE, related_name="equipment_types"
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default="")
+    portability = models.CharField(
+        choices=EquipmentPortability, default=EquipmentPortability.FIXED
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_equipment_types",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["center", "name"], name="uniq_equipment_type_center_name"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["center", "is_active"], name="equip_type_center_active"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
 
 
 class Room(BaseUUIDModel):
@@ -14,11 +86,26 @@ class Room(BaseUUIDModel):
     center = models.ForeignKey(
         "centers.Center", on_delete=models.CASCADE, related_name="rooms"
     )
-    room_type = models.CharField(choices=RoomType.CHOICES)
+    # Legacy enum — retained Phase A for associate equipment/room serializers.
+    room_type = models.CharField(
+        choices=LegacyRoomTypeChoices.CHOICES, null=True, blank=True, default=None
+    )
+    # Typed catalogue FK — used by v2 APIs.
+    room_type_ref = models.ForeignKey(
+        RoomType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rooms",
+    )
     name = models.CharField(max_length=100)  # "Consultation Room 1"
     code = models.CharField(max_length=50, unique=True, editable=False)  # "BLR-S-CR-01"
 
-    capacity = models.PositiveIntegerField(default=1)  # For group sessions
+    capacity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Maximum occupants; minimum 1",
+    )
     floor = models.CharField(max_length=20, blank=True)
 
     created_by = models.ForeignKey(
@@ -70,7 +157,17 @@ class RoomSchedule(BaseUUIDModel):
 class Equipment(BaseUUIDModel):
     """Actual device instances"""
 
-    device_type = models.CharField(choices=DeviceType.CHOICES)
+    # Legacy enum — retained Phase A for associate equipment serializers.
+    device_type = models.CharField(
+        choices=DeviceType.CHOICES, null=True, blank=True, default=None
+    )
+    equipment_type = models.ForeignKey(
+        EquipmentType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="equipments",
+    )
     code = models.CharField(max_length=20, unique=True, editable=False)
 
     center = models.ForeignKey(
@@ -88,6 +185,10 @@ class Equipment(BaseUUIDModel):
     setup_time = models.PositiveIntegerField(default=0)  # minutes
     cooldown_time = models.PositiveIntegerField(default=0)
     requires_technician = models.BooleanField(default=False)
+    operational_status = models.CharField(
+        choices=EquipmentOperationalStatus,
+        default=EquipmentOperationalStatus.OPERATIONAL,
+    )
 
     created_by = models.ForeignKey(
         User,
@@ -99,6 +200,12 @@ class Equipment(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["center", "operational_status", "is_active"],
+                name="equip_center_status_active",
+            )
+        ]
 
 
 class EquipmentSchedule(BaseUUIDModel):
@@ -142,13 +249,6 @@ class EquipmentBooking(BaseUUIDModel):
 
     equipment = models.ForeignKey(
         Equipment, on_delete=models.PROTECT, related_name="bookings"
-    )
-    appointment = models.ForeignKey(
-        "appointments.Appointment",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="devices",
     )
 
     start_datetime = models.DateTimeField()

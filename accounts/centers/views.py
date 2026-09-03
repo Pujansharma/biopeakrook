@@ -143,6 +143,13 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
         if is_care_staff and is_care_staff in ["0", "1"]:
             filter_kwargs["is_care_staff"] = bool(int(is_care_staff))
 
+        role_query = self.request.query_params.get("role")
+        role_filters = {
+            "1": Q(role__isnull=False, role__is_active=True),
+            "0": Q(role__isnull=True) | Q(role__is_active=False),
+        }
+        role_filter = role_filters.get(role_query, Q())
+
         return (
             AssociateCenterAssignment.objects.annotate(
                 national_phone=ExtractPartText(
@@ -156,6 +163,7 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
             )
             .filter(
                 search,
+                role_filter,
                 center_id=center,
                 **filter_kwargs,
             )

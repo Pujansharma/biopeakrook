@@ -1,0 +1,39 @@
+meta {
+  name: POST Equipment Downtime
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/equipment-downtimes/{{equipment_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "date": "2026-09-06",
+    "start_time": "09:00:00",
+    "end_time": "17:00:00",
+    "reason": "Manufacturer service"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Equipment downtime. Equipment from URL. Same-day only: date + start_time + end_time. One POST per day. Required reason. Rejects overlap.
+  Set equipment_downtime_id from response for PATCH.
+}

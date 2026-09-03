@@ -1,0 +1,40 @@
+meta {
+  name: GET List Associates
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/associates/?page=1&limit=10&active=1&admin=0
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  active: 1
+  admin: 0
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Admin-only paginated staff list. Query: search (email/phone/full name prefix), page, limit (max 50), active=0|1, admin=0|1.
+  
+  admin filters AssociateCenterAssignment.is_admin:
+  - 1: at least one center assignment where they are center admin
+  - 0: at least one center assignment where they are not center admin
+  - omit: no admin filter
+  
+  Mixed-role staff (admin at one center, not at another) can appear in both 0 and 1.
+  
+  Auth: bearer {{access_token}}. Run Auth → Login Phone Direct first (Development env selected).
+}
