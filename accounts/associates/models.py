@@ -130,6 +130,7 @@ class Associate(BaseModel):
         base_field=models.CharField(max_length=50), max_length=2, default=list
     )
     has_verified_badge = models.BooleanField(default=False)
+    centers_count = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-created_at"]

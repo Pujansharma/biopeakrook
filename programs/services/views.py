@@ -10,11 +10,13 @@ from django.db.models import (
 from accounts.centers.models import Center
 from accounts.centers.serializers import ServiceAvailableCenterSerializer
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from core.utils.exceptions import get_object_or_404
 from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
+    BaseGenericAPIView,
+    BaseListAPIView,
     BaseListCreateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
-    BaseListAPIView,
 )
 from products.models import Product
 from products.serializers import ServiceAvailableProductSerializer
@@ -25,9 +27,24 @@ from programs.services.models import (
     ServiceProductAssignment,
 )
 from programs.services.serializers import (
+    MinimalServiceCenterSerializer,
+    MinimalServiceProductSerializer,
     ServiceSerializer,
 )
 from programs.services.utils.constants import ServiceCategory
+
+
+class ServiceViewMeta(BaseGenericAPIView):
+    @classmethod
+    def get_service_queryset(cls):
+        return Service.objects.all()
+
+    def get_service(self):
+        return get_object_or_404(
+            self.get_service_queryset(),
+            "Service not found",
+            pk=self.kwargs["pk"],
+        )
 
 
 class ServicesView(BaseListCreateAPIView):
@@ -155,3 +172,68 @@ class ServiceAvailableProducts(BaseListAPIView):
             .order_by("-exists", "-created_at")
         )
         return qs
+
+
+class ServiceCentersView(ServiceViewMeta, BaseListAPIView):
+    """List center assignments for a service without X-Center-ID scoping.
+
+    This read-only catalogue endpoint is intentionally available to admins and
+    associates.
+    """
+
+    serializer_class = MinimalServiceCenterSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        search = Q()
+        filter_kwargs = {"service": self.get_service()}
+        search_query = self.request.query_params.get("search", "").strip()
+        active_query = self.request.query_params.get("active", None)
+
+        if active_query and active_query in ["0", "1"]:
+            filter_kwargs["center__is_active"] = bool(int(active_query))
+
+        if search_query:
+            search |= Q(center__name__istartswith=search_query)
+            search |= Q(center__code__icontains=search_query)
+
+        return (
+            CenterServiceAssignment.objects.filter(search, **filter_kwargs)
+            .select_related("center")
+            .order_by("-created_at")
+        )
+
+
+class ServiceProductsView(ServiceViewMeta, BaseListAPIView):
+    """List product assignments for a service without X-Center-ID scoping.
+
+    This read-only catalogue endpoint is intentionally available to admins and
+    associates.
+    """
+
+    serializer_class = MinimalServiceProductSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        search = Q()
+        filter_kwargs = {"service": self.get_service()}
+        search_query = self.request.query_params.get("search", "").strip()
+        active_query = self.request.query_params.get("active", None)
+        provider_ids = self.request.query_params.getlist("provider", [])
+
+        if active_query and active_query in ["0", "1"]:
+            filter_kwargs["product__is_active"] = bool(int(active_query))
+
+        if provider_ids:
+            filter_kwargs["product__provider__pk__in"] = provider_ids
+
+        if search_query:
+            # Prefix and substring lookups are intentional for instant search.
+            search |= Q(product__name__istartswith=search_query)
+            search |= Q(product__name__icontains=search_query)
+
+        return (
+            ServiceProductAssignment.objects.filter(search, **filter_kwargs)
+            .select_related("product")
+            .order_by("-created_at")
+        )

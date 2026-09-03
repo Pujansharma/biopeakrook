@@ -195,3 +195,5 @@ STATIC_ROOT = BASE_DIR / "storage" / "static"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "storage" / "media"
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

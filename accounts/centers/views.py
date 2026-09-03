@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import F, Prefetch, Q, ProtectedError, RestrictedError, Value
 from django.db.models.functions import Concat
 
@@ -6,6 +7,7 @@ from accounts.associates.serializers import (
     CenterAssociateSerializer,
     AssociateRoleSerializer,
 )
+from accounts.associates.utils.db import update_center_associate_centers_count
 from accounts.centers.models import Center, CenterOperatingHour
 from accounts.centers.serializers import (
     CenterSerializer,
@@ -89,8 +91,10 @@ class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
 
     def perform_destroy(self, instance):
         try:
-            super().perform_destroy(instance)
-            decrement_organization_centers_count()
+            with transaction.atomic():
+                update_center_associate_centers_count(instance.pk)
+                super().perform_destroy(instance)
+                decrement_organization_centers_count()
         except ProtectedError, RestrictedError:
             logger.exception(msg="Error in Center DELETE", exc_info=True)
             self.raise_bad_request(

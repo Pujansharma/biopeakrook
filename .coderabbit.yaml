@@ -258,6 +258,9 @@ reviews:
     - F() expressions and annotations used correctly; no Python-side aggregation of large querysets
       when DB aggregation is possible.
     - IntegrityError handling on unique constraints (duplicate bookings, emails).
+    - Do not flag adjacent-commented `istartswith` and `icontains` pairs as redundant when they
+      document the approved instant-search prefix and substring discovery contract. These pairs
+      do not imply ranking or conditional fallback.
 
     =====================================================================
     DRF SERIALIZERS AND VIEWS

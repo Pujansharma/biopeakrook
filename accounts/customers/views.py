@@ -51,6 +51,7 @@ from core.utils.views.main import (
 )
 from leads.models import Lead
 from programs.services.models import ServiceDocument
+from programs.services.utils.constants import get_module_category_document_types
 
 
 class CustomerProfileMeta(BaseGenericAPIView):
@@ -87,6 +88,7 @@ class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
         active_query = self.request.query_params.get("active")
         document_type = self.request.query_params.get("document_type")
         document_category = self.request.query_params.get("document_category")
+        module_category = self.request.query_params.get("module_category")
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
 
@@ -103,6 +105,10 @@ class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
             filter_kwargs["result__document_type"] = document_type
         if document_category:
             filter_kwargs["document_category"] = document_category
+        if module_category:
+            filter_kwargs["result__document_type__in"] = (
+                get_module_category_document_types(module_category)
+            )
         if date_from:
             filter_kwargs["result__sample_collection_date__gte"] = date_from
         if date_to:

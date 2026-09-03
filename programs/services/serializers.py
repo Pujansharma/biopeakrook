@@ -4,7 +4,13 @@ from rest_framework import serializers
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
-from programs.services.models import Service, CenterServiceAssignment
+from programs.services.models import (
+    CenterServiceAssignment,
+    Service,
+    ServiceDocument,
+    ServiceProductAssignment,
+)
+from programs.services.utils.constants import get_service_document_module_category
 from programs.services.utils.db import (
     update_service_center_count,
 )
@@ -22,6 +28,44 @@ class BaseServiceSerializer(BaseModelSerializer):
     class Meta:
         model = Service
         fields = ["id", "name", "service_category", "service_category_code", "image"]
+
+
+class BaseServiceDocumentModuleCategorySerializer(BaseModelSerializer):
+    module_category = serializers.SerializerMethodField(read_only=True)
+    module_category_code = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = ServiceDocument
+        fields = ["module_category", "module_category_code"]
+
+    def get_module_category(self, instance: ServiceDocument):
+        module_category = get_service_document_module_category(
+            instance.result.document_type
+        )
+        return module_category.label
+
+    def get_module_category_code(self, instance: ServiceDocument):
+        return get_service_document_module_category(instance.result.document_type)
+
+
+class MinimalServiceCenterSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="center.id", read_only=True)
+    code = serializers.CharField(source="center.code", read_only=True)
+    name = serializers.CharField(source="center.name", read_only=True)
+
+    class Meta:
+        model = CenterServiceAssignment
+        fields = ["id", "code", "name"]
+
+
+class MinimalServiceProductSerializer(BaseModelSerializer):
+    id = serializers.UUIDField(source="product.id", read_only=True)
+    name = serializers.CharField(source="product.name", read_only=True)
+    code = serializers.CharField(source="product.code", read_only=True)
+
+    class Meta:
+        model = ServiceProductAssignment
+        fields = ["id", "name", "code"]
 
 
 class BaseServiceSerializerMeta(BaseSerializer):

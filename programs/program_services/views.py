@@ -29,7 +29,10 @@ from programs.program_services.utils.db import (
     delete_service_result,
 )
 from programs.services.models import ServiceDocument, ServiceResult
-from programs.services.utils.constants import ServiceCategory
+from programs.services.utils.constants import (
+    ServiceCategory,
+    get_module_category_document_types,
+)
 
 
 class ProgramServiceCancelViewMeta(BaseGenericAPIView):
@@ -272,6 +275,7 @@ class AssessmentProgramServiceDocumentsView(
         result_identifier = self.request.query_params.get("result")
         document_type = self.request.query_params.get("document_type")
         document_category = self.request.query_params.get("document_category")
+        module_category = self.request.query_params.get("module_category")
         search_query = self.request.query_params.get("search", "").strip()
         if result_identifier:
             filter_kwargs["result__pk"] = result_identifier
@@ -279,6 +283,10 @@ class AssessmentProgramServiceDocumentsView(
             filter_kwargs["result__document_type"] = document_type
         if document_category:
             filter_kwargs["document_category"] = document_category
+        if module_category:
+            filter_kwargs["result__document_type__in"] = (
+                get_module_category_document_types(module_category)
+            )
         if search_query:
             filter_kwargs["filename__icontains"] = search_query
         program_service = self.get_assessment_program_service()
