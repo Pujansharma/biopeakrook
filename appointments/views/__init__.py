@@ -602,7 +602,7 @@ class CenterClosureListCreateView(
             filter_kwargs["date__lte"] = end_date
         return CenterClosure.objects.filter(
             center=center, **filter_kwargs
-        ).order_by("-date", "-created_at")
+        ).order_by("-date")
 
     def perform_create(self, serializer):
         center = self.get_center()

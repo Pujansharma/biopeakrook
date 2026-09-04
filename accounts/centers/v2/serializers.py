@@ -184,6 +184,17 @@ class RoomV2Serializer(BaseModelSerializer):
 
     def validate(self, attrs):
         center = self.context["center"]
+        name = attrs.get("name")
+        if name is None and self.instance is not None:
+            name = self.instance.name
+        if name:
+            clash = Room.objects.filter(center=center, name__iexact=name)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"name": ["A room with this name already exists."]}
+                )
         if self.instance is None and "room_type_id" not in attrs:
             raise serializers.ValidationError(
                 {"room_type_id": "This field is required."}
