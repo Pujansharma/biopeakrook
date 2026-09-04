@@ -193,6 +193,7 @@ Legacy `GET/POST /centers/<id>/operating-hours/` still exists but is not the can
 - PATCH `"is_active": false` reopens the date (soft deactivate); `"is_active": true` closes again; `type` / `reason` also patchable
 - Calendar events use `"type": "closure"` plus extras `closure_type` and `reason`
 - GET supports `?active=0|1` and optional inclusive `?start=` / `?end=` (`YYYY-MM-DD`)
+- GET list order: `date` descending (same-date row order unspecified)
 - No DELETE
 - Model: `CenterClosure` — **user owns migration** for `type` + `reason` fields
 
