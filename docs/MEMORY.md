@@ -77,7 +77,7 @@
 
 ## Known Issues / In-Progress Work
 
-**Service catalog name unique (2026-09-02)** — `Service.name` unique catalog-wide, case-insensitive (`Lower("name")` + serializer `name__iexact`). POST/PATCH `/services/` 400 `"A service with this name already exists."` Same row may keep its name. User owns migration (`uniq_service_name`); existing dup names block migrate. Bruno: `bruno/services/`.
+**Service catalog name unique (2026-09-02 / 2026-09-04)** — `Service.name` unique catalog-wide, case-insensitive (`Lower("name")` + serializer `name__iexact`). Check lives on `BaseServiceSerializerMeta` so generic + therapy + assessment writes all 400 `"A service with this name already exists."` Same row may keep its name. User owns migration (`uniq_service_name`); existing dup names block migrate. Bruno: `bruno/services/`.
 
 **DRF nested as_view() (2026-08-31)** — Never `SomeView.as_view()(request)` from another DRF view. Outer dispatch already wrapped `request` as `rest_framework.request.Request`; inner `as_view()` re-wraps → `AssertionError` 500. Dispatch via view instance handler (`dispatch_to_view` in `appointments/views/booking.py`). Hit GET list + POST book on `AppointmentCollectionView`.
 
