@@ -161,8 +161,11 @@ biopeak-nexus/
     ├── MEMORY.md                 ← project memory for Claude
     ├── features.md
     ├── associate-roles-rbac.md
-    └── scheduling.md
+    ├── appointments-frontend-api.md
+    ├── scheduling.md             # stub → appointments-frontend-api.md
+    └── availability.md           # stub → appointments-frontend-api.md
 ```
+
 
 ### 4.4 Data Model Summary
 
@@ -315,7 +318,9 @@ uv run manage.py <command>
 | `docs/features.md` | Platform feature overview |
 | `docs/accounts-architecture.md` | Accounts segmentation — User, Associate, Customer models and rationale |
 | `docs/associate-roles-rbac.md` | RBAC design details |
-| `docs/scheduling.md` | Scheduling algorithm deep-dive |
+| `docs/appointments-frontend-api.md` | Appointments + availability FE API contract (slots, book, lifecycle, exceptions, ops, care teams, calendars, roster/blocks) |
+| `docs/scheduling.md` | Stub → `appointments-frontend-api.md` |
+| `docs/availability.md` | Stub → `appointments-frontend-api.md` |
 
 ---
 
