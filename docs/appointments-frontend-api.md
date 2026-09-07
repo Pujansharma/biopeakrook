@@ -295,6 +295,16 @@ Each slot = one pinned combo. Pass that pin into book.
 |---|---|---|
 | `start` | today | `YYYY-MM-DD` |
 | `granularity` | `week` | `day` \| `week` \| `month` |
+| `associate_id` | omit | UUID — appointment has this associate |
+| `role_id` | omit | UUID — appointment has this role |
+| `service_id` | omit | UUID |
+| `room_id` | omit | UUID |
+| `equipment_id` | omit | UUID |
+| `equipment_type_id` | omit | UUID — via booked equipment |
+| `status` | omit | single: `confirmed` \| `checked_in` \| `in_progress` \| `completed` \| `cancelled` \| `no_show` |
+| `care_team_id` | omit | UUID |
+
+All optional filters AND with the date window. `associate_id` and `role_id` together = OR (has associate **or** role). Blank/omit = no filter. Junk UUID → 400 `Invalid <param>.`. Junk `status` → 400.
 
 Week = Mon–Sun containing `start`. Month = calendar month.
 
@@ -744,6 +754,8 @@ Same contracts as rooms:
 | `Idempotency key was already used with a different payload.` | 409 |
 | `Cannot perform '…' from status '…'.` | Illegal lifecycle |
 | `Invalid status. Use open or resolved.` | Exceptions list |
+| `Invalid status. Use confirmed, checked_in, in_progress, completed, cancelled, or no_show.` | Appointment list |
+| `Invalid <param>.` | Appointment list junk UUID filter |
 | `X-Center-ID must match the center in the URL.` | Availability associate routes |
 | Roster / hours `detail.day_errors` | Outside hours / roster conflict |
 

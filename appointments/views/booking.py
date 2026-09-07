@@ -1,9 +1,11 @@
 import hashlib
 import json
+import re
 import time
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
@@ -21,7 +23,7 @@ from appointments.serializers.booking import (
     AppointmentSlotFindSerializer,
 )
 from appointments.utils.calendar import get_center_timezone_name, parse_calendar_query_params
-from appointments.utils.constants import AvailabilityGranularity
+from appointments.utils.constants import AppointmentStatus, AvailabilityGranularity
 from appointments.utils.operations import invalidate_operations_cache
 from appointments.utils.intervals import datetime_range_for_dates, resolve_query_date_range
 from appointments.utils.metrics import (
@@ -41,6 +43,64 @@ from inventory.models import Equipment, Room
 LIST_CAP = 500
 APPOINTMENT_CODE_CONSTRAINT = "uniq_appointment_code_per_center"
 IDEMPOTENCY_KEY_CONSTRAINT = "uniq_appointment_idempotency_key_per_center"
+UUID_QUERY_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+APPOINTMENT_LIST_UUID_FILTERS = (
+    ("service_id", "service_id"),
+    ("room_id", "room_id"),
+    ("equipment_id", "equipment_id"),
+    ("equipment_type_id", "equipment__equipment_type_id"),
+    ("care_team_id", "care_team_id"),
+)
+INVALID_APPOINTMENT_STATUS = (
+    "Invalid status. Use confirmed, checked_in, in_progress, "
+    "completed, cancelled, or no_show."
+)
+
+
+def parse_optional_uuid_query(query_params, param_name):
+    raw_value = (query_params.get(param_name) or "").strip()
+    if not raw_value:
+        return None, None
+    if UUID_QUERY_PATTERN.fullmatch(raw_value) is None:
+        return None, f"Invalid {param_name}."
+    return raw_value, None
+
+
+def apply_appointment_list_filters(queryset, query_params):
+    filter_kwargs = {}
+    for param_name, field_name in APPOINTMENT_LIST_UUID_FILTERS:
+        value, error = parse_optional_uuid_query(query_params, param_name)
+        if error:
+            return None, error
+        if value is not None:
+            filter_kwargs[field_name] = value
+    if filter_kwargs:
+        queryset = queryset.filter(**filter_kwargs)
+
+    status = (query_params.get("status") or "").strip()
+    if status:
+        if status not in AppointmentStatus.values:
+            return None, INVALID_APPOINTMENT_STATUS
+        queryset = queryset.filter(status=status)
+
+    associate_id, error = parse_optional_uuid_query(query_params, "associate_id")
+    if error:
+        return None, error
+    role_id, error = parse_optional_uuid_query(query_params, "role_id")
+    if error:
+        return None, error
+
+    link_filter = Q()
+    if associate_id is not None:
+        link_filter |= Q(associate_links__associate_id=associate_id)
+    if role_id is not None:
+        link_filter |= Q(associate_links__role_id=role_id)
+    if associate_id is not None or role_id is not None:
+        queryset = queryset.filter(link_filter).distinct()
+
+    return queryset, None
 
 
 class ConflictError(APIException):
@@ -284,7 +344,7 @@ class AppointmentListView(AppointmentBookingMixin, BaseListAPIView):
             query_end,
             get_center_timezone_name(self.get_center()),
         )
-        return (
+        queryset = (
             self.get_appointment_queryset()
             .filter(
                 start_datetime__lt=range_end,
@@ -292,6 +352,12 @@ class AppointmentListView(AppointmentBookingMixin, BaseListAPIView):
             )
             .order_by("start_datetime")
         )
+        queryset, error = apply_appointment_list_filters(
+            queryset, self.request.query_params
+        )
+        if error:
+            self.raise_bad_request(error)
+        return queryset
 
     def get(self, request, *args, **kwargs):
         started = time.monotonic()

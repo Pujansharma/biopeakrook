@@ -13,6 +13,14 @@ get {
 params:query {
   start: 2026-09-01
   granularity: week
+  ~associate_id: {{associate_id}}
+  ~role_id: {{role_id}}
+  ~service_id: {{service_id}}
+  ~room_id: {{room_id}}
+  ~equipment_id: {{equipment_id}}
+  ~equipment_type_id: {{equipment_type_id}}
+  ~status: confirmed
+  ~care_team_id: {{care_team_id}}
 }
 
 auth:bearer {
@@ -26,4 +34,6 @@ settings {
 
 docs {
   Calendar list for center. Week/month capped at 500 with truncated + total_count.
+  Optional AND filters: service_id, room_id, equipment_id, equipment_type_id, status, care_team_id.
+  associate_id + role_id together = OR. Enable ~params only when set; blank UUID → 400.
 }
