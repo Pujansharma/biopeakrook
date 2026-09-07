@@ -1,0 +1,82 @@
+meta {
+  name: POST Create Service
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/services/
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "IR Sauna",
+    "service_category": "therapy",
+    "is_global": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create catalog service. Admin write. Name unique case-insensitive.
+  Non-global requires add_centers. Duplicate name → 400 name: "A service with this name already exists."
+}
+
+example {
+  name: 400 Duplicate name
+
+  request: {
+    url: {{baseURL}}/services/
+    method: POST
+    mode: json
+    headers: {
+      Content-Type: application/json
+    }
+
+    body:json: {
+      {
+        "name": "IR Sauna",
+        "service_category": "therapy",
+        "is_global": true
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "detail": {
+            "name": [
+              "A service with this name already exists."
+            ]
+          }
+        }
+      '''
+    }
+  }
+}

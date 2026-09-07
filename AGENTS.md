@@ -124,7 +124,7 @@ biopeak-nexus/
 ├── accounts/                    # All user/identity management
 │   ├── users/                   # Custom User model (email-based auth, UUID PK)
 │   ├── associates/              # Internal staff: Associate, AssociateRole, AssociateCenterAssignment
-│   ├── centers/                 # Centers: Center, CenterOperatingHour, CenterHoliday
+│   ├── centers/                 # Centers: Center, CenterOperatingHour, CenterClosure
 │   ├── customers/               # End users: Customer, CustomerProfile, CustomerOnboarding
 │   ├── verifications/           # OTP flows, email verification
 │   └── audits/                  # Audit log models
@@ -135,7 +135,7 @@ biopeak-nexus/
 │       ├── intervals.py         # Pure interval arithmetic (no Django dependency)
 │       ├── scheduling.py        # DB-aware slot finder
 │       ├── db.py                # Appointment CRUD helpers
-│       └── constants.py         # AppointmentStatus, ScheduleModes, AppointmentModes
+│       └── constants.py         # AppointmentStatus, AppointmentModes
 │
 ├── services/                    # Service catalogue
 │   ├── models.py                # Service, ServiceRequirement
@@ -171,13 +171,13 @@ biopeak-nexus/
 - `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField)
 - `AssociateCenterAssignment` — links associate ↔ center with role, is_admin, mode
 - `Customer` (1:1 User) + `CustomerProfile` (family members) + `CustomerOnboarding` (health data)
-- `Center` + `CenterOperatingHour` + `CenterHoliday`
+- `Center` + `CenterOperatingHour` + `CenterClosure`
 
 **Scheduling**
 - `Schedule` — recurring weekly availability (associate, day_of_week, start/end time, duration, buffer)
 - `BlockedPeriod` — one-off unavailability windows (UTC)
-- `Appointment` — booked sessions with full lifecycle (pending → confirmed → completed/cancelled)
-- `AppointmentHistory` — reschedule audit trail
+- `Appointment` — booked sessions; book lands `confirmed` (no `pending`). Cancel/reschedule from `confirmed` or `checked_in`; `in_progress` is not reversible. No-show from `confirmed` only.
+- `AppointmentHistory` — reschedule window snapshots; `AppointmentAuditLog` — appointment-scoped lifecycle trail
 
 **Services & Inventory**
 - `Service` + `ServiceRequirement` — service catalogue per center
@@ -241,7 +241,7 @@ Query: "30-min slots for associate X in room Y, week of Feb 1"
 2. INTERSECT all availability layers
 
 3. SUBTRACT busy periods
-   - CenterHoliday
+   - CenterClosure
    - BlockedPeriod (associate leave, etc.)
    - Existing Appointments
    - EquipmentMaintenance

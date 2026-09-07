@@ -1,0 +1,24 @@
+meta {
+  name: GET Appointment Detail
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/{{appointment_id}}/
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Full appointment detail including exclusive bounds and buffers.
+}

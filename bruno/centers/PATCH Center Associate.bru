@@ -1,0 +1,44 @@
+meta {
+  name: PATCH Center Associate
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseURL}}/centers/associates/{{associate_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "role_id": "{{role_id}}",
+    "is_active": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Update center associate assignment. pk = associate UUID (same as list id). Center from X-Center-ID, not URL.
+  
+  Care role: role_id (UUID from GET List Center Roles). Rejected if associate is_admin. Must belong to this center.
+  Care-staff flag: is_care_staff.
+  Status: is_active (user active flag).
+  
+  PATCH partial — send only fields to change. PUT needs email, first_name, role_id.
+  
+  Auth: bearer {{access_token}}. Set env center_id, associate_id, role_id.
+}

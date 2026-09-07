@@ -1,0 +1,36 @@
+meta {
+  name: PATCH Room Type
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/v2/room-types/{{room_type_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "Consultation",
+    "is_active": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Update room type. Deactivate with is_active=false (no DELETE).
+}

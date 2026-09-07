@@ -1,0 +1,34 @@
+meta {
+  name: POST Cancel
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/{{appointment_id}}/cancel/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "reason": "Customer requested cancellation"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Allowed from confirmed or checked_in. Not from in_progress. Reason required.
+}

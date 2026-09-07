@@ -1,0 +1,38 @@
+meta {
+  name: PATCH Equipment Type
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipment-types/{{equipment_type_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "DEXA",
+    "description": "Whole-body composition scanner",
+    "portability": "fixed",
+    "is_active": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Update equipment type. description optional. Deactivate with is_active=false.
+}

@@ -1,0 +1,26 @@
+meta {
+  name: POST Acknowledge Exception
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/exceptions/{{exception_id}}/acknowledge/
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Resolve without changing appointment status.
+  From in_progress this is the only exception path.
+  From confirmed or checked_in, cancel and reschedule also work.
+}

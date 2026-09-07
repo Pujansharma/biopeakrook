@@ -1,0 +1,34 @@
+meta {
+  name: GET Room Availability
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/rooms/{{room_id}}/?start=2026-09-02&granularity=week
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2026-09-02
+  granularity: week
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Room calendar (center hours minus blocks/downtimes/closures).
+  Omit start → today. Each day includes day_of_week ("0"=Mon … "6"=Sun) and day_of_week_name.
+}

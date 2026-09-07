@@ -1,0 +1,57 @@
+meta {
+  name: PATCH Center Service Assignment V2
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/v2/services/{{service_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "duration": 30,
+    "buffer_before": 5,
+    "buffer_after": 10,
+    "modality": "in_person",
+    "required_room_type_id": null,
+    "required_role_ids": []
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Update per-center assignment config. modality: in_person | virtual | both.
+  
+  Body MUST be a JSON object { ... }. Pasting a bare UUID as the body → 400.
+  
+  All resource fields optional (omit = leave unchanged):
+  - required_room_type_id — UUID | null (null clears)
+  - required_role_ids — UUID[] | null | [] (null/[] clears). Response always includes required_role_ids ([] when none) + nested required_roles.
+  
+  Example with resources:
+  {
+    "duration": 30,
+    "required_room_type_id": "01a03557-a6fd-74ea-a74a-e7db599aefa1",
+    "required_role_ids": []
+  }
+  
+  Type UUID from GET room-types (not rooms). No equipment type on assignment.
+  required_room_type_id, required_role_ids must be active; inactive → 400.
+  Set env service_id first.
+}

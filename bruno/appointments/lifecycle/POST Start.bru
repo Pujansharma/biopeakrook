@@ -1,0 +1,28 @@
+meta {
+  name: POST Start
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/{{appointment_id}}/start/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}

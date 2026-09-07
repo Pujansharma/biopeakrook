@@ -1,0 +1,31 @@
+meta {
+  name: GET List Care Teams
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/care-teams/?page=1&limit=10&search=
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  search: 
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List center care teams. Nested members (associate + role). Query: search, optional active=0|1 (omit = active + inactive).
+  Auth: bearer {{access_token}}. Set env center_id.
+}

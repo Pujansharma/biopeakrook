@@ -1,0 +1,15 @@
+meta {
+  name: appointments
+  type: folder
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Center-scoped appointment booking under /centers/{{center_id}}/appointments/.
+  Care teams catalog: /centers/{{center_id}}/care-teams/.
+  Staff-only (associate/admin). No X-Center-ID required.
+  Env: center_id, customer_profile_id, service_id, appointment_id, care_team_id, idempotency_key.
+}

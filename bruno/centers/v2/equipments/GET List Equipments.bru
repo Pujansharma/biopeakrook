@@ -1,0 +1,47 @@
+meta {
+  name: GET List Equipments
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10&search&type_active=1&room_allotted=1&operational_status=operational&active=1
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  search: 
+  type_active: 1
+  room_allotted: 1
+  operational_status: operational
+  active: 1
+  ~equipment_type_id: {{equipment_type_id}}
+  ~room_id: {{room_id}}
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List equipments. Nested equipment_type + room.
+  operational_status filter: operational | maintenance | downtime.
+  Query: optional active=0|1 (omit = active + inactive).
+  type_active=0|1 (1 = attached type and type.is_active; 0 = type null or inactive type; omit = no type-active filter).
+  room_allotted=0|1 (1 = allotted live room; 0 = room null or inactive room; omit = no room-allotted filter).
+  Separate from equipment active=. Optional equipment_type_id / room_id UUID filters disabled by default — enable to filter.
+  Omit / blank UUID = no id filter.
+  Response includes operational_status + read-only is_in_maintenance, is_downtime booleans.
+}
