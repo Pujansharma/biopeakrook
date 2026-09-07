@@ -1,0 +1,43 @@
+meta {
+  name: POST Care Team Block Recurring
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/care-teams/{{care_team_id}}/blocks/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_recurring": true,
+    "days_of_week": ["0", "1", "2", "3", "4", "5"],
+    "recurring_start_time": "13:00:00",
+    "recurring_end_time": "14:00:00",
+    "effective_from": "2026-09-01",
+    "reason": "Daily team admin"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Recurring care team block. Care team from URL. days_of_week ("0"=Mon … "6"=Sun) → one row per day.
+  POST 201 {detail, data}. data = array of created rows. Set care_team_block_id from data[n].id for PATCH.
+  No effective_until — open-ended until PATCH is_active=false. Rejects overlap on the same team.
+  Top-level exception_scan: "queued" (async multi-day scan). process_appointment_exception_scans required for apply.
+}

@@ -29,6 +29,18 @@ urlpatterns = [
         views.AssociateCenterAvailabilityCalendarView.as_view(),
     ),
     path(
+        "care-teams/<uuid:care_team_id>/blocks/",
+        views.CareTeamAvailabilityBlockListCreateView.as_view(),
+    ),
+    path(
+        "care-teams/<uuid:care_team_id>/blocks/<uuid:pk>/",
+        views.CareTeamAvailabilityBlockDetailView.as_view(),
+    ),
+    path(
+        "care-teams/<uuid:care_team_id>/",
+        views.CareTeamAvailabilityCalendarView.as_view(),
+    ),
+    path(
         "rooms/<uuid:room_id>/",
         views.RoomAvailabilityCalendarView.as_view(),
     ),

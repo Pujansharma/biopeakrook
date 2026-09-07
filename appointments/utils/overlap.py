@@ -8,6 +8,7 @@ from rest_framework import serializers
 from appointments.models import (
     AssociateAvailabilityBlock,
     AssociateLeave,
+    CareTeamAvailabilityBlock,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
@@ -230,6 +231,71 @@ def assert_associate_block_no_overlap(
                 timezone_name,
             ):
                 raise_overlap()
+
+
+def assert_care_team_block_no_overlap(
+    center,
+    care_team,
+    is_recurring,
+    start_datetime,
+    end_datetime,
+    day_of_week,
+    recurring_start_time,
+    recurring_end_time,
+    effective_from,
+    effective_until,
+    exclude_id=None,
+):
+    timezone_name = get_availability_timezone_name()
+    blocks = exclude_pk(
+        CareTeamAvailabilityBlock.objects.filter(
+            center=center, care_team=care_team, is_active=True
+        ),
+        exclude_id,
+    )
+    for block in blocks:
+        if is_recurring and block.is_recurring:
+            if recurring_blocks_overlap(
+                day_of_week,
+                recurring_start_time,
+                recurring_end_time,
+                effective_from,
+                effective_until,
+                block.day_of_week,
+                block.recurring_start_time,
+                block.recurring_end_time,
+                block.effective_from,
+                block.effective_until,
+            ):
+                raise_overlap()
+        elif is_recurring and not block.is_recurring:
+            if one_off_overlaps_recurring_block(
+                block.start_datetime,
+                block.end_datetime,
+                day_of_week,
+                recurring_start_time,
+                recurring_end_time,
+                effective_from,
+                effective_until,
+                timezone_name,
+            ):
+                raise_overlap()
+        elif not is_recurring and block.is_recurring:
+            if one_off_overlaps_recurring_block(
+                start_datetime,
+                end_datetime,
+                block.day_of_week,
+                block.recurring_start_time,
+                block.recurring_end_time,
+                block.effective_from,
+                block.effective_until,
+                timezone_name,
+            ):
+                raise_overlap()
+        elif datetimes_overlap(
+            start_datetime, end_datetime, block.start_datetime, block.end_datetime
+        ):
+            raise_overlap()
 
 
 def assert_associate_leave_no_overlap(

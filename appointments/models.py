@@ -306,6 +306,41 @@ class CenterCareTeamMember(BaseUUIDModel):
         return f"{self.pk}"
 
 
+class CareTeamAvailabilityBlock(BaseUUIDModel):
+    """One-off or weekly recurring unavailability for a care team at a center."""
+
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name="care_team_availability_blocks"
+    )
+    care_team = models.ForeignKey(
+        CenterCareTeam,
+        on_delete=models.CASCADE,
+        related_name="availability_blocks",
+    )
+    is_recurring = models.BooleanField(default=False)
+    start_datetime = models.DateTimeField(null=True, blank=True)
+    end_datetime = models.DateTimeField(null=True, blank=True)
+    day_of_week = models.CharField(choices=AppointmentDays, null=True, blank=True)
+    recurring_start_time = models.TimeField(null=True, blank=True)
+    recurring_end_time = models.TimeField(null=True, blank=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_until = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_care_team_availability_blocks",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class Appointment(BaseUUIDModel):
     """
     Standalone center-scoped appointment booking.

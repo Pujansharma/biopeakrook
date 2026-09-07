@@ -2,7 +2,7 @@ from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.centers.models import Center
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
-from appointments.models import Appointment
+from appointments.models import Appointment, CenterCareTeam
 from appointments.utils.exceptions import (
     apply_availability_exception_hooks,
     get_source_type_for_instance,
@@ -57,6 +57,14 @@ class CenterAvailabilityMixin:
             ).distinct(),
             "Associate not found.",
             pk=self.kwargs["associate_id"],
+        )
+
+    def get_care_team(self):
+        center = self.get_center()
+        return get_object_or_404(
+            CenterCareTeam.objects.filter(center=center, is_active=True),
+            "Care team not found.",
+            pk=self.kwargs["care_team_id"],
         )
 
 

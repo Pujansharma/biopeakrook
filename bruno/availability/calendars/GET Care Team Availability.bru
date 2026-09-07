@@ -1,0 +1,37 @@
+meta {
+  name: GET Care Team Availability
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/care-teams/{{care_team_id}}/?start=2026-09-05&granularity=day
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2026-09-05
+  granularity: day
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Care team calendar. Base = intersect of live members' (center hours ∩ roster).
+  Subtracts closures, team blocks, and every live member's blocks/leaves/appointments.
+  events[] includes those associate events (associate_id on block/leave) plus care_team_block.
+  Reverse: team blocks also appear on each member's associate calendar.
+  Target team must be active at center_id. Omit start → today.
+}

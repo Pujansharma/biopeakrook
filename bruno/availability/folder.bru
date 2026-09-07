@@ -17,10 +17,12 @@ docs {
   4. associates — roster / blocks / leaves
   5. rooms — blocks / downtimes
   6. equipment — blocks / downtimes
+  7. care-teams — blocks (calendar GET under calendars/)
 
-  Aggregate associate calendar lives under bruno/associates/ (not center-scoped).
+  Care team calendar = intersect of live members; events include member associate events + team blocks.
+  Team blocks also subtract from each member's associate calendar and slots.
 
-  All writes use {detail, data}. Block POSTs (assoc/room/equip): data = array of created rows; use data[0].id / data[n].id for env ids.
+  All writes use {detail, data}. Block POSTs (assoc/room/equip/care-team): data = array of created rows; use data[0].id / data[n].id for env ids.
   Writes that trigger exception detection may also return top-level exception_scan: queued | completed | resolved | skipped (data shape unchanged).
   Async scans (recurring blocks, roster): run `uv run manage.py process_appointment_exception_scans` (~1 min cron).
 
@@ -28,7 +30,7 @@ docs {
 
   Center calendar GET defaults granularity=week; other calendars default day.
   Associates: X-Center-ID must match center_id.
-  Env: center_id, associate_id, room_id, equipment_id, closure_id,
+  Env: center_id, associate_id, room_id, equipment_id, closure_id, care_team_id,
   associate_block_id, associate_leave_id, room_block_id, room_downtime_id,
-  equipment_block_id, equipment_downtime_id.
+  equipment_block_id, equipment_downtime_id, care_team_block_id.
 }

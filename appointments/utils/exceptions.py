@@ -16,6 +16,7 @@ from appointments.models import (
     AppointmentExceptionScanJob,
     AssociateAvailabilityBlock,
     AssociateLeave,
+    CareTeamAvailabilityBlock,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
@@ -25,6 +26,7 @@ from appointments.utils.calendar import (
     expand_recurring_block,
     get_center_timezone_name,
 )
+from appointments.utils.care_teams import live_associates_for_care_team
 from appointments.utils.constants import (
     AppointmentAuditAction,
     BUSY_APPOINTMENT_STATUSES,
@@ -52,6 +54,7 @@ RECURRING_SCAN_HORIZON_DAYS = 90
 SOURCE_MODEL_MAP = {
     ExceptionSourceType.ASSOCIATE_LEAVE: AssociateLeave,
     ExceptionSourceType.ASSOCIATE_BLOCK: AssociateAvailabilityBlock,
+    ExceptionSourceType.CARE_TEAM_BLOCK: CareTeamAvailabilityBlock,
     ExceptionSourceType.ROOM_BLOCK: RoomAvailabilityBlock,
     ExceptionSourceType.EQUIPMENT_BLOCK: EquipmentAvailabilityBlock,
     ExceptionSourceType.ROOM_DOWNTIME: RoomDowntime,
@@ -162,7 +165,10 @@ def expand_source_intervals(source_type: str, source, center: Center) -> list[tu
             return []
         return [(source.start_datetime, source.end_datetime)]
 
-    if source_type == ExceptionSourceType.ASSOCIATE_BLOCK:
+    if source_type in {
+        ExceptionSourceType.ASSOCIATE_BLOCK,
+        ExceptionSourceType.CARE_TEAM_BLOCK,
+    }:
         if not source.is_active:
             return []
         if source.is_recurring:
@@ -236,6 +242,16 @@ def appointment_filter_for_source(source_type: str, source):
         return models.Q(associate_links__associate_id=source.associate_id)
     if source_type == ExceptionSourceType.ASSOCIATE_BLOCK:
         return models.Q(associate_links__associate_id=source.associate_id)
+    if source_type == ExceptionSourceType.CARE_TEAM_BLOCK:
+        associate_ids = [
+            associate.pk
+            for associate in live_associates_for_care_team(
+                source.center, source.care_team
+            )
+        ]
+        return models.Q(care_team_id=source.care_team_id) | models.Q(
+            associate_links__associate_id__in=associate_ids
+        )
     if source_type == ExceptionSourceType.ROOM_BLOCK:
         return models.Q(room_id=source.room_id)
     if source_type == ExceptionSourceType.EQUIPMENT_BLOCK:
@@ -267,7 +283,10 @@ def resolve_centers_for_source(source_type: str, source, center: Center | None) 
         )
         return list(Center.objects.filter(pk__in=center_ids, is_active=True))
 
-    if source_type == ExceptionSourceType.ASSOCIATE_BLOCK:
+    if source_type in {
+        ExceptionSourceType.ASSOCIATE_BLOCK,
+        ExceptionSourceType.CARE_TEAM_BLOCK,
+    }:
         return list(Center.objects.filter(pk=source.center_id, is_active=True))
 
     if source_type in {
@@ -524,6 +543,28 @@ def detect_exceptions_for_appointment(appointment: Appointment) -> int:
             center=center,
         )
 
+    care_team_ids = set(
+        CareTeamAvailabilityBlock.objects.filter(
+            center=center,
+            care_team__is_active=True,
+            care_team__members__associate_id__in=associate_ids,
+            is_active=True,
+        ).values_list("care_team_id", flat=True)
+    )
+    if appointment.care_team_id:
+        care_team_ids.add(appointment.care_team_id)
+    for block in CareTeamAvailabilityBlock.objects.filter(
+        center=center,
+        care_team_id__in=care_team_ids,
+        is_active=True,
+    ):
+        total_created += detect_exceptions_for_source(
+            ExceptionSourceType.CARE_TEAM_BLOCK,
+            block.pk,
+            sync=True,
+            center=center,
+        )
+
     if appointment.room_id:
         for block in RoomAvailabilityBlock.objects.filter(
             room_id=appointment.room_id,
@@ -640,6 +681,7 @@ def process_pending_exception_scans(limit: int = 50) -> int:
 def source_is_recurring(source_type: str, source) -> bool:
     if source_type in {
         ExceptionSourceType.ASSOCIATE_BLOCK,
+        ExceptionSourceType.CARE_TEAM_BLOCK,
         ExceptionSourceType.ROOM_BLOCK,
         ExceptionSourceType.EQUIPMENT_BLOCK,
     }:
@@ -686,6 +728,7 @@ def should_run_detection_on_patch(source_type: str, source, validated_data: dict
     tracked_fields = {"effective_from", "effective_until"}
     if source_type in {
         ExceptionSourceType.ASSOCIATE_BLOCK,
+        ExceptionSourceType.CARE_TEAM_BLOCK,
         ExceptionSourceType.ROOM_BLOCK,
         ExceptionSourceType.EQUIPMENT_BLOCK,
     }:
@@ -700,6 +743,7 @@ def should_resolve_on_patch(validated_data: dict) -> bool:
 INSTANCE_SOURCE_TYPE_MAP = {
     AssociateLeave: ExceptionSourceType.ASSOCIATE_LEAVE,
     AssociateAvailabilityBlock: ExceptionSourceType.ASSOCIATE_BLOCK,
+    CareTeamAvailabilityBlock: ExceptionSourceType.CARE_TEAM_BLOCK,
     RoomAvailabilityBlock: ExceptionSourceType.ROOM_BLOCK,
     EquipmentAvailabilityBlock: ExceptionSourceType.EQUIPMENT_BLOCK,
     RoomDowntime: ExceptionSourceType.ROOM_DOWNTIME,

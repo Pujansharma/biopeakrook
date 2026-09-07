@@ -10,6 +10,7 @@ from appointments.models import Appointment, AppointmentAssociate
 from appointments.utils.calendar import (
     collect_associate_block_events,
     collect_associate_leave_events,
+    collect_care_team_block_events,
     collect_closure_events,
     collect_equipment_block_events,
     collect_equipment_downtime_events,
@@ -19,6 +20,7 @@ from appointments.utils.calendar import (
     expand_roster_entries,
     get_center_timezone_name,
 )
+from appointments.utils.care_teams import live_care_teams_for_associate
 from appointments.utils.constants import AvailabilityGranularity
 from appointments.utils.intervals import (
     datetime_range_for_dates,
@@ -172,8 +174,12 @@ def build_associate_capacity(center, associate, start_date, end_date):
     closure_intervals, _ = collect_closure_events(
         center, start_date, end_date, timezone_name
     )
+    care_teams = live_care_teams_for_associate(center, associate)
+    team_block_intervals, _ = collect_care_team_block_events(
+        center, care_teams, start_date, end_date, timezone_name
+    )
     busy_intervals = merge_intervals(
-        block_intervals + leave_intervals + closure_intervals
+        block_intervals + leave_intervals + closure_intervals + team_block_intervals
     )
     available_intervals = subtract_intervals(base_intervals, busy_intervals)
     available_minutes = interval_total_minutes(available_intervals)

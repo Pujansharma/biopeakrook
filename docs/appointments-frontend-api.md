@@ -545,6 +545,7 @@ Associates: send matching `X-Center-ID`.
 |---|---|
 | `…/availability/` | Center hours − closures |
 | `…/availability/associates/<associate_id>/` | Associate at this center |
+| `…/availability/care-teams/<care_team_id>/` | Care team at this center |
 | `…/availability/rooms/<room_id>/` | Room |
 | `…/availability/equipment/<equipment_id>/` | Equipment |
 
@@ -580,8 +581,9 @@ Associates: send matching `X-Center-ID`.
 }
 ```
 
-- Associate calendar adds `associate_id`. Base = center ∩ roster.
-- Event `type` examples: `closure`, `associate_block`, `associate_block_recurring`, `associate_leave` (+ `scope`), room/equipment block/downtime variants.
+- Associate calendar adds `associate_id`. Base = center ∩ roster. Also subtracts blocks from care teams this associate is a live member of (`care_team_block` / `care_team_block_recurring`).
+- Care team calendar adds `care_team_id`. Base = **intersect** of live members' (center ∩ roster). `events` includes team blocks **and** member associate events (blocks/leaves with `associate_id`, plus those members' appointments) and closures.
+- Event `type` examples: `closure`, `associate_block`, `associate_block_recurring`, `associate_leave` (+ `scope`), `care_team_block`, `care_team_block_recurring`, room/equipment block/downtime variants.
 - `base_windows` = before subtractors; `available_windows` = after.
 
 ---
@@ -690,6 +692,18 @@ POST 201: `data` = **array of created rows**. Cannot overlap another active bloc
 ```
 
 `scope`: `center` (URL center) \| `all_centers`. Leave may overlap blocks; block cannot land on leave.
+
+### Care team blocks
+
+**GET / POST** `…/care-teams/<care_team_id>/blocks/`  
+**PATCH** `…/care-teams/<care_team_id>/blocks/<id>/`
+
+Same body as associate blocks (one-off datetimes or recurring `days_of_week`). No team roster or leave — those stay on associates.
+
+- POST 201: `data` = **array of created rows**.
+- Cannot overlap another active block on the **same team**. May overlap a member's personal block/leave.
+- Applies to **current** live members (not snapshotted). Shows on the team calendar and on each member's associate calendar + slots.
+- Recurring POST → `exception_scan: queued`. Scan hits appointments for live members and `Appointment.care_team`.
 
 ### Room blocks & downtimes
 

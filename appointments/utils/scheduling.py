@@ -9,6 +9,7 @@ from appointments.models import Appointment
 from appointments.utils.calendar import (
     collect_associate_block_events,
     collect_associate_leave_events,
+    collect_care_team_block_events,
     collect_closure_events,
     collect_equipment_block_events,
     collect_equipment_downtime_events,
@@ -21,6 +22,7 @@ from appointments.utils.calendar import (
 from appointments.utils.care_teams import (
     expand_care_team_for_assignment,
     live_associate_center_assignments,
+    live_care_teams_for_associate,
     load_active_center_care_team,
 )
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
@@ -273,9 +275,17 @@ def compute_associate_free_windows(
     closure_intervals, _ = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
+    care_teams = live_care_teams_for_associate(center, associate)
+    team_block_intervals, _ = collect_care_team_block_events(
+        center, care_teams, query_start, query_end, timezone_name
+    )
     associate_busy = appointment_busy_map.get(str(associate.pk), [])
     busy_intervals = merge_intervals(
-        block_intervals + leave_intervals + closure_intervals + associate_busy
+        block_intervals
+        + leave_intervals
+        + closure_intervals
+        + team_block_intervals
+        + associate_busy
     )
     return subtract_intervals(base_intervals, busy_intervals)
 
