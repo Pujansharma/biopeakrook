@@ -96,7 +96,7 @@ def serialize_event(event_type, event_id, interval, extra=None):
         "end": interval[1].isoformat(),
     }
     if extra:
-        payload.update(extra)
+        payload.update(dict(extra))
     return payload
 
 
@@ -147,6 +147,36 @@ def expand_roster_entries(center, associate, query_start, query_end, timezone_na
             )
         )
     return merge_intervals(intervals)
+
+
+def expand_roster_entries_for_associates(
+    center, associates, query_start, query_end, timezone_name
+):
+    roster_hours_by_associate = {associate.pk: [] for associate in associates}
+    if not associates:
+        return roster_hours_by_associate
+    roster_entries = AssociateRosterEntry.objects.filter(
+        center=center,
+        associate__in=associates,
+        is_active=True,
+    ).select_related("associate")
+    for roster_entry in roster_entries:
+        roster_hours_by_associate[roster_entry.associate.pk].extend(
+            expand_weekly_time_windows(
+                query_start,
+                query_end,
+                roster_entry.day_of_week,
+                roster_entry.start_time,
+                roster_entry.end_time,
+                timezone_name,
+            )
+        )
+    merged_hours = {}
+    for associate in associates:
+        merged_hours[associate.pk] = merge_intervals(
+            roster_hours_by_associate[associate.pk]
+        )
+    return merged_hours
 
 
 def expand_recurring_block(block, query_start, query_end, timezone_name):
@@ -244,13 +274,103 @@ def collect_associate_leave_events(center, associate, query_start, query_end, ti
     return merge_intervals(intervals), events
 
 
-def events_with_associate_id(events, associate):
-    annotated = []
-    for event in events:
-        payload = dict(event)
-        payload["associate_id"] = str(associate.pk)
-        annotated.append(payload)
-    return annotated
+def collect_associate_block_events_for_associates(
+    center, associates, query_start, query_end, timezone_name
+):
+    if not associates:
+        return [], []
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    blocks = AssociateAvailabilityBlock.objects.filter(
+        center=center,
+        associate__in=associates,
+        is_active=True,
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_datetime_overlap(range_start, range_end)
+    ).select_related("associate")
+    intervals = []
+    events = []
+    for block in blocks:
+        extra = {
+            "reason": block.reason,
+            "associate_id": str(block.associate.pk),
+        }
+        if block.is_recurring:
+            extra["is_recurring"] = True
+            block_intervals = expand_recurring_block(
+                block, query_start, query_end, timezone_name
+            )
+            for block_interval in block_intervals:
+                events.append(
+                    serialize_event(
+                        "associate_block_recurring",
+                        block.pk,
+                        block_interval,
+                        dict(extra),
+                    )
+                )
+            intervals.extend(block_intervals)
+        elif block.start_datetime and block.end_datetime:
+            extra["is_recurring"] = False
+            block_interval = (block.start_datetime, block.end_datetime)
+            clipped = clip_intervals_to_range([block_interval], range_start, range_end)
+            intervals.extend(clipped)
+            for clipped_interval in clipped:
+                events.append(
+                    serialize_event(
+                        "associate_block",
+                        block.pk,
+                        clipped_interval,
+                        dict(extra),
+                    )
+                )
+    return merge_intervals(intervals), events
+
+
+def collect_associate_leave_events_for_associates(
+    center, associates, query_start, query_end, timezone_name
+):
+    if not associates:
+        return [], []
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    leaves = (
+        AssociateLeave.objects.filter(
+            associate__in=associates,
+            is_active=True,
+        )
+        .filter(
+            models.Q(scope=LeaveScope.ALL_CENTERS)
+            | models.Q(scope=LeaveScope.CENTER, center=center)
+        )
+        .filter(datetime_window_overlap(range_start, range_end))
+        .select_related("associate", "center")
+    )
+    intervals = []
+    events = []
+    for leave in leaves:
+        leave_interval = (leave.start_datetime, leave.end_datetime)
+        clipped = clip_intervals_to_range([leave_interval], range_start, range_end)
+        intervals.extend(clipped)
+        extra = {
+            "reason": leave.reason,
+            "scope": leave.scope,
+            "center_id": str(leave.center.pk) if leave.center else None,
+            "associate_id": str(leave.associate.pk),
+        }
+        for clipped_interval in clipped:
+            events.append(
+                serialize_event(
+                    "associate_leave",
+                    leave.pk,
+                    clipped_interval,
+                    dict(extra),
+                )
+            )
+    return merge_intervals(intervals), events
 
 
 def collect_care_team_block_events(
@@ -261,10 +381,9 @@ def collect_care_team_block_events(
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
-    care_team_ids = [care_team.pk for care_team in care_teams]
     blocks = CareTeamAvailabilityBlock.objects.filter(
         center=center,
-        care_team_id__in=care_team_ids,
+        care_team__in=care_teams,
         is_active=True,
     ).filter(
         recurring_block_in_query_range(query_start, query_end)
@@ -273,28 +392,36 @@ def collect_care_team_block_events(
     intervals = []
     events = []
     for block in blocks:
-        extra = {
-            "reason": block.reason,
-            "is_recurring": block.is_recurring,
-            "care_team_id": str(block.care_team_id),
-            "care_team_name": block.care_team.name,
-        }
         if block.is_recurring:
             block_intervals = expand_recurring_block(
                 block, query_start, query_end, timezone_name
             )
-            event_type = "care_team_block_recurring"
-            extra["is_recurring"] = True
+            extra = {
+                "reason": block.reason,
+                "is_recurring": True,
+                "care_team_id": str(block.care_team.pk),
+                "care_team_name": block.care_team.name,
+            }
             for block_interval in block_intervals:
                 events.append(
-                    serialize_event(event_type, block.pk, block_interval, extra)
+                    serialize_event(
+                        "care_team_block_recurring",
+                        block.pk,
+                        block_interval,
+                        extra,
+                    )
                 )
             intervals.extend(block_intervals)
         elif block.start_datetime and block.end_datetime:
             block_interval = (block.start_datetime, block.end_datetime)
             clipped = clip_intervals_to_range([block_interval], range_start, range_end)
             intervals.extend(clipped)
-            extra["is_recurring"] = False
+            extra = {
+                "reason": block.reason,
+                "is_recurring": False,
+                "care_team_id": str(block.care_team.pk),
+                "care_team_name": block.care_team.name,
+            }
             for clipped_interval in clipped:
                 events.append(
                     serialize_event(
@@ -723,30 +850,28 @@ def compute_care_team_calendar(center, care_team, start_date, granularity):
     center_hours = expand_center_operating_hours(
         center, query_start, query_end, timezone_name
     )
+    roster_hours_by_associate = expand_roster_entries_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
     member_bases = []
-    member_busy = []
-    events = []
     for associate in associates:
-        roster_hours = expand_roster_entries(
-            center, associate, query_start, query_end, timezone_name
-        )
+        roster_hours = roster_hours_by_associate[associate.pk]
         member_bases.append(intersect_intervals(center_hours, roster_hours))
-        block_intervals, block_events = collect_associate_block_events(
-            center, associate, query_start, query_end, timezone_name
-        )
-        leave_intervals, leave_events = collect_associate_leave_events(
-            center, associate, query_start, query_end, timezone_name
-        )
-        member_busy.extend(block_intervals)
-        member_busy.extend(leave_intervals)
-        events.extend(events_with_associate_id(block_events, associate))
-        events.extend(events_with_associate_id(leave_events, associate))
     if not member_bases:
         base_intervals = []
     else:
         base_intervals = member_bases[0]
         for member_base in member_bases[1:]:
             base_intervals = intersect_intervals(base_intervals, member_base)
+    block_intervals, block_events = collect_associate_block_events_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
+    leave_intervals, leave_events = collect_associate_leave_events_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
+    events = []
+    events.extend(block_events)
+    events.extend(leave_events)
     closure_intervals, closure_events = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
@@ -767,7 +892,8 @@ def compute_care_team_calendar(center, care_team, start_date, granularity):
     )
     events.extend(appointment_events)
     busy_intervals = merge_intervals(
-        member_busy
+        block_intervals
+        + leave_intervals
         + closure_intervals
         + team_block_intervals
         + appointment_intervals

@@ -243,14 +243,9 @@ def appointment_filter_for_source(source_type: str, source):
     if source_type == ExceptionSourceType.ASSOCIATE_BLOCK:
         return models.Q(associate_links__associate_id=source.associate_id)
     if source_type == ExceptionSourceType.CARE_TEAM_BLOCK:
-        associate_ids = [
-            associate.pk
-            for associate in live_associates_for_care_team(
-                source.center, source.care_team
-            )
-        ]
-        return models.Q(care_team_id=source.care_team_id) | models.Q(
-            associate_links__associate_id__in=associate_ids
+        associates = live_associates_for_care_team(source.center, source.care_team)
+        return models.Q(care_team=source.care_team) | models.Q(
+            associate_links__associate__in=associates
         )
     if source_type == ExceptionSourceType.ROOM_BLOCK:
         return models.Q(room_id=source.room_id)
@@ -543,20 +538,21 @@ def detect_exceptions_for_appointment(appointment: Appointment) -> int:
             center=center,
         )
 
-    care_team_ids = set(
+    associates = [
+        link.associate
+        for link in appointment.associate_links.select_related("associate").all()
+    ]
+    team_block_filter = models.Q(care_team__members__associate__in=associates)
+    if appointment.care_team is not None:
+        team_block_filter |= models.Q(care_team=appointment.care_team)
+    for block in (
         CareTeamAvailabilityBlock.objects.filter(
             center=center,
             care_team__is_active=True,
-            care_team__members__associate_id__in=associate_ids,
             is_active=True,
-        ).values_list("care_team_id", flat=True)
-    )
-    if appointment.care_team_id:
-        care_team_ids.add(appointment.care_team_id)
-    for block in CareTeamAvailabilityBlock.objects.filter(
-        center=center,
-        care_team_id__in=care_team_ids,
-        is_active=True,
+        )
+        .filter(team_block_filter)
+        .distinct()
     ):
         total_created += detect_exceptions_for_source(
             ExceptionSourceType.CARE_TEAM_BLOCK,

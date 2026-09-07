@@ -90,9 +90,7 @@ def care_team_associates_payload(members):
 
 
 def live_members_for_care_team(center, care_team):
-    members = list(
-        care_team.members.select_related("associate", "role", "care_team").all()
-    )
+    members = list(care_team.members.all())
     return members_with_live_center_role(center, members)
 
 
