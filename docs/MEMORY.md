@@ -15,7 +15,6 @@
 - Keep related-object response fields nested; don't duplicate their attributes as flattened top-level fields.
 - Don't repeat explicitly declared `read_only=True` serializer fields in `Meta.read_only_fields`.
 - Never put derived service-document module-category properties or display methods on the model; serializers compute the code and label from `ServiceResult.document_type`.
-- When user says "update collection" or "update bruno", always update the Bruno collection at `bruno/` (requests, folders, envs).
 - Never revert/alter code user manually edited. User change back = final. Don't touch those lines unless asked.
 - Never create Django migration files manually, never run `makemigrations`. User owns migrations.
 - Always use `<uuid:pk>/` for UUID detail URL path params.
@@ -23,8 +22,10 @@
 - Prefer explicit `BaseModelSerializer` + `Meta.model` + declared fields over `to_representation()` delegating to another serializer.
 - Keep related-object fields nested; don't flatten to top level.
 - Don't repeat explicit `read_only=True` fields in `Meta.read_only_fields`.
-- "update collection" / "update bruno" → update `bruno/` (requests, folders, envs).
-- API collection source of truth is Bruno at `bruno/`. Envs: `bruno/environments/{Development,Production}.bru`. Folder vars omitted so they cannot shadow env tokens.
+- Bruno/API-client collection work is separate unless the user explicitly includes it in a task. Missing Bruno requests are not a PR blocker; generate them in a dedicated AI task from implemented URLs and ePRDs.
+- Prefer `timezone.localtime()` for persisted application timestamps in project code.
+- Do not add `transaction.atomic()` inside helper functions unless explicitly requested.
+- Frontend API ePRDs should expose concrete request/response JSON shapes and integration logic without TypeScript, base-type, or interface declarations; frontend derives types from the shapes.
 
 ---
 
@@ -34,7 +35,7 @@
 |---|---|
 | On-demand slot generation (no pre-stored slots) | Avoids DB bloat; computed at query time via `appointments/utils/intervals.py` |
 | UUID7 primary keys on all models | Better DB performance + sortable by time |
-| Bruno collection at `bruno/` (2026-08-18) | Sole API collection. Open `bruno/` in Bruno. Envs: `bruno/environments/Development.bru`, `Production.bru`. No folder vars (folder > env, would blank tokens). |
+| Bruno collection scope (2026-08-27) | Bruno is not an automatic project or PR acceptance requirement. API-client requests belong in a separately scoped automation task generated from implemented URLs and ePRDs unless the user explicitly requests them with the feature. |
 | Center-scoped data isolation via `X-Center-ID` header | Multi-tenant design requirement |
 | Customer associate list center precedence (2026-08-19) | `CustomerAssociateListView` keeps both optional `X-Center-ID` and `center_id` query filtering. When the header is present it is the exclusive center filter; query center IDs are used only when the header is absent. |
 | Customer associate list role join (2026-08-19) | The list filters the intermediate associate-center assignment against each returned customer-assignment center before selecting its role. The response retains the existing nested `role` field and avoids multi-center join fan-out. |
@@ -62,6 +63,8 @@
 | Service document module categories (2026-08-24) | Serializers compute the module-category code and label from `ServiceDocument.result.document_type` through the centralized document-type mapping; the model must not expose a derived property or display method. Unmapped types default to `unknown`. Staff assessment and customer document payloads expose label/code fields. Customer-profile and assessment ProgramService document lists accept a single unvalidated `module_category` query code; invalid or currently empty categories return no rows. |
 | Product allowed-document metadata (2026-08-07) | `GET /products/<uuid:pk>/allowed-documents/` returns the static provider/product-specific `ServiceDocumentType` choices for admins and associates, with `Other` always last. Previously generic-only blood, OligoScan, SOMFIT, MetSights PP, EVO 360, urine-metabolite, and salivary-cortisol products use concise specialized document codes. MetFlux is the sole provider callback for the MetSights Precision Plus product callback; external MetSights integration naming remains unchanged. Existing provider rows and choice migrations are user-owned. |
 | Assessment result upload selection (2026-08-10) | Assessment ProgramService provider/product selectors expose only active providers, products, and service-product assignments and reject inactive ProgramServices. Result creation requires an eligible product and a document type allowed by the product mapping. Product/type corrections are permitted before upload and locked after the first linked document; dates remain editable. Uploads accept only one file and its report/raw category, with no finalize API. |
+| Assessment result requests (updated 2026-09-08) | Provider-backed assessment fetching uses `ResultRequest` as the persistent parent of one or more `ServiceResult` rows. Provider details resolve through `ResultRequest.product.provider`; they are not duplicated on the request. SDK HTTP calls live in `integrations/<provider>/sdk.py`, model-free orchestration/normalization lives in `integrations/<provider>/tasks.py`, and provider-owned model-aware persistence handlers live in `integrations/<provider>/utils/results.py`; BugSpeaks is the reference implementation. Each integration exports a product-callback handler map, while `programs.program_services.utils.results.PROVIDER_HANDLER` maps provider callbacks to those maps. An unknown provider resolves to `None`; an unknown product under a known provider currently resolves to a no-op callable. Initial fetch and refetch start `ResultRequestThread`; refetch reuses the request but deletes its `ServiceResult` rows and cascading document rows before re-queuing. Cancellation sets only `status=cancelled` and `updated_at`: completed and already-cancelled requests are rejected, while queued, running, partially fetched, and failed requests are allowed. The server remains a result collector rather than a broadcaster, so frontend clients do not poll result requests or results. |
+| Partially fetched assessment results (2026-09-08) | Strand NutriDNA and Genomic Health Insights persist any available PDF, VCF, or JSON artifact. All three produce `completed`, at least one produces `partially_fetched` with the missing-artifact errors in `failure_detail`, and none produces `failed` without a `ServiceResult`. Partially fetched requests may be cancelled without deleting their results or explicitly refetched through the existing destructive refetch flow. |
 | Persisted service result and document counters (2026-08-12) | `ServiceResult.documents_count` stores its direct document total. `ProgramService` stores all linked result rows in `results_count` and maintains `documents_count`, `reports_count`, and `raw_data_count` directly from documents across those results. All three document counters are refreshed together in one ORM subquery update without active-state filtering; API reads never annotate the counts. `recompute_service_document_counts` repairs every stored counter from source rows. |
 | Composite program result and document counters (2026-08-19) | `CompositeProgram` persists `results_count`, `documents_count`, `reports_count`, and `raw_data_count` across every assigned `ProgramService`, including add-ons and inactive/cancelled rows. Explicit create/delete hooks refresh direct source-row ORM subqueries; full staff, add-on, and customer composite responses expose the fields read-only, and `recompute_service_document_counts` repairs them. User owns the migration. |
 | Program-service cancellation endpoints (2026-08-12) | Assessment, therapy, and consultation ProgramServices have category-scoped `POST .../<uuid:pk>/cancel/` routes. Cancellation changes only the shared ProgramService active flag and audit fields; result/document rows and flags remain unchanged. Therapy alone requires `X-Center-ID` and retains session/history effects. The legacy last-service rule writes parent Program cancellation metadata without deactivating the parent or subtype. |
@@ -129,11 +132,12 @@
 - Added to CODING_RULES.md Section 1 w/ examples
 - Why: Readability, consistency, prevents ambiguity (especially in subquery annotations)
 
-**Django FK Access (2026-05-18)**
-- **NEVER use `<field>_id`** (e.g. `program_service.program_id`)
-- **ALWAYS use `.pk`** via relation (e.g. `program_service.program.pk`)
-- Added to CODING_RULES.md Section 11
-- Why: Explicit, consistent, avoids implicit Django column accessor confusion
+**Django FK Access (updated 2026-08-27)**
+- Use `relation.pk` when the related model instance is already available.
+- Direct `<field>_id` assignment is permitted specifically while constructing objects for `bulk_create()`; do not hydrate related objects solely to satisfy style.
+- This exception does not apply to ordinary single-object assignments or queryset filters.
+- In `bulk_create()` paths, prefer `center_id=<validated_uuid>` over per-row `Center` lookups or unnecessary batch hydration.
+- `docs/CODING_RULES.md` still contains an older unconditional prohibition and should be reconciled in a separately authorized documentation change.
 
 **ORM Single-Object Lookups (2026-07-27)**
 - Use `filter(...).first()` for serializer + utility object lookups.
