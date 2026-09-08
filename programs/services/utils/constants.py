@@ -101,6 +101,14 @@ class ServiceResultMode(models.TextChoices):
     FETCH = "fetch", "Fetch"
 
 
+class ResultRequestStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
 class ModuleCategoryType(models.TextChoices):
     UNKNOWN = "unknown", "Unknown"
     CLINICAL_LAB_DIAGNOSTICS = "clinical_lab_diagnostics", "Clinical Lab Diagnostics"
