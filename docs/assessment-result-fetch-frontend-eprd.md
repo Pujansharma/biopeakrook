@@ -24,6 +24,11 @@ The backend is the authority for service, provider, product, and request state.
 The frontend must not prevalidate backend lifecycle invariants. Do not poll result
 requests or results after create, refetch, or cancel.
 
+`partially_fetched` means the provider fetch has finished with at least one PDF,
+VCF, or structured JSON artifact available, but one or more expected artifacts
+could not be collected. Display the available results and `failure_detail`.
+Partially fetched requests may be cancelled or explicitly refetched.
+
 ## API Requests
 
 ### 1. List providers
@@ -246,7 +251,7 @@ read remains available when the program service is inactive.
 
 | Name | Required | Example | Notes |
 | --- | --- | --- | --- |
-| `status` | No | `completed` | One of `queued`, `running`, `completed`, `failed`, or `cancelled`; invalid values leave the list unfiltered |
+| `status` | No | `completed` | One of `queued`, `running`, `completed`, `partially_fetched`, `failed`, or `cancelled`; invalid values leave the list unfiltered |
 | `page` | No | `1` | Defaults to the first page |
 | `limit` | No | `10` | Maximum 50 |
 
@@ -365,7 +370,9 @@ Returns one assessment result request on demand.
 }
 ```
 
-Display `failure_detail` when the explicitly loaded request is failed. Do not
+Display `failure_detail` when the explicitly loaded request is failed or partially
+fetched. A partially fetched response uses `"status": "Partially Fetched"` and
+`"status_code": "partially_fetched"` and can contain available results. Do not
 call this endpoint on an interval or retry timer.
 
 #### Error — `404 Not Found`
@@ -591,10 +598,10 @@ Changes only the request's persisted status and update timestamp.
 }
 ```
 
-Queued, running, and failed requests may be cancelled. Completed requests and
-requests already marked cancelled are rejected. Existing results, documents,
-failure details, attempt counts, and timestamps are preserved. Do not poll after
-a successful response.
+Queued, running, failed, and partially fetched requests may be cancelled.
+Completed requests and requests already marked cancelled are rejected. Existing
+results, documents, failure details, attempt counts, and timestamps are
+preserved. Do not poll after a successful response.
 
 #### Errors
 
