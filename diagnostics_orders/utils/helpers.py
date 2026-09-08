@@ -48,11 +48,14 @@ def build_orange_create_payload(address, notes, slot_datetime, customers):
     primary = customers[0]
     patient_details = []
     for customer in customers:
-        tests = [
-            {"test_id": orange_catalog_id(test_id)}
-            for test_id in customer["diagnostic_tests"]
-        ]
+        tests = []
         packages = []
+        for line in customer["line_snapshots"]:
+            catalog_id = orange_catalog_id(line["test_id"])
+            if line["is_custom_package"]:
+                packages.append({"package_id": catalog_id})
+            else:
+                tests.append({"test_id": catalog_id})
         profile = customer["customer_profile"]
         patient_details.append(
             {

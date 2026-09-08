@@ -217,6 +217,7 @@ class CreateOrderSerializer(BaseSerializer):
                         "test_id": test_id,
                         "name": catalog_item.name,
                         "price": catalog_item.price,
+                        "is_custom_package": catalog_item.is_custom_package,
                     }
                 )
 
