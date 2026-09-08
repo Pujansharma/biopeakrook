@@ -142,8 +142,8 @@ Staging/production use the same names with `STG_`/`PRD_` prefixes.
 event gets created on/updated/deleted from — not tied to any individual
 associate's own connection. It must be connected the normal way
 first (via `/google-calendar/connect/` + `/complete/`, same as any
-associate) so its tokens land on the `Associate` row whose `email` matches
-this value. See "Event sync" in `docs/google-calendar-integration.md`.
+associate) so its tokens land on the `Associate` row whose `google_email`
+matches this value. See "Event sync" in `docs/google-calendar-integration.md`.
 
 The callback (`GoogleCalendarCallbackView`) redirects the browser to
 `ADMIN_FRONTEND_URL` on both success and failure, so it must be set for this
@@ -155,8 +155,9 @@ STG_ADMIN_FRONTEND_URL=https://staging-admin.yourdomain.com
 PRD_ADMIN_FRONTEND_URL=https://admin.yourdomain.com
 ```
 
-If unset, `core/settings/{development,staging,production}.py` reads it as
-`None`, and the redirect URL ends up malformed.
+If unset, `_frontend_redirect()` (`integrations/google_calendar/views.py`)
+raises `ImproperlyConfigured` instead of redirecting, so a missing setting
+fails loudly rather than sending the browser to a malformed URL.
 
 `GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` isn't a password you make up - generate
 one with:
@@ -166,7 +167,10 @@ uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_
 ```
 
 If it ever leaks, treat it like a leaked password: rotate it and have every
-connected staff member reconnect their calendar.
+connected staff member reconnect their calendar. If unset, `_get_fernet()`
+(`integrations/google_calendar/utils.py`) raises `ImproperlyConfigured` the
+first time a token is encrypted/decrypted, rather than crashing with a raw
+`AttributeError`.
 
 ## User Management
 

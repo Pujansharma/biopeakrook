@@ -3,7 +3,7 @@ from datetime import datetime
 
 import requests
 
-CALENDAR_ID = "primary"  # every staff member's own Google Calendar
+CALENDAR_ID = "primary"  # the primary calendar of whichever access_token is passed in
 EVENTS_URL = f"https://www.googleapis.com/calendar/v3/calendars/{CALENDAR_ID}/events"
 REQUEST_TIMEOUT = 10
 
@@ -88,43 +88,6 @@ def patch_event(
     )
     response.raise_for_status()
     return response.json()
-
-
-def list_events(access_token: str, time_min: datetime, time_max: datetime):
-    events = []
-    params = {
-        "timeMin": time_min.isoformat(),
-        "timeMax": time_max.isoformat(),
-        "singleEvents": True,
-        "orderBy": "startTime",
-    }
-    while True:
-        response = requests.get(
-            EVENTS_URL,
-            params=params,
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        events.extend(
-            {
-                "id": event["id"],
-                "title": event.get("summary"),
-                "notes": event.get("description"),
-                "location": event.get("location"),
-                "start": event["start"]["dateTime"],
-                "end": event["end"]["dateTime"],
-                "participants": [attendee["email"] for attendee in event.get("attendees", [])],
-                "meet_link": extract_meet_link(event),
-            }
-            for event in payload.get("items", [])
-            if "dateTime" in event.get("start", {})
-        )
-        next_page_token = payload.get("nextPageToken")
-        if not next_page_token:
-            return events
-        params["pageToken"] = next_page_token
 
 
 def delete_event(access_token: str, event_id: str, participant_emails: list[str] | None = None):

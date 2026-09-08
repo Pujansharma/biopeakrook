@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.utils import timezone
@@ -17,10 +18,16 @@ from integrations.google_calendar.db import update_associate_google_tokens
 from integrations.google_calendar.utils import decrypt, encrypt
 
 ADMIN_FRONTEND_URL = getattr(settings, "ADMIN_FRONTEND_URL", None)
+GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
 
 
 def _frontend_redirect(params: dict):
-    return HttpResponseRedirect(f"{ADMIN_FRONTEND_URL}/?{urlencode(params)}")
+    if not ADMIN_FRONTEND_URL:
+        raise ImproperlyConfigured(
+            "ADMIN_FRONTEND_URL is not set; cannot redirect to the frontend."
+        )
+    # Use a URL fragment (#) so these values are not sent to the server
+    return HttpResponseRedirect(f"{ADMIN_FRONTEND_URL}/#{urlencode(params)}")
 
 
 class GoogleCalendarConnectView(BaseGenericAPIView):
@@ -79,7 +86,7 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
                 "Connect the same Google account you log into Biopeak with."
             )
 
-        associate.email = google_email
+        associate.google_email = google_email
         associate.google_access_token = encrypt(tokens["access_token"])
         associate.google_refresh_token = encrypt(refresh_token)
         associate.google_access_token_expires_at = timezone.now() + timedelta(
@@ -87,15 +94,15 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
         )
         try:
             with transaction.atomic():
-                # Associate.email is unique, evict whoever else currently
+                # Associate.google_email is unique, evict whoever else currently
                 # holds this email so the save below doesn't hit that
                 # constraint - same transaction so a failure here can't
                 # leave this Google account unclaimed by either associate.
                 stale_holder_count = (
-                    Associate.objects.filter(email=google_email)
+                    Associate.objects.filter(google_email=google_email)
                     .exclude(pk=associate.pk)
                     .update(
-                        email=None,
+                        google_email=None,
                         google_access_token=None,
                         google_refresh_token=None,
                         google_access_token_expires_at=None,
@@ -103,7 +110,7 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
                 )
                 associate.save(
                     update_fields=[
-                        "email",
+                        "google_email",
                         "google_access_token",
                         "google_refresh_token",
                         "google_access_token_expires_at",
@@ -133,6 +140,18 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
         associate = request.user.associate
         if not associate.google_refresh_token:
             return self.send_response("No Google Calendar connection to disconnect.")
+
+        is_shared_organizer = (
+            GOOGLE_CALENDAR_ID and associate.google_email == GOOGLE_CALENDAR_ID
+        )
+        if is_shared_organizer and not associate.center_assignments.filter(
+            is_admin=True
+        ).exists():
+            self.raise_permission_denied(
+                "This account is the shared Google Calendar connection used for "
+                "appointment sync across all centers. Only a center admin can "
+                "disconnect it."
+            )
 
         google_oauth.revoke_token(decrypt(associate.google_refresh_token))
 

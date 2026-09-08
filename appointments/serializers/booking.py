@@ -1,3 +1,4 @@
+import functools
 from datetime import timedelta
 
 from django.db import transaction
@@ -175,6 +176,74 @@ def create_appointment_record(
     return appointment
 
 
+def sync_new_appointment_and_save(
+    appointment,
+    customer_profile,
+    service,
+    modality,
+    start,
+    end,
+    room,
+    notes,
+    associates_payload,
+):
+    google_event_id, google_meet_link = sync_new_appointment_with_google(
+        customer_profile=customer_profile,
+        service=service,
+        code=appointment.code,
+        modality=modality,
+        start=start,
+        end=end,
+        room=room,
+        notes=notes,
+        associates_payload=associates_payload,
+    )
+    if google_event_id:
+        appointment.google_event_id = google_event_id
+        appointment.google_meet_link = google_meet_link
+        appointment.save(
+            update_fields=["google_event_id", "google_meet_link", "updated_at"]
+        )
+
+
+def sync_cancelled_appointment_and_save(instance):
+    if sync_cancelled_appointment_with_google(instance):
+        instance.save(
+            update_fields=["google_event_id", "google_meet_link", "updated_at"]
+        )
+
+
+def sync_rescheduled_appointment_and_save(
+    instance,
+    customer_profile,
+    modality,
+    start,
+    end,
+    room,
+    notes,
+    associates_payload,
+):
+    google_event_id, google_meet_link = sync_rescheduled_appointment_with_google(
+        instance,
+        customer_profile=customer_profile,
+        modality=modality,
+        start=start,
+        end=end,
+        room=room,
+        notes=notes,
+        associates_payload=associates_payload,
+    )
+    if (google_event_id, google_meet_link) != (
+        instance.google_event_id,
+        instance.google_meet_link,
+    ):
+        instance.google_event_id = google_event_id
+        instance.google_meet_link = google_meet_link
+        instance.save(
+            update_fields=["google_event_id", "google_meet_link", "updated_at"]
+        )
+
+
 class AppointmentPreferredSerializer(BaseSerializer):
     doctor_id = serializers.UUIDField(required=False)
     health_coach_id = serializers.UUIDField(required=False)
@@ -336,23 +405,20 @@ class AppointmentBookSerializer(BaseSerializer):
                     appointment=appointment,
                     expires_at=timezone.now() + timedelta(hours=IDEMPOTENCY_TTL_HOURS),
                 )
-            google_event_id, google_meet_link = sync_new_appointment_with_google(
-                customer_profile=validated_data["customer_profile"],
-                service=validated_data["service"],
-                code=appointment.code,
-                modality=validated_data["modality"],
-                start=validated_data["start"],
-                end=validated_data["end"],
-                room=room,
-                notes=validated_data.get("notes"),
-                associates_payload=associates_payload,
-            )
-            if google_event_id:
-                appointment.google_event_id = google_event_id
-                appointment.google_meet_link = google_meet_link
-                appointment.save(
-                    update_fields=["google_event_id", "google_meet_link", "updated_at"]
+            transaction.on_commit(
+                functools.partial(
+                    sync_new_appointment_and_save,
+                    appointment=appointment,
+                    customer_profile=validated_data["customer_profile"],
+                    service=validated_data["service"],
+                    modality=validated_data["modality"],
+                    start=validated_data["start"],
+                    end=validated_data["end"],
+                    room=room,
+                    notes=validated_data.get("notes"),
+                    associates_payload=associates_payload,
                 )
+            )
         return appointment
 
 
@@ -474,15 +540,14 @@ class AppointmentCancelSerializer(BaseSerializer):
                 instance,
                 ExceptionResolution.CANCELLED,
             )
-            if sync_cancelled_appointment_with_google(instance):
-                instance.save(
-                    update_fields=["google_event_id", "google_meet_link", "updated_at"]
-                )
             create_audit_log(
                 instance,
                 actor,
                 AppointmentAuditAction.CANCEL,
                 note=instance.cancel_reason,
+            )
+            transaction.on_commit(
+                functools.partial(sync_cancelled_appointment_and_save, instance)
             )
         return instance
 
@@ -573,29 +638,23 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
                 exclusive_end,
             )
             sync_associate_status_snapshots(instance)
-            google_event_id, google_meet_link = sync_rescheduled_appointment_with_google(
-                instance,
-                customer_profile=validated_data["customer_profile"],
-                modality=validated_data["modality"],
-                start=validated_data["start"],
-                end=validated_data["end"],
-                room=room,
-                notes=notes,
-                associates_payload=associates_payload,
-            )
-            if (google_event_id, google_meet_link) != (
-                instance.google_event_id,
-                instance.google_meet_link,
-            ):
-                instance.google_event_id = google_event_id
-                instance.google_meet_link = google_meet_link
-                instance.save(
-                    update_fields=["google_event_id", "google_meet_link", "updated_at"]
-                )
             create_audit_log(
                 instance,
                 actor,
                 AppointmentAuditAction.RESCHEDULE,
+            )
+            transaction.on_commit(
+                functools.partial(
+                    sync_rescheduled_appointment_and_save,
+                    instance=instance,
+                    customer_profile=validated_data["customer_profile"],
+                    modality=validated_data["modality"],
+                    start=validated_data["start"],
+                    end=validated_data["end"],
+                    room=room,
+                    notes=notes,
+                    associates_payload=associates_payload,
+                )
             )
         resolve_exceptions_for_appointment(
             instance,

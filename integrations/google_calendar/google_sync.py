@@ -23,7 +23,7 @@ GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
 def get_fixed_calendar_organizer() -> Associate | None:
     if not GOOGLE_CALENDAR_ID:
         return None
-    organizer = Associate.objects.filter(email=GOOGLE_CALENDAR_ID).first()
+    organizer = Associate.objects.filter(google_email=GOOGLE_CALENDAR_ID).first()
     if organizer is None or not organizer.google_refresh_token:
         return None
     return organizer

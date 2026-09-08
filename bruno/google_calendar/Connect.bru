@@ -39,7 +39,8 @@ docs {
   2. Paste auth_url into a real browser, signed in as the Google account
      you want to connect. Approve consent.
   3. Google redirects to DEV_GOOGLE_REDIRECT_URI, which itself redirects to
-     ADMIN_FRONTEND_URL/?code=.... The page itself may 404 (no frontend
+     ADMIN_FRONTEND_URL/#code=... (a URL fragment, not a query string — still
+     visible in the address bar). The page itself may 404 (no frontend
      needed) — just copy `code` out of the address bar.
   4. Paste it into this environment's google_oauth_code var, then run
      Complete.bru.

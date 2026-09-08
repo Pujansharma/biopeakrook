@@ -25,7 +25,9 @@ settings {
 docs {
   Google redirects the staff member's browser here after consent - not
   meant to be called directly. Forwards `code` unchanged to
-  ADMIN_FRONTEND_URL as a redirect; never touches the database itself.
+  ADMIN_FRONTEND_URL as a redirect, carried in the URL fragment (`#code=...`,
+  not a query string, so it's never sent to the server or logged); never
+  touches the database itself.
 
   Method: GET
   Path: /google-calendar/callback/

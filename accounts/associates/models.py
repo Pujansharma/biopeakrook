@@ -132,7 +132,7 @@ class Associate(BaseModel):
     has_verified_badge = models.BooleanField(default=False)
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
 
-    email = models.EmailField(null=True, blank=True, unique=True)
+    google_email = models.EmailField(null=True, blank=True, unique=True)
     google_access_token = models.TextField(null=True, blank=True)
     google_refresh_token = models.TextField(null=True, blank=True)
     google_access_token_expires_at = models.DateTimeField(null=True, blank=True)

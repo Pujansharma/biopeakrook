@@ -37,10 +37,11 @@ docs {
   connect the same Google account they log into Biopeak Nexus with (a
   personal Gmail that differs from their login email won't resolve).
 
-  Set env var google_oauth_code to the `code` query param from the URL your
-  browser lands on after approving consent (see Connect.bru's docs for the
-  full manual flow) - paste it there, not directly into this body, so this
-  request stays runnable straight from the collection.
+  Set env var google_oauth_code to the `code` value from the URL fragment
+  (after the `#`) your browser lands on after approving consent (see
+  Connect.bru's docs for the full manual flow) - paste it there, not
+  directly into this body, so this request stays runnable straight from the
+  collection.
 
   Method: POST
   Path: /google-calendar/complete/
@@ -49,5 +50,5 @@ docs {
   request.user; the email match is what decides whose tokens actually get
   saved). The `auth: bearer` on this request is harmless but unnecessary.
 
-  Success: {"success": true, "detail": "Google Calendar connected.", "data": {"email": "...", "associate_id": "..."}}
+  Success: {"detail": "Google Calendar connected.", "data": {"email": "...", "associate_id": "..."}}
 }
