@@ -39,8 +39,8 @@ def get_bugspeaks_record(api_key, bugspeaks_id: str):
             f"reason=invalid_response bugspeaks_id={bugspeaks_id} "
             f"status={response.status_code} response={response.text}"
         )
-        return None
-    return response.json()
+        return None, "Failed to fetch"
+    return response.json(), None
 
 
 def _get_bugspeaks_file(api_key, bugspeaks_id: str):
@@ -87,8 +87,12 @@ def _get_bugspeaks_additional_file(api_key, bugspeaks_id):
 
 def fetch_bugspeaks_report(api_key, bugspeaks_id):
     report_file = _get_bugspeaks_file(api_key, bugspeaks_id)
+    if not report_file:
+        return (None, None), "Failed to fetch report file"
     additional_file = _get_bugspeaks_additional_file(api_key, bugspeaks_id)
-    return report_file, additional_file
+    if not additional_file:
+        return (None, None), "Failed to fetch additional report file"
+    return (report_file, additional_file), None
 
 
 def register_bugspeaks_client(
