@@ -13,8 +13,8 @@ def mark_result_request_failed(result_request_identifier, detail):
     ResultRequest.objects.filter(pk=result_request_identifier).update(
         status=ResultRequestStatus.FAILED,
         failure_detail=detail,
-        completed_at=timezone.now(),
-        updated_at=timezone.now(),
+        completed_at=timezone.localtime(),
+        updated_at=timezone.localtime(),
     )
 
 
@@ -25,8 +25,8 @@ def mark_result_request_completed(result_request_identifier):
     ).update(
         status=ResultRequestStatus.COMPLETED,
         failure_detail="",
-        completed_at=timezone.now(),
-        updated_at=timezone.now(),
+        completed_at=timezone.localtime(),
+        updated_at=timezone.localtime(),
     )
 
 
@@ -38,9 +38,9 @@ def handle_result_request(result_request):
         status=ResultRequestStatus.RUNNING,
         attempts_count=F("attempts_count") + 1,
         failure_detail="",
-        started_at=timezone.now(),
+        started_at=timezone.localtime(),
         completed_at=None,
-        updated_at=timezone.now(),
+        updated_at=timezone.localtime(),
     )
     if not claimed_count:
         return None
@@ -106,7 +106,24 @@ class ResultRequestThread(threading.Thread):
     def run(self):
         if not self.result_request:
             return None
-        handle_result_request(self.result_request)
+
+        try:
+            handle_result_request(self.result_request)
+        except Exception as e:
+            logger.exception(
+                f"Result request flow encountered an internal error: "
+                f"result_request_id={self.result_request.pk}",
+                exc_info=e
+            )
+            mark_result_request_failed(
+                self.result_request.pk,
+                "An internal error occurred while fetching this result.",
+            )
+            logger.info(
+                f"Result request flow ended: "
+                f"result_request_id={self.result_request.pk} "
+                f"outcome={ResultRequestStatus.FAILED}"
+            )
         return None
 
 
