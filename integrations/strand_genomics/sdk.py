@@ -1,3 +1,4 @@
+import io
 import json
 
 import arrow
@@ -39,21 +40,26 @@ def get_order_status(request_id, api_key):
         request_id (str): The Test Request ID (TRID) assigned to the order.
 
     Returns:
-        list[dict] | None: A list with a single order status object on success,
-        or ``None`` if the request failed.
+        The order-status data and an optional error message.
     """
     url = BASE_URL + f"/order-status/{request_id}"
     logger.info(f"Fetching order status for request_id={request_id}")
     session = Session(api_key)
     response = session.get(url)
     if not response.ok:
+        error_message = "Failed to fetch Strand order status"
         logger.error(
-            f"Failed to fetch order status for request_id={request_id} "
-            f"[status={response.status_code}]: {response.text}"
+            f"{error_message}: request_id={request_id} "
+            f"status={response.status_code}"
         )
-        return None
+        return None, error_message
+    response_data = response.json()
+    if not response_data:
+        error_message = "Strand order status response was empty"
+        logger.warning(f"{error_message}: request_id={request_id}")
+        return None, error_message
     logger.info(f"Successfully fetched order status for request_id={request_id}")
-    return response.json()
+    return response_data, None
 
 
 def get_order_qc_metrics(request_id, api_key):
@@ -68,21 +74,26 @@ def get_order_qc_metrics(request_id, api_key):
         request_id (str): The Test Request ID (TRID) of the processed sample.
 
     Returns:
-        dict | None: A dictionary containing QC metric tags keyed by sample ID
-        on success, or ``None`` if the request failed.
+        The QC metrics and an optional error message.
     """
     url = BASE_URL + f"/qc-metrics/{request_id}"
     logger.info(f"Fetching QC metrics for request_id={request_id}")
     session = Session(api_key)
     response = session.get(url)
     if not response.ok:
+        error_message = "Failed to fetch Strand QC metrics"
         logger.error(
-            f"Failed to fetch QC metrics for request_id={request_id} "
-            f"[status={response.status_code}]: {response.text}"
+            f"{error_message}: request_id={request_id} "
+            f"status={response.status_code}"
         )
-        return None
+        return None, error_message
+    response_data = response.json()
+    if not response_data:
+        error_message = "Strand QC metrics response was empty"
+        logger.warning(f"{error_message}: request_id={request_id}")
+        return None, error_message
     logger.info(f"Successfully fetched QC metrics for request_id={request_id}")
-    return response.json()
+    return response_data, None
 
 
 def get_report_data(request_id, api_key):
@@ -97,79 +108,90 @@ def get_report_data(request_id, api_key):
         request_id (str): The Test Request ID (TRID) of the completed report.
 
     Returns:
-        dict | None: A dictionary containing the full report payload under the
-        ``report`` key on success, or ``None`` if the request failed.
+        The decoded JSON report and an optional error message.
     """
     url = BASE_URL + f"/json-report/{request_id}"
     logger.info(f"Fetching JSON report data for request_id={request_id}")
     session = Session(api_key)
     response = session.get(url)
     if not response.ok:
+        error_message = "Failed to fetch Strand JSON report"
         logger.error(
-            f"Failed to fetch report data for request_id={request_id} "
-            f"[status={response.status_code}]: {response.text}"
+            f"{error_message}: request_id={request_id} "
+            f"status={response.status_code}"
         )
-        return None
+        return None, error_message
+    response_data = response.json()
+    if not response_data:
+        error_message = "Strand JSON report response was empty"
+        logger.warning(f"{error_message}: request_id={request_id}")
+        return None, error_message
     logger.info(f"Successfully fetched JSON report data for request_id={request_id}")
-    return response.json()
+    return response_data, None
 
 
 def get_vcf_file(request_id, api_key):
     """Download the raw Variant Call Format (VCF) file for a genomic sample.
 
-    Calls the ``/vcf-file/{trid}`` endpoint and streams the response to avoid
-    loading the entire file into memory at once. The returned bytes can be
-    written directly to disk or passed to a bioinformatic pipeline.
+    Calls the ``/vcf-file/{trid}`` endpoint and returns the response content in
+    an in-memory file stream.
 
     Args:
         api_key:
         request_id (str): The Test Request ID (TRID) of the sample.
 
     Returns:
-        bytes | None: The raw VCF file content as bytes on success,
-        or ``None`` if the request failed.
+        The VCF file stream and an optional error message.
     """
     url = BASE_URL + f"/vcf-file/{request_id}"
     logger.info(f"Fetching VCF file for request_id={request_id}")
     session = Session(api_key)
     response = session.get(url, stream=True)
     if not response.ok:
+        error_message = "Failed to fetch Strand VCF file"
         logger.error(
-            f"Failed to fetch VCF file for request_id={request_id} "
-            f"[status={response.status_code}]: {response.text}"
+            f"{error_message}: request_id={request_id} "
+            f"status={response.status_code}"
         )
-        return None
+        return None, error_message
+    if not response.content:
+        error_message = "Strand VCF file response was empty"
+        logger.warning(f"{error_message}: request_id={request_id}")
+        return None, error_message
     logger.info(f"Successfully fetched VCF file for request_id={request_id}")
-    return response.content
+    return io.BytesIO(response.content), None
 
 
 def get_pdf_report(request_id, api_key):
     """Download the finalized PDF report for a completed genomic test.
 
-    Calls the ``/pdf-report/{trid}`` endpoint and streams the response to avoid
-    loading the entire file into memory at once. The returned bytes represent a
-    valid PDF document and can be saved to disk or served directly to a client.
+    Calls the ``/pdf-report/{trid}`` endpoint and returns the response content
+    in an in-memory file stream.
 
     Args:
         api_key:
         request_id (str): The Test Request ID (TRID) of the completed report.
 
     Returns:
-        bytes | None: The raw PDF file content as bytes on success,
-        or ``None`` if the request failed.
+        The PDF file stream and an optional error message.
     """
     url = BASE_URL + f"/pdf-report/{request_id}"
     logger.info(f"Fetching PDF report for request_id={request_id}")
     session = Session(api_key)
     response = session.get(url, stream=True)
     if not response.ok:
+        error_message = "Failed to fetch Strand PDF report"
         logger.error(
-            f"Failed to fetch PDF report for request_id={request_id} "
-            f"[status={response.status_code}]: {response.text}"
+            f"{error_message}: request_id={request_id} "
+            f"status={response.status_code}"
         )
-        return None
+        return None, error_message
+    if not response.content:
+        error_message = "Strand PDF report response was empty"
+        logger.warning(f"{error_message}: request_id={request_id}")
+        return None, error_message
     logger.info(f"Successfully fetched PDF report for request_id={request_id}")
-    return response.content
+    return io.BytesIO(response.content), None
 
 
 BOOKING_BASE_URL = "https://www.zohoapis.in/creator/custom/strandls/"
