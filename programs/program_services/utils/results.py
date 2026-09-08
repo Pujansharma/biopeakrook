@@ -15,5 +15,5 @@ def get_result_fetch_handler(provider_callback, product_callback):
     # Return None if not found
     if not provider_handler:
         return None
-    result_handler = provider_handler.get(product_callback) or (lambda *x, **y: None)
+    result_handler = provider_handler.get(product_callback)
     return result_handler
