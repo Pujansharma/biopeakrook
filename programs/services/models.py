@@ -159,6 +159,7 @@ class ServiceResult(BaseUUIDModel):
         blank=True,
         related_name="created_service_results",
     )
+    data = models.JSONField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
