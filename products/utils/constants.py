@@ -4,6 +4,7 @@ from django.db import models
 
 
 class ProviderCallbackFunction(models.TextChoices):
+    OTHER = "other", "Other"
     BIOPEAK = "biopeak", "Biopeak"
     METFLUX = "metflux", "MetFlux"
     HEALTHIANS = "healthians", "Healthians"
@@ -13,9 +14,11 @@ class ProviderCallbackFunction(models.TextChoices):
     STRAND_LIFE_SCIENCES = "strand_life_sciences", "Strand Life Sciences"
     NEUBERG_ANAND = "neuberg_anand", "Neuberg Anand"
     META_OMICS_LABS = "meta_omics_labs", "Meta Omics Labs"
+    YAAZH_XENOMICS = "yaazh_xenomics", "Yaazh Xenomics"
 
 
 class ProductCallbackFunction(models.TextChoices):
+    OTHER = "other", "Other"
     BLOOD = "blood", "Blood Diagnostics"
     DXA = "dxa", "DXA Scan"
     DXA_SEGMENTAL_ANALYSIS = "dxa_segmental_analysis", "DXA – Segmental Analysis"
@@ -108,6 +111,15 @@ PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
         ProductCallbackFunction.BLOOD,
     ]
 }
+
+
+class FetchProfileFieldChoices(models.TextChoices):
+    FULL_NAME = "full_name", "Full Name"
+    AGE = "age", "Age"
+    GENDER = "gender", "Gender"
+    DATE_OF_BIRTH = "date_of_birth", "Date of Birth"
+    EMAIL = "email", "Email"
+    PHONE = "phone", "Phone"
 
 
 def _matches_provider(provider_filter: str, item: tuple[str, list]) -> bool:
