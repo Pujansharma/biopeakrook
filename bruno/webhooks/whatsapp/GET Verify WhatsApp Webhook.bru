@@ -1,0 +1,16 @@
+meta {
+  name: GET Verify WhatsApp Webhook
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/webhooks/whatsapp/?hub.mode=subscribe&hub.verify_token={{whatsapp_webhook_verify_token}}&hub.challenge=test_challenge_123
+  body: none
+  auth: none
+}
+
+docs {
+  Meta webhook verification handshake. Response body must be raw hub.challenge.
+  Set env whatsapp_webhook_verify_token to match *_WHATSAPP_WEBHOOK_VERIFY_TOKEN.
+}

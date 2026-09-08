@@ -35,6 +35,11 @@ from appointments.utils.transitions import (
 )
 from core.utils.constants import AppointmentModes
 from core.utils.serializers import BaseSerializer
+from integrations.communications import (
+    queue_appointment_cancelled,
+    queue_appointment_confirmed,
+    queue_appointment_rescheduled,
+)
 from programs.services.models import Service
 
 IDEMPOTENCY_TTL_HOURS = 24
@@ -329,6 +334,7 @@ class AppointmentBookSerializer(BaseSerializer):
                     appointment=appointment,
                     expires_at=timezone.now() + timedelta(hours=IDEMPOTENCY_TTL_HOURS),
                 )
+            queue_appointment_confirmed(appointment)
         return appointment
 
 
@@ -454,6 +460,7 @@ class AppointmentCancelSerializer(BaseSerializer):
                 AppointmentAuditAction.CANCEL,
                 note=instance.cancel_reason,
             )
+            queue_appointment_cancelled(instance)
         return instance
 
 
@@ -509,6 +516,7 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
             buffer_before,
             buffer_after,
         )
+        previous_start_datetime = instance.start_datetime
         with transaction.atomic():
             AppointmentHistory.objects.create(
                 appointment=instance,
@@ -543,6 +551,10 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
                 instance,
                 actor,
                 AppointmentAuditAction.RESCHEDULE,
+            )
+            queue_appointment_rescheduled(
+                instance,
+                previous_start_datetime=previous_start_datetime,
             )
         resolve_exceptions_for_appointment(
             instance,

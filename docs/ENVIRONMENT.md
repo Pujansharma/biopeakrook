@@ -256,6 +256,49 @@ DJANGO_SUPERUSER_EMAIL=admin@yourdomain.com
 DJANGO_SUPERUSER_PASSWORD=secure_admin_password
 ```
 
+## WhatsApp Cloud API (appointment communications)
+
+Env-only credentials. Package: `integrations/communications/` (WhatsApp behind a channel façade). Webhook: `POST|GET /webhooks/whatsapp/`.
+
+If `*_WHATSAPP_ACCESS_TOKEN` or `*_WHATSAPP_PHONE_NUMBER_ID` is missing, appointment book/cancel/reschedule still succeed and outbox rows are marked `skipped`.
+
+### Development
+
+```env
+DEV_WHATSAPP_ACCESS_TOKEN=
+DEV_WHATSAPP_PHONE_NUMBER_ID=
+DEV_WHATSAPP_APP_SECRET=
+DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+DEV_WHATSAPP_API_VERSION=v23.0
+DEV_WHATSAPP_WABA_ID=
+DEV_WHATSAPP_APP_ID=
+DEV_WHATSAPP_TEMPLATE_LANGUAGE=en
+DEV_WHATSAPP_TEMPLATE_CONFIRMED=appointment_confirmed
+DEV_WHATSAPP_TEMPLATE_CANCELLED=appointment_cancelled
+DEV_WHATSAPP_TEMPLATE_RESCHEDULED=appointment_rescheduled
+```
+
+### Staging / Production
+
+Same keys with `STG_` / `PRD_` prefixes.
+
+### Meta webhook setup
+
+1. Callback URL: `https://<host>/webhooks/whatsapp/`
+2. Verify token: same as `*_WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+3. Subscribe field: `messages` (delivery / read statuses)
+4. App secret: `*_WHATSAPP_APP_SECRET` (validates `X-Hub-Signature-256`)
+
+Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language. Body param order:
+
+- confirmed: name, service, time, date, center
+- cancelled: name, service, date, time
+- rescheduled: name, service, previous_slot, new_slot, center
+
+Retry pending/failed sends: `uv run manage.py process_communication_outbox`
+
+User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+
 ## Security Best Practices
 
 ### General Security
