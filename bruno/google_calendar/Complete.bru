@@ -1,0 +1,53 @@
+meta {
+  name: Complete
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseURL}}/google-calendar/complete/
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {"code": "{{google_oauth_code}}"}
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Finishes the connection using the `code` the frontend received from the
+  `/callback/` redirect. Exchanges the code with Google, fetches the
+  connected account's own email, and saves the tokens onto whichever
+  Associate's login email (Associate.user.email) matches it - not
+  necessarily the signed-in caller. 400 "No Biopeak Nexus account uses this
+  Google account's email..." if nobody's login email matches - staff must
+  connect the same Google account they log into Biopeak Nexus with (a
+  personal Gmail that differs from their login email won't resolve).
+
+  Set env var google_oauth_code to the `code` query param from the URL your
+  browser lands on after approving consent (see Connect.bru's docs for the
+  full manual flow) - paste it there, not directly into this body, so this
+  request stays runnable straight from the collection.
+
+  Method: POST
+  Path: /google-calendar/complete/
+  Source: integrations.google_calendar.views.GoogleCalendarCompleteView
+  Auth: None — authentication_classes = [] (this view never reads
+  request.user; the email match is what decides whose tokens actually get
+  saved). The `auth: bearer` on this request is harmless but unnecessary.
+
+  Success: {"success": true, "detail": "Google Calendar connected.", "data": {"email": "...", "associate_id": "..."}}
+}

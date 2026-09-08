@@ -35,7 +35,8 @@ body:json {
       }
     ],
     "room_id": "{{room_id}}",
-    "equipment_id": null
+    "equipment_id": null,
+    "notes": "First visit"
   }
 }
 
@@ -48,4 +49,11 @@ docs {
   Allowed from confirmed or checked_in. Lands confirmed. Not from in_progress.
   Same pin / preferred contract as POST Book Appointment (complete pin or preferred; no silent re-resolve).
   Duplicate appointment code IntegrityError → 400 "Appointment code already exists." Overlap → 400 "Slot no longer available."
+  notes is optional free text; omit/null keeps the existing value, "" clears it.
+  Google Calendar: mirrors to the one fixed shared account (GOOGLE_CALENDAR_ID), same as booking —
+  not tied to whichever associate is assigned. If connected, the Google event is updated/created
+  right after this reschedule is saved, so a rejected reschedule (e.g. an overlap) never touches
+  Google at all. Best-effort — if that Google call fails, the failure is logged and the reschedule
+  stays saved with the appointment's existing google_event_id/google_meet_link left unchanged.
+  If the shared account isn't connected, reschedule proceeds unsynced as normal.
 }

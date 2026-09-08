@@ -24,19 +24,20 @@ body:json {
     "customer_profile_id": "{{customer_profile_id}}",
     "service_id": "{{service_id}}",
     "modality": "in_person",
-    "start": "2026-09-05T04:00:00Z",
-    "end": "2026-09-05T04:40:00Z",
+    "start": "2026-09-09T04:00:00Z",
+    "end": "2026-09-09T04:30:00Z",
     "preferred": {
       "room_id": "{{room_id}}"
     },
     "associates": [
       {
-        "role_id": "{{role_id}}",
-        "associate_id": "{{associate_id}}"
+        "associate_id": "{{associate_id}}",
+        "role_id": "{{role_id}}"
       }
     ],
     "room_id": "{{room_id}}",
-    "equipment_id": null
+    "equipment_id": "01a041dc-5023-7641-b758-48bdae5a57e4",
+    "notes": "First visit"
   }
 }
 
@@ -62,4 +63,12 @@ docs {
   Adjust start/end to match a slot. Overlap → 400 "Slot no longer available."
   customer_profile_id / service_id must be active at this center.
   Invalid room_id / equipment_id → 400 "Invalid room/equipment for this center."
+  notes is optional free text, stored on the appointment and mirrored as the Google event's description.
+  Google Calendar: if the one fixed shared account (GOOGLE_CALENDAR_ID, see
+  google_calendar/Connect + Complete) is connected, the appointment is mirrored
+  there automatically as this organizer, right after the appointment is saved,
+  with assigned associates invited as attendees. Best-effort — booking always
+  succeeds even if this sync fails or nobody is connected; a Google failure is
+  logged, never surfaced as an error. Response's google_meet_link is populated
+  only when the sync succeeded and the appointment is virtual.
 }

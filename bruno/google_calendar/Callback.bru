@@ -1,0 +1,34 @@
+meta {
+  name: Callback
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/google-calendar/callback/?code=
+  body: none
+  auth: none
+}
+
+params:query {
+  code:
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Google redirects the staff member's browser here after consent - not
+  meant to be called directly. Forwards `code` unchanged to
+  ADMIN_FRONTEND_URL as a redirect; never touches the database itself.
+
+  Method: GET
+  Path: /google-calendar/callback/
+  Source: integrations.google_calendar.views.GoogleCalendarCallbackView
+  Auth: None (public).
+}

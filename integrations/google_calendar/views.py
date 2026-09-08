@@ -3,8 +3,7 @@ from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
-from django.core.signing import BadSignature
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
@@ -14,10 +13,8 @@ from accounts.utils.permissions import IsAssociateUser
 from core.utils.log import logger
 from core.utils.views.main import BaseGenericAPIView
 from integrations.google_calendar import google_oauth
-from integrations.google_calendar.state import build_state, read_state
+from integrations.google_calendar.db import update_associate_google_tokens
 from integrations.google_calendar.utils import decrypt, encrypt
-
-# Depends on the Associate.google_* columns proposed in db.md, not migrated yet.
 
 ADMIN_FRONTEND_URL = getattr(settings, "ADMIN_FRONTEND_URL", None)
 
@@ -27,16 +24,11 @@ def _frontend_redirect(params: dict):
 
 
 class GoogleCalendarConnectView(BaseGenericAPIView):
-    """
-    Returns Google's consent-screen URL for the signed-in associate. The
-    frontend navigates the browser there itself.
-    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
-    permission_classes = [IsAssociateUser]
-
-    def get(self, request, *args, **kwargs):
-        state = build_state(request.user.associate.pk)
-        auth_url = google_oauth.build_auth_url(state=state)
+    def post(self, request, *args, **kwargs):
+        auth_url = google_oauth.build_auth_url()
         return self.send_response(
             "Google Calendar authorization URL generated.",
             data={"auth_url": auth_url},
@@ -44,75 +36,97 @@ class GoogleCalendarConnectView(BaseGenericAPIView):
 
 
 class GoogleCalendarCallbackView(BaseGenericAPIView):
-    """
-    Google redirects the staff member's browser back here after consent.
-    Unauthenticated - the associate is identified via `state` (see
-    `state.py`), not via a client-supplied id. Always redirects back to the
-    admin frontend, success or failure.
-    """
-
     permission_classes = [AllowAny]
     authentication_classes = []
 
     def get(self, request, *args, **kwargs):
-        state = request.query_params.get("state")
         code = request.query_params.get("code")
-        if not state or not code:
+        if not code:
             return _frontend_redirect({"connected": "0", "error": "missing_params"})
 
-        try:
-            associate_id = read_state(state)
-        except BadSignature:
-            return _frontend_redirect({"connected": "0", "error": "invalid_state"})
+        return _frontend_redirect({"code": code})
 
-        associate = Associate.objects.filter(pk=associate_id).first()
-        if associate is None:
-            return _frontend_redirect({"connected": "0", "error": "associate_not_found"})
+
+class GoogleCalendarCompleteView(BaseGenericAPIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, *args, **kwargs):
+        code = request.data.get("code")
+        if not code:
+            self.raise_bad_request("code is required.")
 
         try:
             tokens = google_oauth.exchange_code(code)
         except requests.HTTPError:
-            return _frontend_redirect({"connected": "0", "error": "exchange_failed"})
+            self.raise_bad_request("Failed to exchange the authorization code with Google")
 
         refresh_token = tokens.get("refresh_token")
         if not refresh_token:
-            return _frontend_redirect({"connected": "0", "error": "no_refresh_token"})
+            self.raise_bad_request(
+                "Google did not return a refresh token. Disconnect and reconnect to grant access again"
+            )
 
         try:
             google_email = google_oauth.fetch_email(tokens["access_token"])
         except requests.HTTPError:
-            return _frontend_redirect({"connected": "0", "error": "profile_fetch_failed"})
+            self.raise_bad_request("Failed to fetch the connected Google account's email")
 
-        associate.google_email = google_email
+        associate = Associate.objects.filter(user__email__iexact=google_email).first()
+        if associate is None:
+            self.raise_bad_request(
+                "No Biopeak Staff account uses this Google account's email. "
+                "Connect the same Google account you log into Biopeak with."
+            )
+
+        associate.email = google_email
         associate.google_access_token = encrypt(tokens["access_token"])
         associate.google_refresh_token = encrypt(refresh_token)
         associate.google_access_token_expires_at = timezone.now() + timedelta(
             seconds=tokens["expires_in"]
         )
         try:
-            associate.save(
-                update_fields=[
-                    "google_email",
-                    "google_access_token",
-                    "google_refresh_token",
-                    "google_access_token_expires_at",
-                    "updated_at",
-                ]
-            )
+            with transaction.atomic():
+                # Associate.email is unique, evict whoever else currently
+                # holds this email so the save below doesn't hit that
+                # constraint - same transaction so a failure here can't
+                # leave this Google account unclaimed by either associate.
+                stale_holder_count = (
+                    Associate.objects.filter(email=google_email)
+                    .exclude(pk=associate.pk)
+                    .update(
+                        email=None,
+                        google_access_token=None,
+                        google_refresh_token=None,
+                        google_access_token_expires_at=None,
+                    )
+                )
+                associate.save(
+                    update_fields=[
+                        "email",
+                        "google_access_token",
+                        "google_refresh_token",
+                        "google_access_token_expires_at",
+                        "updated_at",
+                    ]
+                )
         except IntegrityError:
-            logger.warning(
-                f"Google Calendar connect: {google_email} is already linked to another associate."
+            self.raise_bad_request(
+                "This Google account was just connected by another associate. Try again."
             )
-            return _frontend_redirect({"connected": "0", "error": "email_already_connected"})
+        if stale_holder_count:
+            logger.warning(
+                f"Google Calendar connect: {google_email} was linked to another "
+                f"associate; reassigning it to associate {associate.pk}."
+            )
 
-        return _frontend_redirect({"connected": "1", "email": google_email})
+        return self.send_response(
+            "Google Calendar connected.",
+            data={"email": google_email, "associate_id": str(associate.pk)},
+        )
 
 
 class GoogleCalendarDisconnectView(BaseGenericAPIView):
-    """
-    Disconnects the signed-in associate's own Google Calendar.
-    """
-
     permission_classes = [IsAssociateUser]
 
     def delete(self, request, *args, **kwargs):
@@ -122,13 +136,11 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
 
         google_oauth.revoke_token(decrypt(associate.google_refresh_token))
 
-        associate.google_email = None
         associate.google_access_token = None
         associate.google_refresh_token = None
         associate.google_access_token_expires_at = None
         associate.save(
             update_fields=[
-                "google_email",
                 "google_access_token",
                 "google_refresh_token",
                 "google_access_token_expires_at",
@@ -137,3 +149,27 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
         )
 
         return self.send_response("Google Calendar disconnected.")
+
+
+class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
+    permission_classes = [IsAssociateUser]
+
+    def post(self, request, *args, **kwargs):
+        associate = request.user.associate
+        if not associate.google_refresh_token:
+            self.raise_bad_request("No Google Calendar connection to refresh.")
+
+        try:
+            tokens = google_oauth.refresh_access_token(decrypt(associate.google_refresh_token))
+        except requests.HTTPError:
+            self.raise_bad_request("Failed to refresh the Google Calendar token")
+
+        new_refresh_token = encrypt(tokens["refresh_token"]) if "refresh_token" in tokens else None
+        update_associate_google_tokens(
+            associate,
+            access_token=encrypt(tokens["access_token"]),
+            expires_at=timezone.now() + timedelta(seconds=tokens["expires_in"]),
+            refresh_token=new_refresh_token,
+        )
+
+        return self.send_response("Google Calendar token refreshed.")

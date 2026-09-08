@@ -35,6 +35,11 @@ from appointments.utils.transitions import (
 )
 from core.utils.constants import AppointmentModes
 from core.utils.serializers import BaseSerializer
+from integrations.google_calendar.google_sync import (
+    sync_cancelled_appointment_with_google,
+    sync_new_appointment_with_google,
+    sync_rescheduled_appointment_with_google,
+)
 from programs.services.models import Service
 
 IDEMPOTENCY_TTL_HOURS = 24
@@ -157,6 +162,7 @@ def create_appointment_record(
         room=room,
         equipment=equipment,
         care_team=care_team,
+        notes=validated_data.get("notes"),
         created_by=actor,
     )
     create_appointment_associates(
@@ -246,6 +252,7 @@ class AppointmentBookSerializer(BaseSerializer):
     associates = AppointmentAssociateInputSerializer(many=True, required=False)
     room_id = serializers.UUIDField(required=False, allow_null=True)
     equipment_id = serializers.UUIDField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def validate_modality(self, value):
         if value == AppointmentModes.BOTH:
@@ -329,6 +336,23 @@ class AppointmentBookSerializer(BaseSerializer):
                     appointment=appointment,
                     expires_at=timezone.now() + timedelta(hours=IDEMPOTENCY_TTL_HOURS),
                 )
+            google_event_id, google_meet_link = sync_new_appointment_with_google(
+                customer_profile=validated_data["customer_profile"],
+                service=validated_data["service"],
+                code=appointment.code,
+                modality=validated_data["modality"],
+                start=validated_data["start"],
+                end=validated_data["end"],
+                room=room,
+                notes=validated_data.get("notes"),
+                associates_payload=associates_payload,
+            )
+            if google_event_id:
+                appointment.google_event_id = google_event_id
+                appointment.google_meet_link = google_meet_link
+                appointment.save(
+                    update_fields=["google_event_id", "google_meet_link", "updated_at"]
+                )
         return appointment
 
 
@@ -405,6 +429,8 @@ class AppointmentDetailSerializer(AppointmentListSerializer):
     exclusive_start = serializers.DateTimeField(source="exclusive_start_datetime")
     exclusive_end = serializers.DateTimeField(source="exclusive_end_datetime")
     cancel_reason = serializers.CharField()
+    notes = serializers.CharField(allow_null=True)
+    google_meet_link = serializers.URLField(allow_null=True)
     exception_resolution_hint = serializers.SerializerMethodField(
         help_text=(
             "Open-exception resolve guidance. Cancel and reschedule remain "
@@ -448,6 +474,10 @@ class AppointmentCancelSerializer(BaseSerializer):
                 instance,
                 ExceptionResolution.CANCELLED,
             )
+            if sync_cancelled_appointment_with_google(instance):
+                instance.save(
+                    update_fields=["google_event_id", "google_meet_link", "updated_at"]
+                )
             create_audit_log(
                 instance,
                 actor,
@@ -501,6 +531,9 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         validated_data.pop("equipment_id", None)
         validated_data.pop("customer_profile_id", None)
         validated_data.pop("service_id", None)
+        notes = validated_data.pop("notes", None)
+        if notes is None:
+            notes = instance.notes
         buffer_before = assignment.buffer_before
         buffer_after = assignment.buffer_after
         exclusive_start, exclusive_end = compute_exclusive_bounds(
@@ -529,6 +562,7 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
             instance.room = room
             instance.equipment = equipment
             instance.care_team = care_team
+            instance.notes = notes
             instance.status = AppointmentStatus.CONFIRMED
             instance.save()
             instance.associate_links.all().delete()
@@ -539,6 +573,25 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
                 exclusive_end,
             )
             sync_associate_status_snapshots(instance)
+            google_event_id, google_meet_link = sync_rescheduled_appointment_with_google(
+                instance,
+                customer_profile=validated_data["customer_profile"],
+                modality=validated_data["modality"],
+                start=validated_data["start"],
+                end=validated_data["end"],
+                room=room,
+                notes=notes,
+                associates_payload=associates_payload,
+            )
+            if (google_event_id, google_meet_link) != (
+                instance.google_event_id,
+                instance.google_meet_link,
+            ):
+                instance.google_event_id = google_event_id
+                instance.google_meet_link = google_meet_link
+                instance.save(
+                    update_fields=["google_event_id", "google_meet_link", "updated_at"]
+                )
             create_audit_log(
                 instance,
                 actor,

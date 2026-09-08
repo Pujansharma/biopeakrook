@@ -6,7 +6,7 @@ environments (development, staging, production).
 ## Overview
 
 The application uses environment variables for configuration across different environments. All configuration is managed
-through a `.env` file in the project root with environment-specific prefixes (DEV_, STG_, PRD_).
+through a `.env` file in the project root with environment-specific prefixes (DEV*, STG*, PRD\_).
 
 ## Core Settings
 
@@ -133,9 +133,30 @@ DEV_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 DEV_GOOGLE_CLIENT_SECRET=your-client-secret
 DEV_GOOGLE_REDIRECT_URI=http://127.0.0.1:8001/google-calendar/callback/
 DEV_GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
+DEV_GOOGLE_CALENDAR_ID=care@biopeak.health
 ```
 
 Staging/production use the same names with `STG_`/`PRD_` prefixes.
+
+`GOOGLE_CALENDAR_ID` is the one shared Google account every appointment
+event gets created on/updated/deleted from — not tied to any individual
+associate's own connection. It must be connected the normal way
+first (via `/google-calendar/connect/` + `/complete/`, same as any
+associate) so its tokens land on the `Associate` row whose `email` matches
+this value. See "Event sync" in `docs/google-calendar-integration.md`.
+
+The callback (`GoogleCalendarCallbackView`) redirects the browser to
+`ADMIN_FRONTEND_URL` on both success and failure, so it must be set for this
+feature to work at all:
+
+```env
+DEV_ADMIN_FRONTEND_URL=http://localhost:5173
+STG_ADMIN_FRONTEND_URL=https://staging-admin.yourdomain.com
+PRD_ADMIN_FRONTEND_URL=https://admin.yourdomain.com
+```
+
+If unset, `core/settings/{development,staging,production}.py` reads it as
+`None`, and the redirect URL ends up malformed.
 
 `GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` isn't a password you make up - generate
 one with:
@@ -159,14 +180,14 @@ DJANGO_SUPERUSER_PASSWORD=secure_superuser_password
 ## Environment Variable Categories
 
 | Category     | Required | Description                                  |
-|--------------|----------|----------------------------------------------|
-| **Core**     | ✅        | Essential Django settings                    |
-| **Database** | ✅        | PostgreSQL connection settings               |
-| **Email**    | ✅        | SMTP configuration for notifications         |
+| ------------ | -------- | -------------------------------------------- |
+| **Core**     | ✅       | Essential Django settings                    |
+| **Database** | ✅       | PostgreSQL connection settings               |
+| **Email**    | ✅       | SMTP configuration for notifications         |
 | **Redis**    | ⚠️       | Required for production, optional for dev    |
 | **AWS S3**   | ⚠️       | Required for staging/production file storage |
-| **URLs**     | ❌        | Optional password reset frontend URLs        |
-| **Users**    | ❌        | Optional automated user creation             |
+| **URLs**     | ❌       | Optional password reset frontend URLs        |
+| **Users**    | ❌       | Optional automated user creation             |
 
 ## Environment Detection
 
@@ -175,7 +196,6 @@ The application automatically detects the environment based on the `DJANGO_SETTI
 - `core.settings.development` (for development, default)
 - `core.settings.staging` (for staging)
 - `core.settings.production` (for production)
-
 
 ## Complete Example Configurations
 
@@ -319,24 +339,24 @@ DJANGO_SUPERUSER_PASSWORD=secure_admin_password
 ### Common Issues
 
 1. **Database Connection Failed**
-    - Verify database credentials and host accessibility
-    - Check if PostgreSQL service is running
-    - Ensure firewall allows connections on the specified port
+   - Verify database credentials and host accessibility
+   - Check if PostgreSQL service is running
+   - Ensure firewall allows connections on the specified port
 
 2. **Email Not Sending**
-    - Verify SMTP credentials and host settings
-    - Check if less secure app access is enabled (for Gmail)
-    - Ensure email host allows connections from your server IP
+   - Verify SMTP credentials and host settings
+   - Check if less secure app access is enabled (for Gmail)
+   - Ensure email host allows connections from your server IP
 
 3. **Redis Connection Failed**
-    - Verify Redis is running and accessible
-    - Check Redis configuration and authentication
-    - Ensure Redis host and port are correct
+   - Verify Redis is running and accessible
+   - Check Redis configuration and authentication
+   - Ensure Redis host and port are correct
 
 4. **AWS S3 Access Denied**
-    - Verify AWS credentials are correct
-    - Check S3 bucket permissions and policies
-    - Ensure the bucket exists in the specified region
+   - Verify AWS credentials are correct
+   - Check S3 bucket permissions and policies
+   - Ensure the bucket exists in the specified region
 
 ### Environment Variable Validation
 
@@ -352,7 +372,7 @@ This will check for common configuration issues and security problems.
 
 When moving from development to production:
 
-1. **Update Database Settings**: Change from DEV_ to PRD_ prefixed variables
+1. **Update Database Settings**: Change from DEV* to PRD* prefixed variables
 2. **Configure Production Email**: Set up production SMTP service
 3. **Setup AWS S3**: Configure S3 for media file storage
 4. **Enable Redis**: Configure Redis for production caching
