@@ -107,6 +107,10 @@ class ResultRequestThread(threading.Thread):
         if not self.result_request:
             return None
 
+        logger.info(
+            f"Result request thread started: "
+            f"result_request_id={self.result_request.pk}"
+        )
         try:
             handle_result_request(self.result_request)
         except Exception as e:
@@ -123,6 +127,11 @@ class ResultRequestThread(threading.Thread):
                 f"Result request flow ended: "
                 f"result_request_id={self.result_request.pk} "
                 f"outcome={ResultRequestStatus.FAILED}"
+            )
+        else:
+            logger.info(
+                f"Result request thread completed without internal errors: "
+                f"result_request_id={self.result_request.pk}"
             )
         return None
 
