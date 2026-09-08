@@ -4,21 +4,9 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.utils.log import logger
-from products.utils.constants import ProviderCallbackFunction, ProductCallbackFunction
-from programs.program_services.utils.results import handle_bugspeaks_report_fetch
+from programs.program_services.utils.results import get_result_fetch_handler
 from programs.services.models import ResultRequest
 from programs.services.utils.constants import ResultRequestStatus
-
-# Define the functions here for the partners
-# Each handler receives result_request instance & provider_api_data dict
-RESULT_FETCH_HANDLERS = {
-    (ProviderCallbackFunction.ORANGE_LABS, ProductCallbackFunction.BLOOD): lambda *x, **y: (True, None),
-    (ProviderCallbackFunction.BUGSPEAKS, ProductCallbackFunction.GUT_MICROBIOME): handle_bugspeaks_report_fetch,
-}
-
-
-def get_result_fetch_handler(provider_callback, product_callback):
-    return RESULT_FETCH_HANDLERS.get((provider_callback, product_callback))
 
 
 def mark_result_request_failed(result_request_identifier, detail):
