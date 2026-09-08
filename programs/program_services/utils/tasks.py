@@ -44,10 +44,16 @@ def handle_result_request(result_request):
     )
     if not claimed_count:
         return None
-
+    provider_callback = result_request.product.provider.callback
+    product_callback = result_request.product.callback
+    logger.info(
+        f"Result request flow started: result_request_id={result_request.pk} "
+        f"provider_callback={provider_callback} "
+        f"product_callback={product_callback}"
+    )
     handler = get_result_fetch_handler(
-        result_request.product.provider.callback,
-        result_request.product.callback,
+        provider_callback,
+        product_callback,
     )
     if not handler:
         error_message = "Result fetching is not supported for this product."
@@ -56,11 +62,30 @@ def handle_result_request(result_request):
             f"Result request failed: result_request_id={result_request.pk} "
             f"error={error_message}"
         )
+        logger.info(
+            f"Result request flow ended: result_request_id={result_request.pk} "
+            f"provider_callback={provider_callback} "
+            f"product_callback={product_callback}"
+        )
         return None
 
     provider_api_data = result_request.product.provider.api.data or {}
-    # Perform the handler function here
+    logger.info(
+        f"Result request handler started: result_request_id={result_request.pk} "
+        f"provider_callback={provider_callback} "
+        f"product_callback={product_callback}"
+    )
     handler(result_request, provider_api_data)
+    logger.info(
+        f"Result request handler ended: result_request_id={result_request.pk} "
+        f"provider_callback={provider_callback} "
+        f"product_callback={product_callback}"
+    )
+    logger.info(
+        f"Result request flow ended: result_request_id={result_request.pk} "
+        f"provider_callback={provider_callback} "
+        f"product_callback={product_callback}"
+    )
     return None
 
 
