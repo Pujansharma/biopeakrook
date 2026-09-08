@@ -118,6 +118,8 @@ def handle_bugspeaks_report_fetch(result_request: ResultRequest, provider_api_da
         created_by=result_request.created_by,
     )
 
+    documents = []
+
     if _pdf_report:
         file_name = (
             f"BugSpeaks_PDF_Report_{bugspeaks_id}_"
@@ -125,13 +127,15 @@ def handle_bugspeaks_report_fetch(result_request: ResultRequest, provider_api_da
         )
         file_content = _pdf_report.getvalue()
         file = ContentFile(content=file_content, name=file_name)
-        ServiceDocument.objects.create(
-            result=service_result,
-            file=file,
-            filename=file_name,
-            content_type="application/pdf",
-            file_hash=generate_file_hash(file_content),
-            document_category=ServiceDocumentCategory.REPORT,
+        documents.append(
+            ServiceDocument(
+                result=service_result,
+                file=file,
+                filename=file_name,
+                content_type="application/pdf",
+                file_hash=generate_file_hash(file_content),
+                document_category=ServiceDocumentCategory.REPORT,
+            )
         )
 
     if _raw_file:
@@ -141,18 +145,20 @@ def handle_bugspeaks_report_fetch(result_request: ResultRequest, provider_api_da
         )
         file_content = _raw_file.getvalue()
         file = ContentFile(content=file_content, name=file_name)
-        ServiceDocument.objects.create(
-            result=service_result,
-            file=file,
-            filename=file_name,
-            content_type=(
-                "application/vnd.openxmlformats-officedocument."
-                "spreadsheetml.sheet"
-            ),
-            file_hash=generate_file_hash(file_content),
-            document_category=ServiceDocumentCategory.RAW,
+        documents.append(
+            ServiceDocument(
+                result=service_result,
+                file=file,
+                filename=file_name,
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+                file_hash=generate_file_hash(file_content),
+                document_category=ServiceDocumentCategory.RAW,
+            )
         )
-
+    ServiceDocument.objects.bulk_create(documents)
     update_result_documents_count(service_result.pk)
     update_program_service_results_count(program_service.pk)
     update_program_service_document_counts(program_service.pk)
