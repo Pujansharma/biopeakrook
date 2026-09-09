@@ -1,5 +1,6 @@
 import threading
 
+from django.db import close_old_connections
 from django.db.models import F
 from django.utils import timezone
 
@@ -92,48 +93,51 @@ def handle_result_request(result_request):
 class ResultRequestThread(threading.Thread):
     def __init__(self, result_request):
         super().__init__()
-        result_request_identifier = str(result_request)
-        self.result_request = (
-            ResultRequest.objects.select_related(
-                "program_service__program",
-                "product__provider__api",
-                "created_by",
-            )
-            .filter(pk=result_request_identifier)
-            .first()
-        )
+        self.result_request_identifier = str(result_request)
 
     def run(self):
-        if not self.result_request:
-            return None
-
-        logger.info(
-            f"Result request thread started: "
-            f"result_request_id={self.result_request.pk}"
-        )
         try:
-            handle_result_request(self.result_request)
-        except Exception as e:
-            logger.exception(
-                f"Result request flow encountered an internal error: "
-                f"result_request_id={self.result_request.pk}",
-                exc_info=e
+            close_old_connections()
+            result_request = (
+                ResultRequest.objects.select_related(
+                    "program_service__program",
+                    "product__provider__api",
+                    "created_by",
+                )
+                .filter(pk=self.result_request_identifier)
+                .first()
             )
-            mark_result_request_failed(
-                self.result_request.pk,
-                "An internal error occurred while fetching this result.",
-            )
+            if not result_request:
+                return
+
             logger.info(
-                f"Result request flow ended: "
-                f"result_request_id={self.result_request.pk} "
-                f"outcome={ResultRequestStatus.FAILED}"
+                f"Result request thread started: "
+                f"result_request_id={result_request.pk}"
             )
-        else:
-            logger.info(
-                f"Result request thread completed without internal errors: "
-                f"result_request_id={self.result_request.pk}"
-            )
-        return None
+            try:
+                handle_result_request(result_request)
+            except Exception as e:
+                logger.exception(
+                    f"Result request flow encountered an internal error: "
+                    f"result_request_id={result_request.pk}",
+                    exc_info=e
+                )
+                mark_result_request_failed(
+                    result_request.pk,
+                    "An internal error occurred while fetching this result.",
+                )
+                logger.info(
+                    f"Result request flow ended: "
+                    f"result_request_id={result_request.pk} "
+                    f"outcome={ResultRequestStatus.FAILED}"
+                )
+            else:
+                logger.info(
+                    f"Result request thread completed without internal errors: "
+                    f"result_request_id={result_request.pk}"
+                )
+        finally:
+            close_old_connections()
 
 
 def start_result_request_task(result_request):
