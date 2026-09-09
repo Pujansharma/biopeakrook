@@ -21,6 +21,10 @@ from appointments.utils.constants import (
     AppointmentStatus,
     ExceptionResolution,
 )
+from appointments.utils.emails import (
+    build_appointment_confirmed_notes,
+    build_appointment_rescheduled_notes,
+)
 from appointments.utils.exceptions import (
     detect_exceptions_for_appointment,
     resolve_exceptions_for_appointment,
@@ -197,7 +201,7 @@ def sync_new_appointment_and_save(
         start=start,
         end=end,
         room=room,
-        notes=notes,
+        notes=build_appointment_confirmed_notes(appointment, notes),
         associates_payload=associates_payload,
     )
     if google_event_id:
@@ -244,7 +248,7 @@ def sync_rescheduled_appointment_and_save(
         start=start,
         end=end,
         room=room,
-        notes=notes,
+        notes=build_appointment_rescheduled_notes(instance, notes),
         associates_payload=associates_payload,
     )
     if (google_event_id, google_meet_link) != (

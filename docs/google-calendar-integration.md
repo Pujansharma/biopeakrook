@@ -69,6 +69,7 @@ All under `integrations/google_calendar/`:
 | `views.py`        | The five HTTP endpoints associates actually hit: connect, callback, complete, disconnect, refresh. See below.                                                                                                                                                                                                      |
 | `urls.py`         | Routes those five views under `/google-calendar/`.                                                                                                                                                                                                                                                                 |
 | `google_sync.py`  | The appointment-side wiring: picks the fixed calendar organizer and syncs a booked/rescheduled/cancelled `Appointment` to Google Calendar. Called from `appointments/serializers/booking.py`. See "Event sync (book/reschedule/cancel)" below.                                                                     |
+| `appointments/utils/emails.py` (outside this package) | Builds the formatted event `description` text (`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`) - patient/service plus a modality-conditional clinic address or Meet-link note. See "Event description" below.                                                                     |
 
 `integrations/models.py` is empty - this feature doesn't get its own tables.
 Connection/event data lives directly on `Associate` and `Appointment` - see
@@ -193,15 +194,15 @@ is stored directly on that same appointment row.
 
 | Column             | Type            | What it stores                                                                           | Why we need it                                                                                                   |
 | ------------------ | --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `notes`            | Text (optional) | Free-text notes for the appointment, e.g. `"First visit"`. Settable via book/reschedule. | Becomes the Google event's `description`. Independent of Google - kept even if the appointment was never synced. |
+| `notes`            | Text (optional) | Free-text notes for the appointment, e.g. `"First visit"`. Settable via book/reschedule. | Appended to the formatted event `description` built by `appointments/utils/emails.py` (see "Event description" below). Independent of Google - kept even if the appointment was never synced. |
 | `google_event_id`  | Text (optional) | The ID Google assigned this event, e.g. `"abc123xyz"`                                    | Needed to update (`patch_event`) or cancel (`delete_event`) this same event on Google's side later.              |
 | `google_meet_link` | URL (optional)  | The Google Meet video call link, e.g. `"https://meet.google.com/abc-defg-hij"`           | So the app can show/send the meeting link to the staff member and the customer.                                  |
 
 All three columns are optional. `google_event_id`/`google_meet_link` only
 get a value once the appointment has actually been mirrored to Google. The
-event's `summary` (title) isn't stored at all - it's built fresh at sync
-time from `service.name`/`code` (see "Event sync" below), so there's no
-separate column for it to go stale in.
+event's `summary` (title) isn't stored at all - it's a fixed string built
+fresh at sync time (see "Event sync" below), so there's no separate column
+for it to go stale in.
 
 **Uniqueness:** `google_event_id` must be unique - two appointments should
 never point at the same Google event, or updating/cancelling one could
@@ -291,12 +292,13 @@ rejected by the DB (e.g. an overlap or idempotency conflict) never creates a
 Google event that would otherwise be orphaned. `need_meet_link=True` only
 when `modality` is `virtual`. Returns
 `(google_event_id, google_meet_link)`, which the caller saves onto the row
-in a follow-up save right after. The event title is `"{service} - {code}"`,
-same as reschedule, since the row (and its `code`) already exists by the
-time this call runs.
+in a follow-up save right after. The event title is the fixed string
+`"Appointment Confirmed"` - it does not include the service name or
+appointment code.
 
-**On reschedule** (`sync_rescheduled_appointment_with_google`) - if the
-appointment has no `google_event_id` yet (e.g. the fixed account was
+**On reschedule** (`sync_rescheduled_appointment_with_google`) - event title
+is the fixed string `"Appointment Rescheduled"` (also no service name/code).
+If the appointment has no `google_event_id` yet (e.g. the fixed account was
 connected _after_ the original booking), it creates a fresh event.
 Otherwise `patch_event()` updates the existing event's time/room/attendees.
 `add_meet_link` is `True` only when the appointment doesn't already have a
@@ -323,6 +325,38 @@ the caller must include those two fields in its own `save(update_fields=...)`
 call for them to actually persist. No-ops (returns `False`, nothing to
 raise) if the appointment was never synced or the fixed account isn't
 connected.
+
+## Event description
+
+The Google event's `description` isn't the raw `notes` field a caller
+passes in - it's a formatted message built by
+`appointments/utils/emails.py` (`build_appointment_confirmed_notes()` for
+book, `build_appointment_rescheduled_notes()` for reschedule) and only then
+handed to `sync_*_appointment_with_google()` as `notes`. Both functions
+share the same shape: a greeting with the patient's name, then a
+`<b>Service:</b>` line (Google Calendar's own UI renders a handful of basic
+tags like `<b>` in the description), a location line, a closing note, and
+finally the caller-supplied `notes` text (if any) appended by
+`append_notes()`. There is no date/time line - the event's own start/end
+times already show that on the calendar entry itself.
+`appointments/utils/emails.py` also defines `get_appointment_date()` /
+`get_appointment_time()` helpers, but neither is called from anywhere -
+they were built for a date/time line that isn't in the message.
+
+**The location line is modality-conditional** (`build_location_note()`):
+
+- `modality == AppointmentModes.VIRTUAL` - shows a one-line "join using the
+  Google Meet link on the calendar invite" note. No clinic address. The
+  actual Meet link isn't inlined into this text (it doesn't exist yet at the
+  point the description is built for a new event) - Google attaches it to
+  the event itself via `conferenceData`/`hangoutLink` (see
+  `need_meet_link`/`add_meet_link` above), and shows it as a join button on
+  the calendar entry.
+- Anything else (`in_person`, `both`) - shows `<b>Clinic Address:</b>`
+  followed by `Center.full_address` (`accounts/centers/models.py`).
+
+`cancel` has no equivalent - `sync_cancelled_appointment_with_google()`
+only calls `delete_event()`, which doesn't touch `description`.
 
 ## Rescheduling and Meet links
 

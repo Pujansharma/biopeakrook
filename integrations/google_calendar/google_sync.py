@@ -93,10 +93,10 @@ def sync_new_appointment_with_google(
         access_token = get_valid_access_token(organizer)
         event = calendar_api.insert_event(
             access_token,
-            title=f"{service.name} - {code}",
+            title=f"Appointment Confirmed",
             start=start,
             end=end,
-            location=room.name if room else None,
+            location=None,
             notes=notes,
             need_meet_link=modality == AppointmentModes.VIRTUAL,
             participant_emails=build_attendee_emails(
@@ -125,8 +125,8 @@ def sync_rescheduled_appointment_with_google(
         return instance.google_event_id, instance.google_meet_link
     associates = resolve_associates_from_payload(associates_payload)
 
-    title = f"{instance.service.name} - {instance.code}"
-    location = room.name if room else None
+    title = f"Appointment Rescheduled"
+    location = None
     attendee_emails = build_attendee_emails(
         customer_profile.customer.contact_email, associates, organizer
     )

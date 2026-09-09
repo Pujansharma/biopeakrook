@@ -56,6 +56,18 @@ class Center(BaseUUIDModel):
     def __str__(self):
         return f"{self.pk}"
 
+    @property
+    def full_address(self) -> str:
+        region = " ".join(part for part in (self.state, self.pincode) if part)
+        address_parts = [
+            self.name,
+            self.address_line_1,
+            self.address_line_2,
+            self.city,
+            region,
+        ]
+        return ", ".join(part for part in address_parts if part)
+
 
 class CenterOperatingHour(BaseUUIDModel):
     """Global operating hours for the center"""
