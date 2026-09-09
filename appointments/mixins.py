@@ -126,7 +126,10 @@ class CenterAppointmentsMixin:
                 "center",
                 "care_team",
             )
-            .prefetch_related("associate_links__associate", "associate_links__role")
+            .prefetch_related(
+                "associate_links__associate__user",
+                "associate_links__role",
+            )
         )
 
 

@@ -318,7 +318,7 @@ Each slot = one pinned combo. Pass that pin into book.
 | `status` | omit | single: `confirmed` \| `checked_in` \| `in_progress` \| `completed` \| `cancelled` \| `no_show` |
 | `care_team_id` | omit | UUID |
 
-All optional filters AND with the date window when a window applies. `search` is OR across fields, then AND with UUID/`status` filters. `associate_id` and `role_id` together = AND (same associate-link row). Blank/omit = no filter. `associate_id` / `role_id` match `associates[]` on the appointment (always present on booked rows).
+All optional filters AND with the date window when a window applies. `search` is OR across fields, then AND with UUID/`status` filters. `associate_id` and `role_id` together = **OR** (appointment has this associate **or** this role on any link). Blank/omit = no filter. `associate_id` / `role_id` match `associates[]` on the appointment (always present on booked rows).
 
 **Date window**
 
@@ -343,7 +343,7 @@ Week = Mon–Sun containing `start`. Month = calendar month.
 }
 ```
 
-Week/month cap **500**; unscoped `search` (no `start`) also capped at 500, newest first. `truncated: true` if more. Windowed lists stay chronological (`start` ascending).
+Week/month and unscoped `search` (no `start`) hard-cap **500** via `LIMIT 501` (no full-table `COUNT(*)`). `truncated: true` if more than 500; `total_count` = returned row count (≤500). Day window is uncapped and still uses exact `count()`. Windowed lists stay chronological (`start` ascending); unscoped search is newest first.
 
 ---
 

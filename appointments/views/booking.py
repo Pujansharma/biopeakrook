@@ -135,24 +135,18 @@ def apply_appointment_list_filters(queryset, query_params):
     if error:
         return None, error
 
-    if associate_id is not None and role_id is not None:
-        queryset = queryset.filter(
-            associate_links__associate_id=associate_id,
-            associate_links__role_id=role_id,
-        ).distinct()
-    elif associate_id is not None:
-        queryset = queryset.filter(
-            associate_links__associate_id=associate_id
-        ).distinct()
-    elif role_id is not None:
-        queryset = queryset.filter(associate_links__role_id=role_id).distinct()
+    link_filter = Q()
+    if associate_id is not None:
+        link_filter |= Q(associate_links__associate_id=associate_id)
+    if role_id is not None:
+        link_filter |= Q(associate_links__role_id=role_id)
+    if associate_id is not None or role_id is not None:
+        queryset = queryset.filter(link_filter).distinct()
 
     return queryset, None
 
 
-def appointment_list_should_cap(query_params, total_count):
-    if total_count <= LIST_CAP:
-        return False
+def appointment_list_applies_hard_cap(query_params):
     if not appointment_list_uses_date_window(query_params):
         return True
     granularity = query_params.get("granularity", AvailabilityGranularity.WEEK)
@@ -425,12 +419,16 @@ class AppointmentListView(AppointmentBookingMixin, BaseListAPIView):
     def get(self, request, *args, **kwargs):
         started = time.monotonic()
         queryset = self.get_queryset()
-        total_count = queryset.count()
-        truncated = False
-        if appointment_list_should_cap(request.query_params, total_count):
-            truncated = True
-            queryset = queryset[:LIST_CAP]
-        serializer = self.get_serializer(queryset, many=True)
+        if appointment_list_applies_hard_cap(request.query_params):
+            page = list(queryset[: LIST_CAP + 1])
+            truncated = len(page) > LIST_CAP
+            page = page[:LIST_CAP]
+            total_count = len(page)
+            serializer = self.get_serializer(page, many=True)
+        else:
+            total_count = queryset.count()
+            truncated = False
+            serializer = self.get_serializer(queryset, many=True)
         data = {
             "appointments": serializer.data,
             "truncated": truncated,

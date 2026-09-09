@@ -34,9 +34,9 @@ settings {
 }
 
 docs {
-  Calendar list for center. Week/month capped at 500 with truncated + total_count.
+  Calendar list for center. Week/month + unscoped search hard-cap 500 (LIMIT 501, no full COUNT); truncated + total_count (= page size).
   Optional AND filters: service_id, room_id, equipment_id, equipment_type_id, status, care_team_id.
-  associate_id + role_id together = AND (same associate-link row). Enable ~params only when set; blank UUID → 400.
+  associate_id + role_id together = OR (any matching associate-link). Enable ~params only when set; blank UUID → 400.
   associate_id / role_id match appointment associates[] (always present on booked rows).
   search: customer name/email/phone, appointment code, service name. Omit start for all-history
   matches (newest first, also capped 500). search + start = windowed. Never send empty search=.

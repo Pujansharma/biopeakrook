@@ -1,3 +1,8 @@
+from functools import partial
+
+from django.db import transaction
+
+from appointments.models import Appointment
 from integrations.communications.outbox import enqueue_appointment_message
 from integrations.utils.constants import CommunicationEventType
 
@@ -21,6 +26,52 @@ def send_appointment_rescheduled(appointment, *, previous_start_datetime=None):
         appointment,
         CommunicationEventType.APPOINTMENT_RESCHEDULED,
         previous_start_datetime=previous_start_datetime,
+    )
+
+
+def queue_confirmed_by_appointment_id(appointment_id):
+    appointment = Appointment.objects.filter(pk=appointment_id).first()
+    if appointment is None:
+        return None
+    return send_appointment_confirmed(appointment)
+
+
+def queue_cancelled_by_appointment_id(appointment_id):
+    appointment = Appointment.objects.filter(pk=appointment_id).first()
+    if appointment is None:
+        return None
+    return send_appointment_cancelled(appointment)
+
+
+def queue_rescheduled_by_appointment_id(appointment_id, previous_start_datetime):
+    appointment = Appointment.objects.filter(pk=appointment_id).first()
+    if appointment is None:
+        return None
+    return send_appointment_rescheduled(
+        appointment,
+        previous_start_datetime=previous_start_datetime,
+    )
+
+
+def schedule_queue_appointment_confirmed(appointment):
+    transaction.on_commit(
+        partial(queue_confirmed_by_appointment_id, appointment.pk)
+    )
+
+
+def schedule_queue_appointment_cancelled(appointment):
+    transaction.on_commit(
+        partial(queue_cancelled_by_appointment_id, appointment.pk)
+    )
+
+
+def schedule_queue_appointment_rescheduled(appointment, *, previous_start_datetime):
+    transaction.on_commit(
+        partial(
+            queue_rescheduled_by_appointment_id,
+            appointment.pk,
+            previous_start_datetime,
+        )
     )
 
 

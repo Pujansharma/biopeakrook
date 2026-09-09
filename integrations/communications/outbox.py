@@ -120,7 +120,8 @@ def enqueue_appointment_message(
 ):
     """
     Persist outbox row only. Cron (`process_communication_outbox`) sends.
-    Safe inside booking/cancel/reschedule atomic blocks.
+    Call via schedule_queue_* (transaction.on_commit) so outbox failures
+    do not roll back booking/cancel/reschedule.
     """
     to_phone = resolve_recipient_phone(appointment)
     template_name = template_name_for_event(event_type)
@@ -172,16 +173,20 @@ def enqueue_appointment_message(
 
 
 def reclaim_stale_sending_messages():
+    """
+    Ambiguous crash window: Meta may already have accepted the send.
+    Skip — never retry — to avoid duplicate WhatsApp messages.
+    """
     stale_before = timezone.now() - timedelta(minutes=STALE_SENDING_MINUTES)
     now = timezone.now()
     return CommunicationOutbox.objects.filter(
         status=CommunicationOutboxStatus.SENDING,
         updated_at__lt=stale_before,
     ).update(
-        status=CommunicationOutboxStatus.FAILED,
-        failed_at=now,
+        status=CommunicationOutboxStatus.SKIPPED,
+        skip_reason="Stale SENDING: send may have reached Meta; not retried",
         error_code="stale_sending",
-        error_detail="Send timed out or worker crashed",
+        error_detail="Send timed out or worker crashed after claim",
         updated_at=now,
     )
 
@@ -251,8 +256,9 @@ def process_outbox_message(message_id):
     message.provider_response = body
     wamid = extract_wamid(body)
     now = timezone.now()
-    if status_code < 300 and wamid:
-        message.wamid = wamid
+    if status_code < 300:
+        # HTTP success = Meta accepted; do not retry even if wamid parse misses.
+        message.wamid = wamid or ""
         message.status = CommunicationOutboxStatus.ACCEPTED
         message.accepted_at = now
         message.error_code = ""
@@ -348,14 +354,18 @@ def apply_whatsapp_status_update(status_payload):
         return None
 
     event_key = f"{wamid}:{provider_status}:{timestamp}"
-    _event, created = CommunicationWebhookEvent.objects.get_or_create(
-        event_key=event_key,
-        defaults={
-            "wamid": wamid,
-            "status": provider_status,
-            "payload": status_payload,
-        },
-    )
+    try:
+        _event, created = CommunicationWebhookEvent.objects.get_or_create(
+            event_key=event_key,
+            defaults={
+                "wamid": wamid,
+                "status": provider_status,
+                "payload": status_payload,
+            },
+        )
+    except IntegrityError:
+        # Concurrent duplicate webhook — treat as already processed.
+        return None
     if not created:
         return None
 

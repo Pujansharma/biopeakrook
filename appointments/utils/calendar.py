@@ -375,6 +375,72 @@ def collect_associate_leave_events_for_associates(
     return merge_intervals(intervals), events
 
 
+def associate_block_intervals_by_associate(
+    center, associates, query_start, query_end, timezone_name
+):
+    """One block query for all associates. Returns {associate_pk: merged intervals}."""
+    result = {associate.pk: [] for associate in associates}
+    if not associates:
+        return result
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    blocks = AssociateAvailabilityBlock.objects.filter(
+        center=center,
+        associate__in=associates,
+        is_active=True,
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_datetime_overlap(range_start, range_end)
+    ).select_related("associate")
+    for block in blocks:
+        if block.is_recurring:
+            block_intervals = expand_recurring_block(
+                block, query_start, query_end, timezone_name
+            )
+            result[block.associate.pk].extend(block_intervals)
+        elif block.start_datetime and block.end_datetime:
+            block_interval = (block.start_datetime, block.end_datetime)
+            clipped = clip_intervals_to_range([block_interval], range_start, range_end)
+            result[block.associate.pk].extend(clipped)
+    return {
+        associate_id: merge_intervals(intervals)
+        for associate_id, intervals in result.items()
+    }
+
+
+def associate_leave_intervals_by_associate(
+    center, associates, query_start, query_end, timezone_name
+):
+    """One leave query for all associates. Returns {associate_pk: merged intervals}."""
+    result = {associate.pk: [] for associate in associates}
+    if not associates:
+        return result
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    leaves = (
+        AssociateLeave.objects.filter(
+            associate__in=associates,
+            is_active=True,
+        )
+        .filter(
+            models.Q(scope=LeaveScope.ALL_CENTERS)
+            | models.Q(scope=LeaveScope.CENTER, center=center)
+        )
+        .filter(datetime_window_overlap(range_start, range_end))
+        .select_related("associate")
+    )
+    for leave in leaves:
+        leave_interval = (leave.start_datetime, leave.end_datetime)
+        clipped = clip_intervals_to_range([leave_interval], range_start, range_end)
+        result[leave.associate.pk].extend(clipped)
+    return {
+        associate_id: merge_intervals(intervals)
+        for associate_id, intervals in result.items()
+    }
+
+
 def collect_care_team_block_intervals_by_team(
     center, care_teams, query_start, query_end, timezone_name
 ):
@@ -719,24 +785,35 @@ def build_calendar_days(
 def collect_appointment_busy_intervals(
     center, resource_type, resource_ids, range_start, range_end
 ):
-    appointments = (
-        Appointment.objects.filter(
-            center=center,
-            status__in=BUSY_APPOINTMENT_STATUSES,
-            start_datetime__lt=range_end,
-            end_datetime__gt=range_start,
-        )
-        .select_related(
-            "customer_profile",
-            "service",
-            "room",
-            "equipment",
-        )
-        .prefetch_related("associate_links__associate", "associate_links__role")
-    )
     resource_id_set = None
     if resource_ids is not None:
-        resource_id_set = {str(item) for item in resource_ids}
+        resource_id_list = list(resource_ids)
+        if not resource_id_list:
+            return [], []
+        resource_id_set = {str(item) for item in resource_id_list}
+
+    appointments = Appointment.objects.filter(
+        center=center,
+        status__in=BUSY_APPOINTMENT_STATUSES,
+        start_datetime__lt=range_end,
+        end_datetime__gt=range_start,
+    )
+    if resource_type == "associate" and resource_id_set is not None:
+        appointments = appointments.filter(
+            associate_links__associate_id__in=resource_id_list
+        ).distinct()
+    elif resource_type == "room" and resource_id_set is not None:
+        appointments = appointments.filter(room_id__in=resource_id_list)
+    elif resource_type == "equipment" and resource_id_set is not None:
+        appointments = appointments.filter(equipment_id__in=resource_id_list)
+
+    appointments = appointments.select_related(
+        "customer_profile",
+        "service",
+        "room",
+        "equipment",
+    ).prefetch_related("associate_links__associate", "associate_links__role")
+
     intervals = []
     events = []
     for appointment in appointments:

@@ -7,6 +7,8 @@ from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.customers.models import CustomerCenterAssignment
 from appointments.models import Appointment
 from appointments.utils.calendar import (
+    associate_block_intervals_by_associate,
+    associate_leave_intervals_by_associate,
     collect_associate_block_events,
     collect_associate_leave_events,
     collect_care_team_block_events,
@@ -17,6 +19,7 @@ from appointments.utils.calendar import (
     collect_room_downtime_events,
     expand_center_operating_hours,
     expand_roster_entries,
+    expand_roster_entries_for_associates,
     get_center_timezone_name,
     team_block_intervals_by_associate,
 )
@@ -192,37 +195,54 @@ def validate_customer_profile_for_center(customer_profile, center):
 
 
 def get_eligible_associates_for_role(center, role, modality):
+    by_role = get_eligible_associates_by_roles(center, [role], modality)
+    return by_role.get(str(role.pk), [])
+
+
+def get_eligible_associates_by_roles(center, roles, modality):
+    by_role = {str(role.pk): [] for role in roles}
+    if not roles:
+        return by_role
+    role_ids = [role.pk for role in roles]
     assignments = (
         AssociateCenterAssignment.objects.filter(
             center=center,
-            role=role,
+            role_id__in=role_ids,
             is_active=True,
             associate__user__is_active=True,
             role__is_active=True,
         )
-        .select_related("associate", "associate__user")
+        .select_related("associate", "associate__user", "role")
         .order_by("associate__created_at", "associate__pk")
-        .distinct()
     )
-    associates = []
+    seen_by_role = {str(role.pk): set() for role in roles}
     for assignment in assignments:
-        if associate_modality_compatible(assignment.mode, modality):
-            associates.append(assignment.associate)
-    return associates
+        role_key = str(assignment.role_id)
+        if role_key not in by_role:
+            continue
+        if not associate_modality_compatible(assignment.mode, modality):
+            continue
+        if assignment.associate.pk in seen_by_role[role_key]:
+            continue
+        seen_by_role[role_key].add(assignment.associate.pk)
+        by_role[role_key].append(assignment.associate)
+    return by_role
 
 
 def build_service_resource_pools(center, assignment, modality):
-    role_requirements = assignment.role_requirements.filter(is_active=True)
+    role_requirements = list(
+        assignment.role_requirements.filter(is_active=True).select_related("role")
+    )
+    roles = [requirement.role for requirement in role_requirements]
+    associates_by_role = get_eligible_associates_by_roles(center, roles, modality)
     role_pools = []
-    for requirement in role_requirements.select_related("role"):
+    for requirement in role_requirements:
         role = requirement.role
         role_pools.append(
             {
                 "role_id": str(role.pk),
                 "role": role,
-                "associates": get_eligible_associates_for_role(
-                    center, role, modality
-                ),
+                "associates": associates_by_role.get(str(role.pk), []),
             }
         )
     rooms = []
@@ -238,6 +258,7 @@ def build_service_resource_pools(center, assignment, modality):
         "roles": role_pools,
         "rooms": rooms,
         "equipment": [],
+        "equipment_by_room_id": {},
     }
 
 
@@ -264,23 +285,33 @@ def compute_associate_free_windows(
     timezone_name,
     appointment_busy_map,
     team_block_intervals=None,
+    center_hours=None,
+    closure_intervals=None,
+    roster_hours=None,
+    block_intervals=None,
+    leave_intervals=None,
 ):
-    center_hours = expand_center_operating_hours(
-        center, query_start, query_end, timezone_name
-    )
-    roster_hours = expand_roster_entries(
-        center, associate, query_start, query_end, timezone_name
-    )
+    if center_hours is None:
+        center_hours = expand_center_operating_hours(
+            center, query_start, query_end, timezone_name
+        )
+    if roster_hours is None:
+        roster_hours = expand_roster_entries(
+            center, associate, query_start, query_end, timezone_name
+        )
     base_intervals = intersect_intervals(center_hours, roster_hours)
-    block_intervals, _ = collect_associate_block_events(
-        center, associate, query_start, query_end, timezone_name
-    )
-    leave_intervals, _ = collect_associate_leave_events(
-        center, associate, query_start, query_end, timezone_name
-    )
-    closure_intervals, _ = collect_closure_events(
-        center, query_start, query_end, timezone_name
-    )
+    if block_intervals is None:
+        block_intervals, _ = collect_associate_block_events(
+            center, associate, query_start, query_end, timezone_name
+        )
+    if leave_intervals is None:
+        leave_intervals, _ = collect_associate_leave_events(
+            center, associate, query_start, query_end, timezone_name
+        )
+    if closure_intervals is None:
+        closure_intervals, _ = collect_closure_events(
+            center, query_start, query_end, timezone_name
+        )
     if team_block_intervals is None:
         care_teams = live_care_teams_for_associate(center, associate)
         team_block_intervals, _ = collect_care_team_block_events(
@@ -304,19 +335,24 @@ def compute_room_free_windows(
     query_end,
     timezone_name,
     appointment_busy_map,
+    center_hours=None,
+    closure_intervals=None,
 ):
-    base_intervals = expand_center_operating_hours(
-        center, query_start, query_end, timezone_name
-    )
+    if center_hours is None:
+        center_hours = expand_center_operating_hours(
+            center, query_start, query_end, timezone_name
+        )
+    base_intervals = center_hours
     block_intervals, _ = collect_room_block_events(
         room, query_start, query_end, timezone_name
     )
     downtime_intervals, _ = collect_room_downtime_events(
         room, query_start, query_end, timezone_name
     )
-    closure_intervals, _ = collect_closure_events(
-        center, query_start, query_end, timezone_name
-    )
+    if closure_intervals is None:
+        closure_intervals, _ = collect_closure_events(
+            center, query_start, query_end, timezone_name
+        )
     room_busy = appointment_busy_map.get(str(room.pk), [])
     busy_intervals = merge_intervals(
         block_intervals + downtime_intervals + closure_intervals + room_busy
@@ -331,19 +367,24 @@ def compute_equipment_free_windows(
     query_end,
     timezone_name,
     appointment_busy_map,
+    center_hours=None,
+    closure_intervals=None,
 ):
-    base_intervals = expand_center_operating_hours(
-        center, query_start, query_end, timezone_name
-    )
+    if center_hours is None:
+        center_hours = expand_center_operating_hours(
+            center, query_start, query_end, timezone_name
+        )
+    base_intervals = center_hours
     block_intervals, _ = collect_equipment_block_events(
         equipment, query_start, query_end, timezone_name
     )
     downtime_intervals, _ = collect_equipment_downtime_events(
         equipment, query_start, query_end, timezone_name
     )
-    closure_intervals, _ = collect_closure_events(
-        center, query_start, query_end, timezone_name
-    )
+    if closure_intervals is None:
+        closure_intervals, _ = collect_closure_events(
+            center, query_start, query_end, timezone_name
+        )
     equipment_busy = appointment_busy_map.get(str(equipment.pk), [])
     busy_intervals = merge_intervals(
         block_intervals + downtime_intervals + closure_intervals + equipment_busy
@@ -377,6 +418,21 @@ def build_resource_free_window_cache(
     appointment_busy_map,
 ):
     associates = unique_associates_from_resource_pools(resource_pools)
+    center_hours = expand_center_operating_hours(
+        center, query_start, query_end, timezone_name
+    )
+    closure_intervals, _ = collect_closure_events(
+        center, query_start, query_end, timezone_name
+    )
+    roster_by_associate = expand_roster_entries_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
+    blocks_by_associate = associate_block_intervals_by_associate(
+        center, associates, query_start, query_end, timezone_name
+    )
+    leaves_by_associate = associate_leave_intervals_by_associate(
+        center, associates, query_start, query_end, timezone_name
+    )
     team_blocks_by_associate = team_block_intervals_by_associate(
         center, associates, query_start, query_end, timezone_name
     )
@@ -390,6 +446,11 @@ def build_resource_free_window_cache(
             timezone_name,
             appointment_busy_map["associate"],
             team_block_intervals=team_blocks_by_associate.get(associate.pk, []),
+            center_hours=center_hours,
+            closure_intervals=closure_intervals,
+            roster_hours=roster_by_associate.get(associate.pk, []),
+            block_intervals=blocks_by_associate.get(associate.pk, []),
+            leave_intervals=leaves_by_associate.get(associate.pk, []),
         )
     room_windows = {}
     for room in resource_pools["rooms"]:
@@ -400,6 +461,8 @@ def build_resource_free_window_cache(
             query_end,
             timezone_name,
             appointment_busy_map["room"],
+            center_hours=center_hours,
+            closure_intervals=closure_intervals,
         )
     equipment_windows = {}
     for equipment in resource_pools["equipment"]:
@@ -410,6 +473,8 @@ def build_resource_free_window_cache(
             query_end,
             timezone_name,
             appointment_busy_map["equipment"],
+            center_hours=center_hours,
+            closure_intervals=closure_intervals,
         )
     return {
         "associate": associate_windows,
@@ -450,6 +515,36 @@ def first_active_equipment_for_room(room):
         .order_by("created_at", "pk")
         .first()
     )
+
+
+def first_active_equipment_by_room_ids(center, rooms):
+    equipment_by_room_id = {str(room.pk): None for room in rooms}
+    if not rooms:
+        return equipment_by_room_id
+    equipment_rows = (
+        Equipment.objects.filter(
+            center=center,
+            room__in=rooms,
+            is_active=True,
+        )
+        .order_by("room_id", "created_at", "pk")
+    )
+    for equipment in equipment_rows:
+        room_key = str(equipment.room_id)
+        if equipment_by_room_id.get(room_key) is None:
+            equipment_by_room_id[room_key] = equipment
+    return equipment_by_room_id
+
+
+def resolve_equipment_for_room(room, resource_pools=None):
+    if room is None:
+        return None
+    if resource_pools is not None:
+        by_room = resource_pools.get("equipment_by_room_id") or {}
+        room_key = str(room.pk)
+        if room_key in by_room:
+            return by_room[room_key]
+    return first_active_equipment_for_room(room)
 
 
 def resource_is_free(resource_type, resource_id, exclusive_start, exclusive_end, free_window_cache):
@@ -594,12 +689,16 @@ def build_resolve_resource_pools(center, assignment, modality, preferred):
         if assignment.required_room_type is None and not preferred_id:
             pass
 
-    equipment_list = []
-    for room in resource_pools["rooms"]:
-        equipment = first_active_equipment_for_room(room)
-        if equipment is not None:
-            equipment_list.append(equipment)
+    equipment_by_room_id = first_active_equipment_by_room_ids(
+        center, resource_pools["rooms"]
+    )
+    equipment_list = [
+        equipment
+        for equipment in equipment_by_room_id.values()
+        if equipment is not None
+    ]
     resource_pools["equipment"] = equipment_list
+    resource_pools["equipment_by_room_id"] = equipment_by_room_id
     resource_pools["extra_associates"] = extra_associates
     resource_pools["care_team"] = care_team
     resource_pools["care_team_members"] = care_team_members
@@ -621,6 +720,21 @@ def ensure_free_windows_for_pools(
         if str(associate.pk) not in free_window_cache["associate"]
     ]
     if missing_associates:
+        center_hours = expand_center_operating_hours(
+            center, query_start, query_end, timezone_name
+        )
+        closure_intervals, _ = collect_closure_events(
+            center, query_start, query_end, timezone_name
+        )
+        roster_by_associate = expand_roster_entries_for_associates(
+            center, missing_associates, query_start, query_end, timezone_name
+        )
+        blocks_by_associate = associate_block_intervals_by_associate(
+            center, missing_associates, query_start, query_end, timezone_name
+        )
+        leaves_by_associate = associate_leave_intervals_by_associate(
+            center, missing_associates, query_start, query_end, timezone_name
+        )
         team_blocks_by_associate = team_block_intervals_by_associate(
             center, missing_associates, query_start, query_end, timezone_name
         )
@@ -636,6 +750,11 @@ def ensure_free_windows_for_pools(
                     team_block_intervals=team_blocks_by_associate.get(
                         associate.pk, []
                     ),
+                    center_hours=center_hours,
+                    closure_intervals=closure_intervals,
+                    roster_hours=roster_by_associate.get(associate.pk, []),
+                    block_intervals=blocks_by_associate.get(associate.pk, []),
+                    leave_intervals=leaves_by_associate.get(associate.pk, []),
                 )
             )
     for room in resource_pools["rooms"]:
@@ -832,7 +951,7 @@ def resolve_appointment_combo(
                 "A room is required for in-person appointments."
             )
 
-        equipment = first_active_equipment_for_room(room)
+        equipment = resolve_equipment_for_room(room, resource_pools)
         if equipment is not None:
             if not resource_is_free(
                 "equipment",
@@ -1112,6 +1231,10 @@ def validate_appointment_allocation(
         resource_pools["rooms"] = list(resource_pools["rooms"]) + [room]
     if equipment is not None:
         resource_pools["equipment"] = [equipment]
+        if room is not None:
+            by_room = dict(resource_pools.get("equipment_by_room_id") or {})
+            by_room[str(room.pk)] = equipment
+            resource_pools["equipment_by_room_id"] = by_room
 
     buffer_before = assignment.buffer_before
     buffer_after = assignment.buffer_after
