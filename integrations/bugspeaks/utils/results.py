@@ -105,17 +105,19 @@ def handle_bugspeaks_report_fetch(result_request: ResultRequest, provider_api_da
     program_service = result_request.program_service
     program_identifier = program_service.program.pk
 
-    service_result = ServiceResult.objects.create(
+    service_result, _ = ServiceResult.objects.update_or_create(
         result_request=result_request,
         program_service=program_service,
-        product=result_request.product,
-        provider_name=result_request.product.provider.name,
-        product_name=result_request.product.name,
-        result_mode=ServiceResultMode.FETCH,
-        document_type=ServiceDocumentType.BUGSPEAKS_REPORT,
-        sample_collection_date=metadata.get("sample_pickup_date"),
-        report_generation_date=metadata.get("project_completed_timestamp"),
-        created_by=result_request.created_by,
+        defaults={
+            "product": result_request.product,
+            "provider_name": result_request.product.provider.name,
+            "product_name": result_request.product.name,
+            "result_mode": ServiceResultMode.FETCH,
+            "document_type": ServiceDocumentType.BUGSPEAKS_REPORT,
+            "sample_collection_date": metadata.get("sample_pickup_date"),
+            "report_generation_date": metadata.get("project_completed_timestamp"),
+            "created_by": result_request.created_by,
+        }
     )
 
     documents = []
