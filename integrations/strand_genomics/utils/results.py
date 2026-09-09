@@ -36,17 +36,19 @@ def _process_result_data(
         f"result_request_id={result_request.pk} request_id={request_id}"
     )
 
-    service_result = ServiceResult.objects.create(
+    service_result, _ = ServiceResult.objects.update_or_create(
         result_request=result_request,
-        program_service=program_service,
-        product=result_request.product,
-        provider_name=result_request.product.provider.name,
-        product_name=result_request.product.name,
-        result_mode=ServiceResultMode.FETCH,
         document_type=service_document_type,
-        # sample_collection_date=metadata.get("sample_pickup_date"),
-        # report_generation_date=metadata.get("project_completed_timestamp"),
-        created_by=result_request.created_by,
+        defaults={
+            "program_service": program_service,
+            "product": result_request.product,
+            "provider_name": result_request.product.provider.name,
+            "product_name": result_request.product.name,
+            "result_mode": ServiceResultMode.FETCH,
+            # "sample_collection_date": metadata.get("sample_pickup_date"),
+            # "report_generation_date": metadata.get("project_completed_timestamp"),
+            "created_by": result_request.created_by,
+        },
     )
 
     documents = []
