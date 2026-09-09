@@ -36,6 +36,39 @@ class WhatsAppSession(requests.Session):
         )
 
 
+def _normalize_body_parameters(body_parameters):
+    """
+    Accept:
+    - list[{"parameter_name", "text"}] (named Meta templates)
+    - list[str] (legacy positional {{1}}, {{2}}, ...)
+    - dict[str, str] (named shorthand)
+    """
+    if not body_parameters:
+        return []
+    if isinstance(body_parameters, dict):
+        return [
+            {
+                "type": "text",
+                "parameter_name": str(name),
+                "text": str(text),
+            }
+            for name, text in body_parameters.items()
+        ]
+
+    parameters = []
+    for entry in body_parameters:
+        if isinstance(entry, dict):
+            parameter_name = entry.get("parameter_name")
+            text = entry.get("text", "")
+            item = {"type": "text", "text": str(text)}
+            if parameter_name:
+                item["parameter_name"] = str(parameter_name)
+            parameters.append(item)
+            continue
+        parameters.append({"type": "text", "text": str(entry)})
+    return parameters
+
+
 def send_template(
     *,
     to_phone,
@@ -47,7 +80,7 @@ def send_template(
     Send an approved WhatsApp template message.
 
     Returns (http_status, body_dict).
-    body_parameters: list[str] mapped to template {{1}}, {{2}}, ...
+    Prefer named body_parameters for Meta named-variable templates.
     """
     if not is_whatsapp_configured():
         raise ValueError("WhatsApp Cloud API is not configured")
@@ -62,14 +95,12 @@ def send_template(
             "language": {"code": language_code},
         },
     }
-    if body_parameters:
+    normalized = _normalize_body_parameters(body_parameters)
+    if normalized:
         payload["template"]["components"] = [
             {
                 "type": "body",
-                "parameters": [
-                    {"type": "text", "text": str(parameter)}
-                    for parameter in body_parameters
-                ],
+                "parameters": normalized,
             }
         ]
 

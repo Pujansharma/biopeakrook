@@ -13,6 +13,7 @@ get {
 params:query {
   start: 2026-09-01
   granularity: week
+  ~search: Meera
   ~associate_id: {{associate_id}}
   ~role_id: {{role_id}}
   ~service_id: {{service_id}}
@@ -36,4 +37,6 @@ docs {
   Calendar list for center. Week/month capped at 500 with truncated + total_count.
   Optional AND filters: service_id, room_id, equipment_id, equipment_type_id, status, care_team_id.
   associate_id + role_id together = OR. Enable ~params only when set; blank UUID → 400.
+  search: customer name/email/phone, appointment code, service name. Omit start for all-history
+  matches (newest first, also capped 500). search + start = windowed. Never send empty search=.
 }

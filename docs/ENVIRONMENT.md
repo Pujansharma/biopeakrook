@@ -289,11 +289,15 @@ Same keys with `STG_` / `PRD_` prefixes.
 3. Subscribe field: `messages` (delivery / read statuses)
 4. App secret: `*_WHATSAPP_APP_SECRET` (validates `X-Hub-Signature-256`)
 
-Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language. Body param order:
+Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language.
+Templates use **named** body variables. Backend sends `parameter_name` + `text`.
 
-- confirmed: name, service, time, date, center
-- cancelled: name, service, date, time
-- rescheduled: name, service, previous_slot, new_slot, center
+| Template | Named params |
+|---|---|
+| confirmed / rescheduled | `patient_name`, `appointment_date`, `appointment_time`, `service_name`, `clinic_address` |
+| cancelled | `patient_name`, `appointment_date`, `appointment_time`, `service_name` |
+
+`clinic_address` value format: `{center.name}, {address lines/city/state/pincode}`.
 
 Retry pending/failed sends: `uv run manage.py process_communication_outbox`
 

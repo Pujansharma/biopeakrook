@@ -287,14 +287,15 @@ Each slot = one pinned combo. Pass that pin into book.
 
 ### GET `…/` — List (calendar)
 
-**Purpose:** Appointments overlapping a day/week/month window.
+**Purpose:** Appointments overlapping a day/week/month window. With `search` and no `start`, matching appointments for this center across all dates.
 
 **Query**
 
 | Param | Default | Values |
 |---|---|---|
-| `start` | today | `YYYY-MM-DD` |
-| `granularity` | `week` | `day` \| `week` \| `month` |
+| `start` | today (no `search`); omit with `search` = all history | `YYYY-MM-DD` |
+| `granularity` | `week` | `day` \| `week` \| `month` — used only when a date window applies |
+| `search` | omit | string — customer name / email / phone, appointment `code`, service name |
 | `associate_id` | omit | UUID — appointment has this associate |
 | `role_id` | omit | UUID — appointment has this role |
 | `service_id` | omit | UUID |
@@ -304,7 +305,18 @@ Each slot = one pinned combo. Pass that pin into book.
 | `status` | omit | single: `confirmed` \| `checked_in` \| `in_progress` \| `completed` \| `cancelled` \| `no_show` |
 | `care_team_id` | omit | UUID |
 
-All optional filters AND with the date window. `associate_id` and `role_id` together = OR (has associate **or** role). Blank/omit = no filter. Junk UUID → 400 `Invalid <param>.`. Junk `status` → 400.
+All optional filters AND with the date window when a window applies. `search` is OR across fields, then AND with UUID/`status` filters. `associate_id` and `role_id` together = OR (has associate **or** role). Blank/omit = no filter.
+
+**Date window**
+
+| `search` | `start` | Date filter |
+|---|---|---|
+| omit | omit | today + default `granularity` (`week`) |
+| omit | sent | window for that `start` + `granularity` |
+| set | omit | **none** — all matching appointments at this center |
+| set | sent | window for that `start` + `granularity` (narrows search) |
+
+Omit `start` to search history. Do not send empty `start=`. Junk UUID → 400 `Invalid <param>.`. Junk `status` → 400.
 
 Week = Mon–Sun containing `start`. Month = calendar month.
 
@@ -318,7 +330,7 @@ Week = Mon–Sun containing `start`. Month = calendar month.
 }
 ```
 
-Week/month cap **500**; `truncated: true` if more.
+Week/month cap **500**; unscoped `search` (no `start`) also capped at 500, newest first. `truncated: true` if more. Windowed lists stay chronological (`start` ascending).
 
 ---
 

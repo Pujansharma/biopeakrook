@@ -19,13 +19,6 @@ def template_name_for_event(event_type):
     return getattr(settings, setting_name)
 
 
-def format_appointment_datetime(value):
-    if value is None:
-        return ""
-    local_value = timezone.localtime(value)
-    return local_value.strftime("%d %b %Y %I:%M %p")
-
-
 def format_appointment_date(value):
     if value is None:
         return ""
@@ -48,38 +41,77 @@ def customer_display_name(customer_profile):
     return " ".join(part for part in parts if part).strip() or "Customer"
 
 
+def center_address_text(center):
+    if center is None:
+        return ""
+    parts = []
+    for value in (
+        center.address,
+        center.address_line_1,
+        center.address_line_2,
+        center.city,
+        center.state,
+        center.pincode,
+        center.country,
+    ):
+        text = (value or "").strip()
+        if text and text not in parts:
+            parts.append(text)
+    return ", ".join(parts)
+
+
+def clinic_address_display(center):
+    """Meta {{clinic_address}}: 'Clinic name, Clinic address'."""
+    if center is None:
+        return "Center"
+    name = (center.name or "").strip() or "Center"
+    address = center_address_text(center)
+    if address:
+        return f"{name}, {address}"
+    return name
+
+
+def named_text_parameter(parameter_name, text):
+    return {"parameter_name": parameter_name, "text": str(text)}
+
+
 def build_template_parameters(
     event_type,
     appointment,
     *,
     previous_start_datetime=None,
 ):
+    """
+    Named body params matching approved Meta templates:
+    patient_name, appointment_date, appointment_time, service_name,
+    clinic_address (confirmed / rescheduled only).
+    """
+    _ = previous_start_datetime  # Meta reschedule template shows new slot only
     profile = appointment.customer_profile
-    customer_name = customer_display_name(profile)
+    patient_name = customer_display_name(profile)
     service_name = appointment.service.name if appointment.service_id else "Service"
-    center_name = appointment.center.name if appointment.center_id else "Center"
+    center = appointment.center if appointment.center_id else None
     start = appointment.start_datetime
+    appointment_date = format_appointment_date(start)
+    appointment_time = format_appointment_time(start)
+    clinic_address = clinic_address_display(center)
 
+    confirmed_or_rescheduled = [
+        named_text_parameter("patient_name", patient_name),
+        named_text_parameter("appointment_date", appointment_date),
+        named_text_parameter("appointment_time", appointment_time),
+        named_text_parameter("service_name", service_name),
+        named_text_parameter("clinic_address", clinic_address),
+    ]
+    cancelled = [
+        named_text_parameter("patient_name", patient_name),
+        named_text_parameter("appointment_date", appointment_date),
+        named_text_parameter("appointment_time", appointment_time),
+        named_text_parameter("service_name", service_name),
+    ]
     builders = {
-        CommunicationEventType.APPOINTMENT_CONFIRMED: lambda: [
-            customer_name,
-            service_name,
-            format_appointment_time(start),
-            format_appointment_date(start),
-            center_name,
-        ],
-        CommunicationEventType.APPOINTMENT_CANCELLED: lambda: [
-            customer_name,
-            service_name,
-            format_appointment_date(start),
-            format_appointment_time(start),
-        ],
-        CommunicationEventType.APPOINTMENT_RESCHEDULED: lambda: [
-            customer_name,
-            service_name,
-            format_appointment_datetime(previous_start_datetime or start),
-            format_appointment_datetime(start),
-            center_name,
-        ],
+        CommunicationEventType.APPOINTMENT_CONFIRMED: confirmed_or_rescheduled,
+        CommunicationEventType.APPOINTMENT_CANCELLED: cancelled,
+        CommunicationEventType.APPOINTMENT_RESCHEDULED: confirmed_or_rescheduled,
     }
-    return builders[event_type]()
+    return builders[event_type]
