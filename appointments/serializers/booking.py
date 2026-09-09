@@ -47,6 +47,11 @@ from integrations.google_calendar.google_sync import (
     sync_new_appointment_with_google,
     sync_rescheduled_appointment_with_google,
 )
+from integrations.communications import (
+    schedule_queue_appointment_cancelled,
+    schedule_queue_appointment_confirmed,
+    schedule_queue_appointment_rescheduled,
+)
 from programs.services.models import Service
 
 IDEMPOTENCY_TTL_HOURS = 24
@@ -421,6 +426,7 @@ class AppointmentBookSerializer(BaseSerializer):
                     associates_payload=associates_payload,
                 )
             )
+            schedule_queue_appointment_confirmed(appointment)
         return appointment
 
 
@@ -551,6 +557,7 @@ class AppointmentCancelSerializer(BaseSerializer):
             transaction.on_commit(
                 functools.partial(sync_cancelled_appointment_with_google, instance)
             )
+            schedule_queue_appointment_cancelled(instance)
         return instance
 
 
@@ -583,6 +590,14 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         attrs = super().validate(attrs)
         appointment = self.context["appointment"]
         validate_transition(appointment.status, "reschedule")
+        if attrs["customer_profile"].pk != appointment.customer_profile.pk:
+            raise serializers.ValidationError(
+                {"customer_profile_id": ["Cannot change the customer on a reschedule."]}
+            )
+        if attrs["service"].pk != appointment.service.pk:
+            raise serializers.ValidationError(
+                {"service_id": ["Cannot change the service on a reschedule."]}
+            )
         return attrs
 
     def update(self, instance, validated_data):
@@ -609,6 +624,7 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
             buffer_before,
             buffer_after,
         )
+        previous_start_datetime = instance.start_datetime
         with transaction.atomic():
             AppointmentHistory.objects.create(
                 appointment=instance,
@@ -631,6 +647,8 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
             instance.care_team = care_team
             instance.notes = notes
             instance.status = AppointmentStatus.CONFIRMED
+            instance.is_late = False
+            instance.late_by = None
             instance.save()
             instance.associate_links.all().delete()
             create_appointment_associates(
@@ -656,6 +674,10 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
                     notes=notes,
                     associates_payload=associates_payload,
                 )
+            )
+            schedule_queue_appointment_rescheduled(
+                instance,
+                previous_start_datetime=previous_start_datetime,
             )
         resolve_exceptions_for_appointment(
             instance,

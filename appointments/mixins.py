@@ -1,8 +1,10 @@
+from django.db.models import Prefetch
+
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.centers.models import Center
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
-from appointments.models import Appointment
+from appointments.models import Appointment, CenterCareTeam, CenterCareTeamMember
 from appointments.utils.exceptions import (
     apply_availability_exception_hooks,
     get_source_type_for_instance,
@@ -59,6 +61,23 @@ class CenterAvailabilityMixin:
             pk=self.kwargs["associate_id"],
         )
 
+    def get_care_team(self):
+        center = self.get_center()
+        return get_object_or_404(
+            CenterCareTeam.objects.filter(center=center, is_active=True).prefetch_related(
+                Prefetch(
+                    "members",
+                    queryset=CenterCareTeamMember.objects.select_related(
+                        "associate",
+                        "role",
+                        "care_team",
+                    ),
+                )
+            ),
+            "Care team not found.",
+            pk=self.kwargs["care_team_id"],
+        )
+
 
 class CenterAppointmentsMixin:
     """Resolve URL center for appointment APIs without X-Center-ID requirement."""
@@ -107,7 +126,10 @@ class CenterAppointmentsMixin:
                 "center",
                 "care_team",
             )
-            .prefetch_related("associate_links__associate", "associate_links__role")
+            .prefetch_related(
+                "associate_links__associate__user",
+                "associate_links__role",
+            )
         )
 
 

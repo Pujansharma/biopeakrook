@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -10,6 +10,7 @@ from appointments.models import (
     AssociateAvailabilityBlock,
     AssociateLeave,
     AssociateRosterEntry,
+    CareTeamAvailabilityBlock,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
@@ -23,10 +24,12 @@ from appointments.utils.operating_hours import (
 from appointments.utils.overlap import (
     assert_associate_block_no_overlap,
     assert_associate_leave_no_overlap,
+    assert_care_team_block_no_overlap,
     assert_equipment_block_no_overlap,
     assert_equipment_downtime_no_overlap,
     assert_room_block_no_overlap,
     assert_room_downtime_no_overlap,
+    raise_if_care_team_one_off_overlap_integrity,
     validate_same_day_time_window,
 )
 from core.utils.constants import AppointmentDays
@@ -505,6 +508,224 @@ class AssociateAvailabilityBlockCreateSerializer(BaseSerializer):
                     create_associate_availability_block(
                         center,
                         associate,
+                        created_by,
+                        False,
+                        validated_data.get("start_datetime"),
+                        validated_data.get("end_datetime"),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        reason,
+                        is_active,
+                    )
+                )
+        return results
+
+
+def create_care_team_availability_block(
+    center,
+    care_team,
+    created_by,
+    is_recurring,
+    start_datetime,
+    end_datetime,
+    day_of_week,
+    recurring_start_time,
+    recurring_end_time,
+    effective_from,
+    effective_until,
+    reason,
+    is_active,
+):
+    try:
+        return CareTeamAvailabilityBlock.objects.create(
+            center=center,
+            care_team=care_team,
+            created_by=created_by,
+            is_recurring=is_recurring,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            day_of_week=day_of_week,
+            recurring_start_time=recurring_start_time,
+            recurring_end_time=recurring_end_time,
+            effective_from=effective_from,
+            effective_until=effective_until,
+            reason=reason,
+            is_active=is_active,
+        )
+    except IntegrityError as error:
+        raise_if_care_team_one_off_overlap_integrity(error)
+
+
+class CareTeamAvailabilityBlockSerializer(BaseModelSerializer):
+    care_team_id = serializers.UUIDField(source="care_team.pk", read_only=True)
+    center_id = serializers.UUIDField(source="center.pk", read_only=True)
+    created_by = BaseUserSerializer(read_only=True)
+    is_active = serializers.BooleanField(required=False, default=True)
+
+    class Meta:
+        model = CareTeamAvailabilityBlock
+        fields = [
+            "id",
+            "center_id",
+            "care_team_id",
+            "is_recurring",
+            "start_datetime",
+            "end_datetime",
+            "day_of_week",
+            "recurring_start_time",
+            "recurring_end_time",
+            "effective_from",
+            "reason",
+            "is_active",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, data):
+        if "effective_until" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "effective_until": [
+                        "Not supported. Deactivate the block with is_active=false."
+                    ]
+                }
+            )
+        merged = merge_block_validation_data(data, self.instance)
+        merged["effective_until"] = None
+        errors = {}
+        if merged["is_recurring"]:
+            validate_recurring_block_fields(merged, errors)
+        else:
+            validate_one_off_block_fields(merged, errors)
+        if errors:
+            raise serializers.ValidationError(errors)
+        if self.instance is not None and merged["is_active"]:
+            assert_care_team_block_no_overlap(
+                self.instance.center,
+                self.instance.care_team,
+                merged["is_recurring"],
+                merged["start_datetime"],
+                merged["end_datetime"],
+                merged["day_of_week"],
+                merged["recurring_start_time"],
+                merged["recurring_end_time"],
+                merged["effective_from"],
+                None,
+                exclude_id=self.instance.pk,
+            )
+        return data
+
+    def update(self, instance, validated_data):
+        try:
+            instance = super().update(instance, validated_data)
+        except IntegrityError as error:
+            raise_if_care_team_one_off_overlap_integrity(error)
+        if instance.effective_until is not None:
+            instance.effective_until = None
+            instance.save(update_fields=["effective_until", "updated_at"])
+        return instance
+
+
+class CareTeamAvailabilityBlockCreateSerializer(BaseSerializer):
+    is_recurring = serializers.BooleanField(default=False)
+    start_datetime = serializers.DateTimeField(required=False, allow_null=True)
+    end_datetime = serializers.DateTimeField(required=False, allow_null=True)
+    days_of_week = serializers.ListField(
+        child=serializers.ChoiceField(choices=AppointmentDays.choices),
+        allow_empty=False,
+        required=False,
+    )
+    recurring_start_time = serializers.TimeField(required=False, allow_null=True)
+    recurring_end_time = serializers.TimeField(required=False, allow_null=True)
+    effective_from = serializers.DateField(required=False, allow_null=True)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+    is_active = serializers.BooleanField(required=False, default=True)
+
+    def validate(self, data):
+        if "effective_until" in self.initial_data:
+            raise serializers.ValidationError(
+                {
+                    "effective_until": [
+                        "Not supported. Deactivate the block with is_active=false."
+                    ]
+                }
+            )
+        is_recurring = data.get("is_recurring", False)
+        errors = {}
+        if is_recurring:
+            validate_recurring_block_create_fields(data, errors)
+        else:
+            if data.get("days_of_week"):
+                errors["days_of_week"] = ["Not allowed for one-off blocks."]
+            validate_one_off_block_fields(data, errors)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return data
+
+    def create(self, validated_data):
+        center = validated_data["center"]
+        care_team = validated_data["care_team"]
+        created_by = validated_data.get("created_by")
+        is_recurring = validated_data.get("is_recurring", False)
+        reason = validated_data.get("reason", "")
+        is_active = validated_data.get("is_active", True)
+        results = []
+        with transaction.atomic():
+            if is_recurring:
+                for day_of_week in validated_data["days_of_week"]:
+                    if is_active:
+                        assert_care_team_block_no_overlap(
+                            center,
+                            care_team,
+                            True,
+                            None,
+                            None,
+                            day_of_week,
+                            validated_data.get("recurring_start_time"),
+                            validated_data.get("recurring_end_time"),
+                            validated_data.get("effective_from"),
+                            None,
+                        )
+                    results.append(
+                        create_care_team_availability_block(
+                            center,
+                            care_team,
+                            created_by,
+                            True,
+                            None,
+                            None,
+                            day_of_week,
+                            validated_data.get("recurring_start_time"),
+                            validated_data.get("recurring_end_time"),
+                            validated_data.get("effective_from"),
+                            None,
+                            reason,
+                            is_active,
+                        )
+                    )
+            else:
+                if is_active:
+                    assert_care_team_block_no_overlap(
+                        center,
+                        care_team,
+                        False,
+                        validated_data.get("start_datetime"),
+                        validated_data.get("end_datetime"),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                results.append(
+                    create_care_team_availability_block(
+                        center,
+                        care_team,
                         created_by,
                         False,
                         validated_data.get("start_datetime"),
