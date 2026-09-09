@@ -1,6 +1,7 @@
 import functools
 from datetime import timedelta
 
+from django.db import Error as DatabaseError
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -35,6 +36,7 @@ from appointments.utils.transitions import (
     validate_transition,
 )
 from core.utils.constants import AppointmentModes
+from core.utils.log import logger
 from core.utils.serializers import BaseSerializer
 from integrations.google_calendar.google_sync import (
     sync_cancelled_appointment_with_google,
@@ -201,9 +203,15 @@ def sync_new_appointment_and_save(
     if google_event_id:
         appointment.google_event_id = google_event_id
         appointment.google_meet_link = google_meet_link
-        appointment.save(
-            update_fields=["google_event_id", "google_meet_link", "updated_at"]
-        )
+        try:
+            appointment.save(
+                update_fields=["google_event_id", "google_meet_link", "updated_at"]
+            )
+        except DatabaseError as error:
+            logger.warning(
+                f"Failed to persist google_event_id for appointment "
+                f"{appointment.pk} after it was created in Google Calendar: {error}"
+            )
 
 
 def sync_cancelled_appointment_and_save(instance):
@@ -239,9 +247,15 @@ def sync_rescheduled_appointment_and_save(
     ):
         instance.google_event_id = google_event_id
         instance.google_meet_link = google_meet_link
-        instance.save(
-            update_fields=["google_event_id", "google_meet_link", "updated_at"]
-        )
+        try:
+            instance.save(
+                update_fields=["google_event_id", "google_meet_link", "updated_at"]
+            )
+        except DatabaseError as error:
+            logger.warning(
+                f"Failed to persist google_event_id for appointment "
+                f"{instance.pk} after syncing it with Google Calendar: {error}"
+            )
 
 
 class AppointmentPreferredSerializer(BaseSerializer):

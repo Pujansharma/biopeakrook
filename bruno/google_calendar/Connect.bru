@@ -24,10 +24,10 @@ docs {
 
   No body needed — this no longer names which associate is connecting, and
   there's no `state` param either; identity is worked out later in
-  /complete/ from the connected Google account's own verified email
-  (matched against Associate.user.email). Whichever Google account the
-  staff member actually signs into on the consent screen decides who gets
-  connected — not whoever called /connect/.
+  /complete/ from the connected Google account's own email (matched against
+  Associate.user.email). Whichever Google account the staff member actually
+  signs into on the consent screen decides who gets connected — not
+  whoever called /connect/.
 
   Method: POST
   Path: /google-calendar/connect/

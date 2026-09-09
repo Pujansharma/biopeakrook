@@ -5,13 +5,13 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/google-calendar/callback/?code=
+  url: {{baseURL}}/google-calendar/callback/
   body: none
   auth: none
 }
 
 params:query {
-  code:
+  ~code: {{google_oauth_code}}
 }
 
 headers {

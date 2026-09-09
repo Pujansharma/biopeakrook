@@ -2,6 +2,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 import requests
+from cryptography.fernet import InvalidToken
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError, transaction
@@ -79,10 +80,23 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
         except requests.HTTPError:
             self.raise_bad_request("Failed to fetch the connected Google account's email")
 
-        associate = Associate.objects.filter(user__email__iexact=google_email).first()
+        if not GOOGLE_CALENDAR_ID:
+            raise ImproperlyConfigured(
+                "GOOGLE_CALENDAR_ID is not set, cannot complete a Google Calendar "
+                "connection."
+            )
+        if google_email.lower() != GOOGLE_CALENDAR_ID.lower():
+            self.raise_bad_request(
+                "This is not the shared Google Calendar account used for "
+                "appointment sync. Connect the configured shared account instead."
+            )
+
+        associate = Associate.objects.filter(
+            user__email__iexact=google_email, is_active=True, user__is_active=True
+        ).first()
         if associate is None:
             self.raise_bad_request(
-                "No Biopeak Staff account uses this Google account's email. "
+                "No active Biopeak Staff account uses this Google account's email. "
                 "Connect the same Google account you log into Biopeak with."
             )
 
@@ -94,12 +108,13 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
         )
         try:
             with transaction.atomic():
-                # Associate.google_email is unique, evict whoever else currently
-                # holds this email so the save below doesn't hit that
-                # constraint - same transaction so a failure here can't
-                # leave this Google account unclaimed by either associate.
+                # Associate.google_email is unique (case-insensitively), evict
+                # whoever else currently holds this email so the save below
+                # doesn't hit that constraint - same transaction so a failure
+                # here can't leave this Google account unclaimed by either
+                # associate.
                 stale_holder_count = (
-                    Associate.objects.filter(google_email=google_email)
+                    Associate.objects.filter(google_email__iexact=google_email)
                     .exclude(pk=associate.pk)
                     .update(
                         google_email=None,
@@ -142,18 +157,30 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
             return self.send_response("No Google Calendar connection to disconnect.")
 
         is_shared_organizer = (
-            GOOGLE_CALENDAR_ID and associate.google_email == GOOGLE_CALENDAR_ID
+            GOOGLE_CALENDAR_ID
+            and associate.google_email
+            and associate.google_email.lower() == GOOGLE_CALENDAR_ID.lower()
         )
-        if is_shared_organizer and not associate.center_assignments.filter(
-            is_admin=True
-        ).exists():
+        if is_shared_organizer and not (
+            associate.is_active
+            and associate.center_assignments.filter(
+                is_admin=True, is_active=True
+            ).exists()
+        ):
             self.raise_permission_denied(
                 "This account is the shared Google Calendar connection used for "
-                "appointment sync across all centers. Only a center admin can "
-                "disconnect it."
+                "appointment sync across all centers. Only an active center "
+                "admin can disconnect it."
             )
 
-        google_oauth.revoke_token(decrypt(associate.google_refresh_token))
+        try:
+            google_oauth.revoke_token(decrypt(associate.google_refresh_token))
+        except InvalidToken:
+            logger.warning(
+                f"Google Calendar disconnect: stored token for associate "
+                f"{associate.pk} could not be decrypted; clearing it without "
+                f"revoking with Google."
+            )
 
         associate.google_access_token = None
         associate.google_refresh_token = None
@@ -179,7 +206,26 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
             self.raise_bad_request("No Google Calendar connection to refresh.")
 
         try:
-            tokens = google_oauth.refresh_access_token(decrypt(associate.google_refresh_token))
+            refresh_token = decrypt(associate.google_refresh_token)
+        except InvalidToken:
+            associate.google_access_token = None
+            associate.google_refresh_token = None
+            associate.google_access_token_expires_at = None
+            associate.save(
+                update_fields=[
+                    "google_access_token",
+                    "google_refresh_token",
+                    "google_access_token_expires_at",
+                    "updated_at",
+                ]
+            )
+            self.raise_bad_request(
+                "Stored Google Calendar token could not be decrypted. "
+                "Reconnect Google Calendar to grant access again."
+            )
+
+        try:
+            tokens = google_oauth.refresh_access_token(refresh_token)
         except requests.HTTPError:
             self.raise_bad_request("Failed to refresh the Google Calendar token")
 
@@ -192,3 +238,17 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
         )
 
         return self.send_response("Google Calendar token refreshed.")
+
+
+class GoogleCalendarStatusView(BaseGenericAPIView):
+    permission_classes = [IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        associate = request.user.associate
+        return self.send_response(
+            "Google Calendar connection status.",
+            data={
+                "google_email": associate.google_email,
+                "is_connected": bool(associate.google_refresh_token),
+            },
+        )

@@ -23,6 +23,8 @@ def _event_body(
 
 
 def extract_meet_link(google_event: dict):
+    if google_event.get("hangoutLink"):
+        return google_event["hangoutLink"]
     entry_points = google_event.get("conferenceData", {}).get("entryPoints", [])
     for entry_point in entry_points:
         if entry_point.get("entryPointType") == "video":
@@ -62,10 +64,13 @@ def insert_event(
 def patch_event(
     access_token: str, event_id: str, title: str, start: datetime, end: datetime,
     location: str | None = None, notes: str | None = None, add_meet_link: bool = False,
-    participant_emails: list[str] | None = None,
+    clear_meet_link: bool = False, participant_emails: list[str] | None = None,
 ):
     # add_meet_link=True rotates the Meet link if the event already has one -
     # only pass True the first time a Meet link is added to this event.
+    # clear_meet_link=True drops an existing Meet link (e.g. modality changed
+    # from virtual to in-person) - conferenceDataVersion=1 with an empty
+    # conferenceData tells Google to remove it.
     body = _event_body(title, start, end, location, notes, participant_emails)
     params = {}
     if add_meet_link:
@@ -75,6 +80,9 @@ def patch_event(
                 "conferenceSolutionKey": {"type": "hangoutsMeet"},
             }
         }
+        params["conferenceDataVersion"] = 1
+    elif clear_meet_link:
+        body["conferenceData"] = {}
         params["conferenceDataVersion"] = 1
     if participant_emails:
         params["sendUpdates"] = "all"

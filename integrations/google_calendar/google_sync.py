@@ -3,6 +3,7 @@ from datetime import datetime
 import requests
 from cryptography.fernet import InvalidToken
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 from accounts.associates.models import Associate
 from accounts.customers.models import CustomerProfile
@@ -15,7 +16,7 @@ from inventory.models import Room
 from programs.services.models import Service
 
 GOOGLE_SYNC_ERRORS = (
-    requests.RequestException, ValueError, InvalidToken, KeyError, TypeError,
+    requests.RequestException, ValueError, InvalidToken, ImproperlyConfigured,
 )
 GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
 
@@ -23,7 +24,9 @@ GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
 def get_fixed_calendar_organizer() -> Associate | None:
     if not GOOGLE_CALENDAR_ID:
         return None
-    organizer = Associate.objects.filter(google_email=GOOGLE_CALENDAR_ID).first()
+    organizer = Associate.objects.filter(
+        google_email__iexact=GOOGLE_CALENDAR_ID, is_active=True
+    ).first()
     if organizer is None or not organizer.google_refresh_token:
         return None
     return organizer
@@ -130,9 +133,13 @@ def sync_rescheduled_appointment_with_google(
     # Reuse the existing Meet link if there is one patch_event() only
     # rotates it when add_meet_link=True, and rotating strands anyone
     # holding the old link. Only add a fresh one if the appointment doesn't
-    # have one yet and the (possibly just-changed) modality is virtual.
+    # have one yet and the (possibly just-changed) modality is virtual. If
+    # the modality moved away from virtual, drop the Meet link instead.
     needs_new_meet_link = (
         modality == AppointmentModes.VIRTUAL and not instance.google_meet_link
+    )
+    needs_clear_meet_link = (
+        modality != AppointmentModes.VIRTUAL and bool(instance.google_meet_link)
     )
     needs_insert = not instance.google_event_id
     try:
@@ -148,6 +155,7 @@ def sync_rescheduled_appointment_with_google(
                     location=location,
                     notes=notes,
                     add_meet_link=needs_new_meet_link,
+                    clear_meet_link=needs_clear_meet_link,
                     participant_emails=attendee_emails,
                 )
             except requests.HTTPError as error:

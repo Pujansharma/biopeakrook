@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("", views.GoogleCalendarStatusView.as_view()),
     path("connect/", views.GoogleCalendarConnectView.as_view()),
     path("callback/", views.GoogleCalendarCallbackView.as_view()),
     path("complete/", views.GoogleCalendarCompleteView.as_view()),

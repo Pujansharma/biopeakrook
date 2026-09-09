@@ -30,12 +30,14 @@ settings {
 docs {
   Finishes the connection using the `code` the frontend received from the
   `/callback/` redirect. Exchanges the code with Google, fetches the
-  connected account's own email, and saves the tokens onto whichever
-  Associate's login email (Associate.user.email) matches it - not
-  necessarily the signed-in caller. 400 "No Biopeak Nexus account uses this
-  Google account's email..." if nobody's login email matches - staff must
-  connect the same Google account they log into Biopeak Nexus with (a
-  personal Gmail that differs from their login email won't resolve).
+  connected account's own email, and requires it to exactly match
+  settings.GOOGLE_CALENDAR_ID (the one fixed shared organizer account) - 400
+  "This is not the shared Google Calendar account..." otherwise. Only then
+  does it save the tokens onto whichever Associate's login email
+  (Associate.user.email) matches that address - not necessarily the
+  signed-in caller. 400 "No active Biopeak Staff account uses this Google
+  account's email..." if no active associate's login email matches - the
+  shared account's own login email must equal GOOGLE_CALENDAR_ID.
 
   Set env var google_oauth_code to the `code` value from the URL fragment
   (after the `#`) your browser lands on after approving consent (see

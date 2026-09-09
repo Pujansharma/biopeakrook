@@ -2,6 +2,7 @@ from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 from core.utils.log import logger
 
@@ -23,6 +24,11 @@ SCOPES = [
 
 
 def build_auth_url():
+    if not GOOGLE_CLIENT_ID or not GOOGLE_REDIRECT_URI:
+        raise ImproperlyConfigured(
+            "GOOGLE_CLIENT_ID / GOOGLE_REDIRECT_URI is not set, cannot build the "
+            "Google authorization URL"
+        )
     params = {
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
