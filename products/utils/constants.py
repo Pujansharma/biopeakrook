@@ -56,6 +56,9 @@ class ProductCallbackFunction(models.TextChoices):
 
 
 PROVIDER_PRODUCT_CALLBACK_MAP: dict[str, list[ProductCallbackFunction]] = {
+    ProviderCallbackFunction.OTHER: [
+        ProductCallbackFunction.OTHER,
+    ],
     ProviderCallbackFunction.BIOPEAK: [
         ProductCallbackFunction.OLIGOSCAN,
         ProductCallbackFunction.BLOOD,
