@@ -54,16 +54,18 @@ def _process_evo_result_data(
         f"result_request_id={result_request.pk}"
     )
 
-    service_result = ServiceResult.objects.create(
+    service_result, _ = ServiceResult.objects.update_or_create(
         result_request=result_request,
-        program_service=program_service,
-        product=result_request.product,
-        provider_name=result_request.product.provider.name,
-        product_name=result_request.product.name,
-        result_mode=ServiceResultMode.FETCH,
         document_type=ServiceDocumentType.EVO_360,
-        data=metadata,
-        created_by=result_request.created_by,
+        defaults={
+            "program_service": program_service,
+            "product": result_request.product,
+            "provider_name": result_request.product.provider.name,
+            "product_name": result_request.product.name,
+            "result_mode": ServiceResultMode.FETCH,
+            "data": metadata,
+            "created_by": result_request.created_by,
+        },
     )
 
     file_name = (
