@@ -43,6 +43,7 @@ settings {
 docs {
   Partial update. members present = full replace (still min 2). Omit members to change name or is_active only.
   Name unique per center, case-insensitive. Member replace uses the same eligibility rules as create, including active roles only (inactive role → 400 "Role is inactive.").
-  No DELETE; deactivate with is_active=false.
+  No DELETE; deactivate with is_active=false — also soft-deactivates that team's active availability blocks.
+  Reactivate team does not revive those blocks.
   Auth: bearer {{access_token}}. Set env center_id, care_team_id.
 }

@@ -635,8 +635,11 @@ def build_resolve_resource_pools(center, assignment, modality, preferred):
         care_team_members = expand_care_team_for_assignment(
             center, care_team_id, assignment
         )
-        if care_team_members:
-            care_team = care_team_members[0].care_team
+        if not care_team_members:
+            raise ValidationError(
+                "Care team has no live members at this center."
+            )
+        care_team = care_team_members[0].care_team
         for member in care_team_members:
             extra_associates.append(member.associate)
             for role_pool in resource_pools["roles"]:
@@ -1310,6 +1313,10 @@ def resolve_pinned_care_team(center, care_team_id, assignment, associates):
     """
     team = load_active_center_care_team(center, care_team_id)
     members = expand_care_team_for_assignment(center, care_team_id, assignment)
+    if not members:
+        raise ValidationError(
+            "Care team has no live members at this center."
+        )
     pinned_pairs = {
         (str(entry["role_id"]), str(entry["associate_id"])) for entry in associates
     }

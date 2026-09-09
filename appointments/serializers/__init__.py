@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -29,6 +29,7 @@ from appointments.utils.overlap import (
     assert_equipment_downtime_no_overlap,
     assert_room_block_no_overlap,
     assert_room_downtime_no_overlap,
+    raise_if_care_team_one_off_overlap_integrity,
     validate_same_day_time_window,
 )
 from core.utils.constants import AppointmentDays
@@ -538,21 +539,24 @@ def create_care_team_availability_block(
     reason,
     is_active,
 ):
-    return CareTeamAvailabilityBlock.objects.create(
-        center=center,
-        care_team=care_team,
-        created_by=created_by,
-        is_recurring=is_recurring,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        day_of_week=day_of_week,
-        recurring_start_time=recurring_start_time,
-        recurring_end_time=recurring_end_time,
-        effective_from=effective_from,
-        effective_until=effective_until,
-        reason=reason,
-        is_active=is_active,
-    )
+    try:
+        return CareTeamAvailabilityBlock.objects.create(
+            center=center,
+            care_team=care_team,
+            created_by=created_by,
+            is_recurring=is_recurring,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            day_of_week=day_of_week,
+            recurring_start_time=recurring_start_time,
+            recurring_end_time=recurring_end_time,
+            effective_from=effective_from,
+            effective_until=effective_until,
+            reason=reason,
+            is_active=is_active,
+        )
+    except IntegrityError as error:
+        raise_if_care_team_one_off_overlap_integrity(error)
 
 
 class CareTeamAvailabilityBlockSerializer(BaseModelSerializer):
@@ -617,7 +621,10 @@ class CareTeamAvailabilityBlockSerializer(BaseModelSerializer):
         return data
 
     def update(self, instance, validated_data):
-        instance = super().update(instance, validated_data)
+        try:
+            instance = super().update(instance, validated_data)
+        except IntegrityError as error:
+            raise_if_care_team_one_off_overlap_integrity(error)
         if instance.effective_until is not None:
             instance.effective_until = None
             instance.save(update_fields=["effective_until", "updated_at"])

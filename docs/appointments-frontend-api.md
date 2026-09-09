@@ -85,6 +85,7 @@ Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated
 - Book/reschedule with role requirements and neither complete pin nor preferred → 400.
 - Every booked appointment has non-empty `associates[]` (`AppointmentAssociate` links). Guard: zero roles **and** no preferred staff → 400 / slots soft-skip (misconfigured service).
 - Pin + `preferred.care_team_id` stamps care team only when every live team member is in the pin.
+- Preferred / pin `care_team_id` with **zero live members** → 400 `"Care team has no live members at this center."`
 
 ### Weekday codes
 
@@ -548,7 +549,7 @@ Min 2 members. Unique associate + unique role per team. Name unique per center (
 
 ### GET / PATCH `…/care-teams/<id>/`
 
-PATCH partial. `members` present = full replace (still min 2). Deactivate: `{ "is_active": false }`.
+PATCH partial. `members` present = full replace (still min 2). Deactivate: `{ "is_active": false }` — also soft-deactivates that team's active availability blocks (slots reopen). Reactivating the team does **not** revive those blocks.
 
 ---
 
@@ -728,7 +729,7 @@ Same body as associate blocks (one-off datetimes or recurring `days_of_week`). N
 - POST 201: `data` = **array of created rows**.
 - Cannot overlap another active block on the **same team**. May overlap a member's personal block/leave.
 - Applies to **current** live members (not snapshotted). Shows on the team calendar and on each member's associate calendar + slots.
-- Recurring POST → `exception_scan: queued`. Scan hits appointments for live members and `Appointment.care_team`.
+- Recurring POST → `exception_scan: queued`. Scan hits appointments with `Appointment.care_team` = this team (not every solo member apt).
 
 ### Room blocks & downtimes
 

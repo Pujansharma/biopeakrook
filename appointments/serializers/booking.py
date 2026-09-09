@@ -538,6 +538,8 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
             instance.equipment = equipment
             instance.care_team = care_team
             instance.status = AppointmentStatus.CONFIRMED
+            instance.is_late = False
+            instance.late_by = None
             instance.save()
             instance.associate_links.all().delete()
             create_appointment_associates(

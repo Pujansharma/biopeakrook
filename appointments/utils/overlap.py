@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db import models
+from django.db import IntegrityError, models
 from rest_framework import serializers
 
 from appointments.models import (
@@ -18,6 +18,7 @@ from appointments.utils.constants import LeaveScope
 
 UTC = ZoneInfo("UTC")
 OVERLAP_ERROR = "Overlaps an existing unavailability window."
+CARE_TEAM_ONE_OFF_OVERLAP_CONSTRAINT = "care_team_block_one_off_no_overlap"
 
 
 def get_availability_timezone_name():
@@ -40,6 +41,12 @@ def date_ranges_overlap(start_a, end_a, start_b, end_b):
 
 def raise_overlap():
     raise serializers.ValidationError({"non_field_errors": [OVERLAP_ERROR]})
+
+
+def raise_if_care_team_one_off_overlap_integrity(error):
+    if CARE_TEAM_ONE_OFF_OVERLAP_CONSTRAINT in str(error):
+        raise_overlap()
+    raise error
 
 
 def local_day_window(day_value, start_time, end_time, timezone_name):

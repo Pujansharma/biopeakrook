@@ -121,8 +121,12 @@ def send_template(
     except ValueError:
         body = {"raw": response.text}
     if not response.ok:
+        error = {}
+        if isinstance(body, dict) and isinstance(body.get("error"), dict):
+            error = body["error"]
         logger.warning(
-            f"WhatsApp send_template error {response.status_code}: {body}"
+            f"WhatsApp send_template error {response.status_code}: "
+            f"code={error.get('code')} message={error.get('message')}"
         )
     return response.status_code, body
 

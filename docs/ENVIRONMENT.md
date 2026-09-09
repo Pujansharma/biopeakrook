@@ -303,6 +303,17 @@ Retry pending/failed sends: `uv run manage.py process_communication_outbox`
 
 User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
 
+## Scheduled jobs (production)
+
+Wire these as EventBridge → ECS RunTask (or equivalent) on a ~1 min cadence. Not in `deploy-aws.yml` (image/service only).
+
+| Command | Purpose |
+|---|---|
+| `uv run manage.py process_communication_outbox` | Send WhatsApp outbox (`PENDING` / retryable `FAILED`) |
+| `uv run manage.py process_appointment_exception_scans` | Drain availability → appointment exception scan queue |
+
+Without the outbox cron, WhatsApp rows stay `PENDING` even when secrets are set. Without the exception-scan cron, care-team / roster / block writes enqueue scans that never run.
+
 ## Security Best Practices
 
 ### General Security

@@ -28,7 +28,6 @@ from appointments.utils.calendar import (
     get_center_timezone_name,
 )
 from appointments.utils.care_teams import (
-    live_associates_for_care_team,
     members_with_live_center_role,
 )
 from appointments.utils.constants import (
@@ -247,10 +246,9 @@ def appointment_filter_for_source(source_type: str, source):
     if source_type == ExceptionSourceType.ASSOCIATE_BLOCK:
         return models.Q(associate_links__associate_id=source.associate_id)
     if source_type == ExceptionSourceType.CARE_TEAM_BLOCK:
-        associates = live_associates_for_care_team(source.center, source.care_team)
-        return models.Q(care_team=source.care_team) | models.Q(
-            associate_links__associate__in=associates
-        )
+        # Team-stamped appointments only — solo member apts stay quiet.
+        # Slot/calendar still subtract team blocks from live member free windows.
+        return models.Q(care_team=source.care_team)
     if source_type == ExceptionSourceType.ROOM_BLOCK:
         return models.Q(room_id=source.room_id)
     if source_type == ExceptionSourceType.EQUIPMENT_BLOCK:

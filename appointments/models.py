@@ -36,6 +36,15 @@ def _exclusive_range_expression():
     )
 
 
+def _care_team_one_off_range_expression():
+    return Func(
+        F("start_datetime"),
+        F("end_datetime"),
+        function="tstzrange",
+        template="%(function)s(%(expressions)s, '[)')",
+    )
+
+
 class AssociateRosterEntry(BaseUUIDModel):
     """Weekly recurring associate work hours at a center."""
 
@@ -336,6 +345,25 @@ class CareTeamAvailabilityBlock(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["care_team", "is_active"]),
+            models.Index(fields=["center", "care_team", "is_active"]),
+        ]
+        constraints = [
+            ExclusionConstraint(
+                name="care_team_block_one_off_no_overlap",
+                expressions=[
+                    (F("care_team_id"), "="),
+                    (_care_team_one_off_range_expression(), "&&"),
+                ],
+                condition=Q(
+                    is_active=True,
+                    is_recurring=False,
+                    start_datetime__isnull=False,
+                    end_datetime__isnull=False,
+                ),
+            ),
+        ]
 
     def __str__(self):
         return f"{self.pk}"
