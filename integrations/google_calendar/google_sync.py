@@ -25,7 +25,7 @@ def get_fixed_calendar_organizer() -> Associate | None:
     if not GOOGLE_CALENDAR_ID:
         return None
     organizer = Associate.objects.filter(
-        google_email__iexact=GOOGLE_CALENDAR_ID, is_active=True
+        google_email__iexact=GOOGLE_CALENDAR_ID, is_active=True, user__is_active=True
     ).first()
     if organizer is None or not organizer.google_refresh_token:
         return None

@@ -506,6 +506,8 @@ class AppointmentListSerializer(BaseSerializer):
     )
     room = AppointmentRoomNestedSerializer(allow_null=True)
     equipment = AppointmentEquipmentNestedSerializer(allow_null=True)
+    notes = serializers.CharField(allow_null=True)
+    google_meet_link = serializers.URLField(allow_null=True)
 
 
 class AppointmentDetailSerializer(AppointmentListSerializer):
@@ -515,8 +517,6 @@ class AppointmentDetailSerializer(AppointmentListSerializer):
     exclusive_start = serializers.DateTimeField(source="exclusive_start_datetime")
     exclusive_end = serializers.DateTimeField(source="exclusive_end_datetime")
     cancel_reason = serializers.CharField()
-    notes = serializers.CharField(allow_null=True)
-    google_meet_link = serializers.URLField(allow_null=True)
     exception_resolution_hint = serializers.SerializerMethodField(
         help_text=(
             "Open-exception resolve guidance. Cancel and reschedule remain "
