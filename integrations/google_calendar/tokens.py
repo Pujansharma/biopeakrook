@@ -41,7 +41,7 @@ def get_valid_access_token(associate):
     try:
         tokens = google_oauth.refresh_access_token(decrypt(associate.google_refresh_token))
     except requests.HTTPError as error:
-        if error.response is not None and error.response.status_code == 400:
+        if google_oauth.is_invalid_grant_error(error):
             clear_associate_google_tokens(associate)
         raise
 

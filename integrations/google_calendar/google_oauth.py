@@ -90,7 +90,23 @@ def fetch_email(access_token: str):
     return email
 
 
+def is_invalid_grant_error(error: requests.HTTPError):
+    response = error.response
+    if response is None or response.status_code != 400:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    return payload.get("error") == "invalid_grant"
+
+
 def revoke_token(token: str):
     response = requests.post(REVOKE_URL, data={"token": token}, timeout=REQUEST_TIMEOUT)
+    if response.status_code == 400:
+        # Google returns 400 when the token is already invalid/expired/revoked,
+        # there is nothing left to revoke, so treat this as success.
+        return
     if not response.ok:
         logger.warning(f"Google OAuth token revoke error {response.status_code}: {response.text}")
+    response.raise_for_status()

@@ -20,7 +20,7 @@ from integrations.google_calendar.db import (
     clear_associate_google_tokens,
     update_associate_google_tokens,
 )
-from integrations.google_calendar.utils import decrypt, encrypt
+from integrations.google_calendar.utils import decrypt, encrypt, ensure_encryption_configured
 
 ADMIN_FRONTEND_URL = getattr(settings, "ADMIN_FRONTEND_URL", None)
 GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
@@ -75,11 +75,15 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
         code = request.data.get("code")
         if not code:
             self.raise_bad_request("code is required.")
-        if not GOOGLE_CALENDAR_ID:
+        if not GOOGLE_CALENDAR_ID or not google_oauth.GOOGLE_CLIENT_SECRET:
             raise ServiceUnavailable(
-                "GOOGLE_CALENDAR_ID is not set, cannot complete a Google Calendar "
-                "connection"
+                "GOOGLE_CALENDAR_ID/GOOGLE_CLIENT_SECRET is not set, cannot "
+                "complete a Google Calendar connection"
             )
+        try:
+            ensure_encryption_configured()
+        except ImproperlyConfigured as error:
+            raise ServiceUnavailable(str(error))
 
         try:
             tokens = google_oauth.exchange_code(code)
@@ -198,11 +202,15 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
                 f"revoking with Google."
             )
         except requests.RequestException as error:
-            logger.warning(
-                f"Google Calendar disconnect: failed to reach Google to revoke "
-                f"the token for associate {associate.pk}: {error}; clearing it "
-                f"locally"
+            logger.error(
+                f"Google Calendar disconnect: Google did not confirm the "
+                f"token revoke for associate {associate.pk}: {error}. Not "
+                f"clearing the local connection so this can be retried."
             )
+            raise ServiceUnavailable(
+                "Failed to reach Google to revoke the Google Calendar "
+                "connection. Please try again."
+            ) from error
 
         clear_associate_google_tokens(associate)
 
@@ -229,7 +237,7 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
         try:
             tokens = google_oauth.refresh_access_token(refresh_token)
         except requests.HTTPError as error:
-            if error.response is not None and error.response.status_code == 400:
+            if google_oauth.is_invalid_grant_error(error):
                 clear_associate_google_tokens(associate)
                 self.raise_bad_request(
                     "Google rejected the stored Google Calendar token. "

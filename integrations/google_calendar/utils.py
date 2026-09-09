@@ -18,6 +18,9 @@ def _get_fernet():
     return _fernet_instance
 
 
+def ensure_encryption_configured():
+    _get_fernet()
+
 def encrypt(plaintext: str):
     return _get_fernet().encrypt(plaintext.encode()).decode()
 

@@ -82,6 +82,11 @@ def sync_new_appointment_with_google(
 ):
     organizer = get_fixed_calendar_organizer()
     if organizer is None:
+        logger.error(
+            "Google Calendar organizer is disconnected; cannot create an "
+            "event for this appointment. The appointment will have no "
+            "Google Calendar sync."
+        )
         return None, None
     associates = resolve_associates_from_payload(associates_payload)
     try:
@@ -116,6 +121,11 @@ def sync_rescheduled_appointment_with_google(
 ):
     organizer = get_fixed_calendar_organizer()
     if organizer is None:
+        logger.error(
+            f"Google Calendar organizer is disconnected; cannot sync the "
+            f"reschedule for appointment {instance.pk}. Its Google Calendar "
+            f"event, if any, will be stale."
+        )
         return instance.google_event_id, instance.google_meet_link
     associates = resolve_associates_from_payload(associates_payload)
 
