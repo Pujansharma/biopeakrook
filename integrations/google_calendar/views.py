@@ -12,28 +12,18 @@ from rest_framework.permissions import AllowAny
 
 from accounts.associates.models import Associate
 from accounts.utils.permissions import IsAssociateUser
+from core.utils.exceptions import ServiceUnavailable
 from core.utils.log import logger
 from core.utils.views.main import BaseGenericAPIView
 from integrations.google_calendar import google_oauth
-from integrations.google_calendar.db import update_associate_google_tokens
+from integrations.google_calendar.db import (
+    clear_associate_google_tokens,
+    update_associate_google_tokens,
+)
 from integrations.google_calendar.utils import decrypt, encrypt
 
 ADMIN_FRONTEND_URL = getattr(settings, "ADMIN_FRONTEND_URL", None)
 GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
-
-
-def _clear_associate_google_tokens(associate: Associate):
-    associate.google_access_token = None
-    associate.google_refresh_token = None
-    associate.google_access_token_expires_at = None
-    associate.save(
-        update_fields=[
-            "google_access_token",
-            "google_refresh_token",
-            "google_access_token_expires_at",
-            "updated_at",
-        ]
-    )
 
 
 def _frontend_redirect(params: dict):
@@ -51,11 +41,14 @@ class GoogleCalendarConnectView(BaseGenericAPIView):
 
     def post(self, request, *args, **kwargs):
         if not ADMIN_FRONTEND_URL or not GOOGLE_CALENDAR_ID or not google_oauth.GOOGLE_CLIENT_SECRET:
-            raise ImproperlyConfigured(
+            raise ServiceUnavailable(
                 "ADMIN_FRONTEND_URL/GOOGLE_CALENDAR_ID/GOOGLE_CLIENT_SECRET is "
                 "not set, cannot start a Google Calendar connection"
             )
-        auth_url = google_oauth.build_auth_url()
+        try:
+            auth_url = google_oauth.build_auth_url()
+        except ImproperlyConfigured as error:
+            raise ServiceUnavailable(str(error))
         return self.send_response(
             "Google Calendar authorization URL generated.",
             data={"auth_url": auth_url},
@@ -83,7 +76,7 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
         if not code:
             self.raise_bad_request("code is required.")
         if not GOOGLE_CALENDAR_ID:
-            raise ImproperlyConfigured(
+            raise ServiceUnavailable(
                 "GOOGLE_CALENDAR_ID is not set, cannot complete a Google Calendar "
                 "connection"
             )
@@ -93,15 +86,19 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
         except requests.HTTPError:
             self.raise_bad_request("Failed to exchange the authorization code with Google")
 
+        access_token = tokens.get("access_token")
+        expires_in = tokens.get("expires_in")
         refresh_token = tokens.get("refresh_token")
+        if not access_token or not expires_in:
+            self.raise_bad_request("Google returned an unexpected token response.")
         if not refresh_token:
             self.raise_bad_request(
                 "Google did not return a refresh token. Disconnect and reconnect to grant access again"
             )
 
         try:
-            google_email = google_oauth.fetch_email(tokens["access_token"])
-        except requests.HTTPError:
+            google_email = google_oauth.fetch_email(access_token)
+        except (requests.HTTPError, ValueError):
             self.raise_bad_request("Failed to fetch the connected Google account's email")
 
         if google_email.lower() != GOOGLE_CALENDAR_ID.lower():
@@ -120,10 +117,10 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
             )
 
         associate.google_email = google_email
-        associate.google_access_token = encrypt(tokens["access_token"])
+        associate.google_access_token = encrypt(access_token)
         associate.google_refresh_token = encrypt(refresh_token)
         associate.google_access_token_expires_at = timezone.now() + timedelta(
-            seconds=tokens["expires_in"]
+            seconds=expires_in
         )
         try:
             with transaction.atomic():
@@ -207,7 +204,7 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
                 f"locally"
             )
 
-        _clear_associate_google_tokens(associate)
+        clear_associate_google_tokens(associate)
 
         return self.send_response("Google Calendar disconnected.")
 
@@ -223,7 +220,7 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
         try:
             refresh_token = decrypt(associate.google_refresh_token)
         except InvalidToken:
-            _clear_associate_google_tokens(associate)
+            clear_associate_google_tokens(associate)
             self.raise_bad_request(
                 "Stored Google Calendar token could not be decrypted. "
                 "Reconnect Google Calendar to grant access again."
@@ -233,7 +230,7 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
             tokens = google_oauth.refresh_access_token(refresh_token)
         except requests.HTTPError as error:
             if error.response is not None and error.response.status_code == 400:
-                _clear_associate_google_tokens(associate)
+                clear_associate_google_tokens(associate)
                 self.raise_bad_request(
                     "Google rejected the stored Google Calendar token. "
                     "Reconnect Google Calendar to grant access again."

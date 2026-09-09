@@ -53,23 +53,35 @@ the appointment needs one.
    `google_meet_link` columns - see "Event sync" below.
 7. **Before every Google API call**, `get_valid_access_token()` checks if the
    saved access token has expired - if so, it silently uses the refresh token
-   to get a new one first.
+   to get a new one first. It re-reads the associate row right before doing
+   that refresh, so a concurrent book/reschedule/cancel that already
+   refreshed and saved a live token wins instead of triggering a second,
+   redundant refresh (Google can rotate/invalidate the refresh token on
+   refresh, so two concurrent refreshes for the same associate is unsafe).
+   If Google rejects the refresh token outright (HTTP 400, `invalid_grant`
+   - revoked, expired, or rotated away), the stored tokens are cleared via
+   `db.clear_associate_google_tokens()` (same helper `/refresh/` and
+   `/disconnect/` use) before the error is re-raised and swallowed by the
+   calling sync flow like any other `GOOGLE_SYNC_ERRORS` failure - so
+   `get_fixed_calendar_organizer()` stops treating that associate as
+   connected instead of every sync silently soft-failing until someone
+   hits `/refresh/` or `/disconnect/` by hand.
 
 ## The files
 
 All under `integrations/google_calendar/`:
 
-| File              | What it does                                                                                                                                                                                                                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `utils.py`        | Encrypt/decrypt for tokens before they touch the database. Reads the encryption key from Django settings and builds the Fernet cipher lazily on first use, so importing this module doesn't require the key to be configured.                                                                                      |
-| `google_oauth.py` | Talks to Google's _login_ side - builds the consent screen URL, trades codes for tokens, refreshes tokens, looks up the connected email, revokes access. Reads its own client ID/secret/redirect URL from Django settings, same pattern as `ORANGE_LABS_*` in `core/settings/{development,staging,production}.py`. |
-| `calendar_api.py` | Talks to Google's _calendar_ side - create/update/delete events on someone's calendar.                                                                                                                                                                                                                        |
-| `tokens.py`       | The glue: given an associate, hands back a token that's guaranteed to still be valid (refreshing it first if needed).                                                                                                                                                                                              |
-| `db.py`           | Persists a refreshed access/refresh token onto the `Associate` row via `save(update_fields=...)` - only the columns that changed, not a full-row save.                                                                                                                                                             |
-| `views.py`        | The five HTTP endpoints associates actually hit: connect, callback, complete, disconnect, refresh. See below.                                                                                                                                                                                                      |
-| `urls.py`         | Routes those five views under `/google-calendar/`.                                                                                                                                                                                                                                                                 |
-| `google_sync.py`  | The appointment-side wiring: picks the fixed calendar organizer and syncs a booked/rescheduled/cancelled `Appointment` to Google Calendar. Called from `appointments/serializers/booking.py`. See "Event sync (book/reschedule/cancel)" below.                                                                     |
-| `appointments/utils/emails.py` (outside this package) | Builds the formatted event `description` text (`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`) - patient/service plus a modality-conditional clinic address or Meet-link note. See "Event description" below.                                                                     |
+| File                                                  | What it does                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `utils.py`                                            | Encrypt/decrypt for tokens before they touch the database. Reads the encryption key from Django settings and builds the Fernet cipher lazily on first use, so importing this module doesn't require the key to be configured.                                                                                      |
+| `google_oauth.py`                                     | Talks to Google's _login_ side - builds the consent screen URL, trades codes for tokens, refreshes tokens, looks up the connected email, revokes access. Reads its own client ID/secret/redirect URL from Django settings, same pattern as `ORANGE_LABS_*` in `core/settings/{development,staging,production}.py`. |
+| `calendar_api.py`                                     | Talks to Google's _calendar_ side - create/update/delete events on someone's calendar.                                                                                                                                                                                                                             |
+| `tokens.py`                                           | The glue: given an associate, hands back a token that's guaranteed to still be valid (refreshing it first if needed).                                                                                                                                                                                              |
+| `db.py`                                               | Persists a refreshed access/refresh token onto the `Associate` row via `save(update_fields=...)` - only the columns that changed, not a full-row save.                                                                                                                                                             |
+| `views.py`                                            | The five HTTP endpoints associates actually hit: connect, callback, complete, disconnect, refresh. See below.                                                                                                                                                                                                      |
+| `urls.py`                                             | Routes those five views under `/google-calendar/`.                                                                                                                                                                                                                                                                 |
+| `google_sync.py`                                      | The appointment-side wiring: picks the fixed calendar organizer and syncs a booked/rescheduled/cancelled `Appointment` to Google Calendar. Called from `appointments/serializers/booking.py`. See "Event sync (book/reschedule/cancel)" below.                                                                     |
+| `appointments/utils/emails.py` (outside this package) | Builds the formatted event `description` text (`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`) - patient/service plus a modality-conditional clinic address or Meet-link note. See "Event description" below.                                                                       |
 
 `integrations/models.py` is empty - this feature doesn't get its own tables.
 Connection/event data lives directly on `Associate` and `Appointment` - see
@@ -77,13 +89,13 @@ Connection/event data lives directly on `Associate` and `Appointment` - see
 
 ## Connect/disconnect/refresh endpoints
 
-| Endpoint                              | Auth            | What it does                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /google-calendar/connect/`      | None (public)   | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). No body needed - see "Identity" below for why. The frontend navigates the browser there itself.                                                                                                                                                                                                                                                       |
-| `GET /google-calendar/callback/`      | None (public)   | Google redirects the browser here after consent. Forwards `code` unchanged to `ADMIN_FRONTEND_URL` as `#code=...`, or `#connected=0&error=...` on a missing param. Raises a config error (`ImproperlyConfigured`) instead of redirecting if `ADMIN_FRONTEND_URL` isn't set. Does not touch the database.                                                                                                                              |
-| `POST /google-calendar/complete/`     | None (public)   | Frontend calls this with the `code` it got from `/callback/`. Exchanges the code with Google, fetches the connected account's email, and saves the tokens onto whichever associate's login email matches it. Returns `{"data": {"email": "...", "associate_id": "..."}}` on success.                                                                                                                                                 |
-| `DELETE /google-calendar/disconnect/` | Associate (JWT) | Revokes the token with Google and clears the signed-in associate's own `google_access_token`/`google_refresh_token`/`google_access_token_expires_at`. `google_email` is deliberately kept as a "last connected as \_\_\_" record - check `google_refresh_token` to know if actually still connected. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), this requires `is_admin=True` on at least one center assignment, since disconnecting that account kills sync for every center - 403 otherwise.                                             |
-| `POST /google-calendar/refresh/`      | Associate (JWT) | Forces a refresh of the signed-in associate's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_associate_google_tokens()`. |
+| Endpoint                              | Auth            | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /google-calendar/connect/`      | None (public)   | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). No body needed - see "Identity" below for why. The frontend navigates the browser there itself.                                                                                                                                                                                                                                                                                                                                                                            |
+| `GET /google-calendar/callback/`      | None (public)   | Google redirects the browser here after consent. Forwards `code` unchanged to `ADMIN_FRONTEND_URL` as `#code=...`, or `#connected=0&error=...` on a missing param. Raises a config error (`ImproperlyConfigured`) instead of redirecting if `ADMIN_FRONTEND_URL` isn't set. Does not touch the database.                                                                                                                                                                                                                                                  |
+| `POST /google-calendar/complete/`     | None (public)   | Frontend calls this with the `code` it got from `/callback/`. Exchanges the code with Google, fetches the connected account's email, and saves the tokens onto whichever associate's login email matches it. Returns `{"data": {"google_email": "...", "associate_id": "..."}}` on success.                                                                                                                                                                                                                                                               |
+| `DELETE /google-calendar/disconnect/` | Associate (JWT) | Revokes the token with Google and clears the signed-in associate's own `google_access_token`/`google_refresh_token`/`google_access_token_expires_at`. `google_email` is deliberately kept as a "last connected as \_\_\_" record - check `google_refresh_token` to know if actually still connected. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), this requires `is_admin=True` on at least one center assignment, since disconnecting that account kills sync for every center - 403 otherwise. |
+| `POST /google-calendar/refresh/`      | Associate (JWT) | Forces a refresh of the signed-in associate's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_associate_google_tokens()`.                                                                                                                      |
 
 **Why `/connect/` doesn't redirect directly:** the callback (`/callback/`) is a
 plain browser navigation triggered by Google - it can't carry our
@@ -192,11 +204,11 @@ up first.
 Once an appointment is mirrored onto Google Calendar, what Google gives back
 is stored directly on that same appointment row.
 
-| Column             | Type            | What it stores                                                                           | Why we need it                                                                                                   |
-| ------------------ | --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Column             | Type            | What it stores                                                                           | Why we need it                                                                                                                                                                                |
+| ------------------ | --------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `notes`            | Text (optional) | Free-text notes for the appointment, e.g. `"First visit"`. Settable via book/reschedule. | Appended to the formatted event `description` built by `appointments/utils/emails.py` (see "Event description" below). Independent of Google - kept even if the appointment was never synced. |
-| `google_event_id`  | Text (optional) | The ID Google assigned this event, e.g. `"abc123xyz"`                                    | Needed to update (`patch_event`) or cancel (`delete_event`) this same event on Google's side later.              |
-| `google_meet_link` | URL (optional)  | The Google Meet video call link, e.g. `"https://meet.google.com/abc-defg-hij"`           | So the app can show/send the meeting link to the staff member and the customer.                                  |
+| `google_event_id`  | Text (optional) | The ID Google assigned this event, e.g. `"abc123xyz"`                                    | Needed to update (`patch_event`) or cancel (`delete_event`) this same event on Google's side later.                                                                                           |
+| `google_meet_link` | URL (optional)  | The Google Meet video call link, e.g. `"https://meet.google.com/abc-defg-hij"`           | So the app can show/send the meeting link to the staff member and the customer.                                                                                                               |
 
 All three columns are optional. `google_event_id`/`google_meet_link` only
 get a value once the appointment has actually been mirrored to Google. The
@@ -236,24 +248,34 @@ either way, sync is skipped and the appointment write stands.
 
 Code: `integrations/google_calendar/google_sync.py` -
 `sync_new_appointment_with_google()`, `sync_rescheduled_appointment_with_google()`,
-`sync_cancelled_appointment_with_google()`, called (via the
-`sync_*_appointment_and_save()` wrappers) from
+`sync_cancelled_appointment_with_google()`, called from
 `appointments/serializers/booking.py` (`AppointmentBookSerializer.create`,
 `AppointmentRescheduleSerializer.update`, `AppointmentCancelSerializer.update`)
 through `transaction.on_commit(...)`, registered inside each operation's
 `transaction.atomic()` block but only actually run once that block has
 committed - a booking/reschedule/cancel rejected by the database (an
 overlap, an idempotency conflict) never reaches Google at all, and the DB
-connection isn't held open for the duration of the Google HTTP call.
+connection isn't held open for the duration of the Google HTTP call. Book
+and reschedule go through a module-level `sync_*_appointment_and_save()`
+wrapper in `booking.py` that also persists the returned
+`google_event_id`/`google_meet_link` onto the row in a follow-up
+`save(update_fields=...)`. Cancel has no such wrapper - `transaction.on_commit(...)`
+calls `sync_cancelled_appointment_with_google()` directly (via
+`functools.partial`), since cancel never needs to persist anything new (see
+"On cancel" below).
 Each function catches `GOOGLE_SYNC_ERRORS` (`requests.RequestException`,
-`ValueError`, `InvalidToken`) plus an unrecovered `requests.HTTPError`
-internally, logs a warning via `core.utils.log.logger`, and returns a
-"no sync happened" result instead of raising - `(None, None)` for create,
-the untouched `(instance.google_event_id, instance.google_meet_link)` for
-reschedule, and `False` for cancel (leaving `google_event_id`/
-`google_meet_link` on the instance untouched, since the Google event may
-still exist and need manual cleanup). Nothing about the appointment write
-itself is skipped or rolled back.
+`ValueError`, `InvalidToken`, `ImproperlyConfigured`) plus an unrecovered
+`requests.HTTPError` internally, logs via `core.utils.log.logger`, and
+returns a "no sync happened" result instead of raising - `(None, None)`
+for create, the untouched `(instance.google_event_id, instance.google_meet_link)`
+for reschedule, and `False` for cancel. Nothing about the appointment write
+itself is skipped or rolled back. If the Google call succeeds but the
+follow-up `appointment.save(update_fields=[...])` in
+`sync_new_appointment_and_save()`/`sync_rescheduled_appointment_and_save()`
+(`booking.py`) then fails with a `DatabaseError`, that's logged
+(`logger.warning`) and swallowed too - by design, the Google event is
+**not** deleted to compensate, so it can end up existing on the calendar
+with no `google_event_id` pointer in our DB in that (rare) case.
 
 **Picking which calendar hosts the event.** Every appointment's Google
 Calendar event is created on **one single shared account** -
@@ -319,12 +341,15 @@ for the caller to persist in a small follow-up save.
 **On cancel** (`sync_cancelled_appointment_with_google`) - `delete_event()`
 using the fixed organizer, called _after_ the cancellation's own DB writes
 have committed (via `transaction.on_commit(...)`), so a rejected cancel
-never deletes a still-live Google event. Then clears
-`instance.google_event_id`/`instance.google_meet_link` **in memory only** -
-the caller must include those two fields in its own `save(update_fields=...)`
-call for them to actually persist. No-ops (returns `False`, nothing to
-raise) if the appointment was never synced or the fixed account isn't
-connected.
+never deletes a still-live Google event. Returns a plain `bool` and
+deliberately does **not** touch `instance.google_event_id`/
+`instance.google_meet_link` at all, even on a successful delete - those
+two columns are kept on a cancelled appointment as a record of what was
+synced, now pointing at a Google event that no longer exists after a
+successful delete. A delete failure (or a disconnected organizer) is
+surfaced via `logger.error` (not just a warning) so ops can find and clean
+up the orphaned Google event by hand. No-ops (returns `False`, nothing to
+raise) if the appointment was never synced.
 
 ## Event description
 

@@ -84,7 +84,10 @@ def fetch_email(access_token: str):
     if not response.ok:
         logger.warning(f"Google OAuth userinfo lookup error {response.status_code}: {response.text}")
     response.raise_for_status()
-    return response.json()["email"]
+    email = response.json().get("email")
+    if not email:
+        raise ValueError("Google userinfo response did not include an email.")
+    return email
 
 
 def revoke_token(token: str):

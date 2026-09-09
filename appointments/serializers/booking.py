@@ -185,22 +185,17 @@ def create_appointment_record(
 def sync_new_appointment_and_save(
     appointment,
     customer_profile,
-    service,
     modality,
     start,
     end,
-    room,
     notes,
     associates_payload,
 ):
     google_event_id, google_meet_link = sync_new_appointment_with_google(
         customer_profile=customer_profile,
-        service=service,
-        code=appointment.code,
         modality=modality,
         start=start,
         end=end,
-        room=room,
         notes=build_appointment_confirmed_notes(appointment, notes),
         associates_payload=associates_payload,
     )
@@ -218,26 +213,12 @@ def sync_new_appointment_and_save(
             )
 
 
-def sync_cancelled_appointment_and_save(instance):
-    if sync_cancelled_appointment_with_google(instance):
-        try:
-            instance.save(
-                update_fields=["google_event_id", "google_meet_link", "updated_at"]
-            )
-        except DatabaseError as error:
-            logger.warning(
-                f"Failed to clear google_event_id for appointment "
-                f"{instance.pk} after deleting it from Google Calendar: {error}"
-            )
-
-
 def sync_rescheduled_appointment_and_save(
     instance,
     customer_profile,
     modality,
     start,
     end,
-    room,
     notes,
     associates_payload,
 ):
@@ -247,7 +228,6 @@ def sync_rescheduled_appointment_and_save(
         modality=modality,
         start=start,
         end=end,
-        room=room,
         notes=build_appointment_rescheduled_notes(instance, notes),
         associates_payload=associates_payload,
     )
@@ -434,11 +414,9 @@ class AppointmentBookSerializer(BaseSerializer):
                     sync_new_appointment_and_save,
                     appointment=appointment,
                     customer_profile=validated_data["customer_profile"],
-                    service=validated_data["service"],
                     modality=validated_data["modality"],
                     start=validated_data["start"],
                     end=validated_data["end"],
-                    room=room,
                     notes=validated_data.get("notes"),
                     associates_payload=associates_payload,
                 )
@@ -571,7 +549,7 @@ class AppointmentCancelSerializer(BaseSerializer):
                 note=instance.cancel_reason,
             )
             transaction.on_commit(
-                functools.partial(sync_cancelled_appointment_and_save, instance)
+                functools.partial(sync_cancelled_appointment_with_google, instance)
             )
         return instance
 
@@ -675,7 +653,6 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
                     modality=validated_data["modality"],
                     start=validated_data["start"],
                     end=validated_data["end"],
-                    room=room,
                     notes=notes,
                     associates_payload=associates_payload,
                 )

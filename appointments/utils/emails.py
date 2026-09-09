@@ -1,3 +1,5 @@
+import html
+
 from django.utils import timezone
 
 from appointments.models import Appointment
@@ -31,13 +33,13 @@ def get_appointment_time(appointment: Appointment) -> str:
 
 def append_notes(message: str, notes: str | None) -> str:
     if notes:
-        return f"{message}\n\n{notes}"
+        return f"{message}\n\n{html.escape(notes)}"
     return message
 
 
 def build_appointment_confirmed_notes(appointment: Appointment, notes: str | None) -> str:
-    patient_name = appointment.customer_profile.get_full_name()
-    service_name = appointment.service.name
+    patient_name = html.escape(appointment.customer_profile.get_full_name())
+    service_name = html.escape(appointment.service.name)
     message = (
         f"Hi <b>{patient_name}</b>,\n"
         f"Your appointment has been confirmed. Please find the details below:\n\n"
@@ -50,8 +52,8 @@ def build_appointment_confirmed_notes(appointment: Appointment, notes: str | Non
 
 
 def build_appointment_rescheduled_notes(appointment: Appointment, notes: str | None) -> str:
-    patient_name = appointment.customer_profile.get_full_name()
-    service_name = appointment.service.name
+    patient_name = html.escape(appointment.customer_profile.get_full_name())
+    service_name = html.escape(appointment.service.name)
     message = (
         f"Hi <b>{patient_name}</b>,\n\n"
         f"Your appointment has been rescheduled. Please find your updated "

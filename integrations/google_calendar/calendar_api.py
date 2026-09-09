@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 import requests
+from django.conf import settings
 
 CALENDAR_ID = "primary"  # the primary calendar of whichever access_token is passed in
 EVENTS_URL = f"https://www.googleapis.com/calendar/v3/calendars/{CALENDAR_ID}/events"
@@ -14,8 +15,8 @@ def _event_body(
 ):
     return {
         "summary": title,
-        "start": {"dateTime": start.isoformat()},
-        "end": {"dateTime": end.isoformat()},
+        "start": {"dateTime": start.isoformat(), "timeZone": settings.TIME_ZONE},
+        "end": {"dateTime": end.isoformat(), "timeZone": settings.TIME_ZONE},
         "location": location or "",
         "description": notes or "",
         "attendees": [{"email": email} for email in participant_emails or []],

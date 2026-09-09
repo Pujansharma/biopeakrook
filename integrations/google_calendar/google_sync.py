@@ -12,8 +12,6 @@ from core.utils.constants import AppointmentModes
 from core.utils.log import logger
 from integrations.google_calendar import calendar_api
 from integrations.google_calendar.tokens import get_valid_access_token
-from inventory.models import Room
-from programs.services.models import Service
 
 GOOGLE_SYNC_ERRORS = (
     requests.RequestException, ValueError, InvalidToken, ImproperlyConfigured,
@@ -21,7 +19,7 @@ GOOGLE_SYNC_ERRORS = (
 GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
 
 
-def get_fixed_calendar_organizer() -> Associate | None:
+def get_fixed_calendar_organizer():
     if not GOOGLE_CALENDAR_ID:
         return None
     organizer = Associate.objects.filter(
@@ -32,7 +30,7 @@ def get_fixed_calendar_organizer() -> Associate | None:
     return organizer
 
 
-def describe_google_error(error: Exception) -> str:
+def describe_google_error(error: Exception):
     if isinstance(error, InvalidToken):
         return (
             "Stored Google token could not be decrypted, the account may "
@@ -55,7 +53,7 @@ def describe_google_error(error: Exception) -> str:
 
 def build_attendee_emails(
     contact_email: str | None, associates: list[Associate], organizer: Associate | None
-) -> list[str]:
+):
     emails = []
     if contact_email:
         emails.append(contact_email)
@@ -67,7 +65,7 @@ def build_attendee_emails(
     return emails
 
 
-def resolve_associates_from_payload(associates_payload: list[dict] | None) -> list[Associate]:
+def resolve_associates_from_payload(associates_payload: list[dict] | None):
     if not associates_payload:
         return []
     associate_ids = [entry["associate_id"] for entry in associates_payload]
@@ -76,15 +74,12 @@ def resolve_associates_from_payload(associates_payload: list[dict] | None) -> li
 
 def sync_new_appointment_with_google(
     customer_profile: CustomerProfile,
-    service: Service,
-    code: str,
     modality: str,
     start: datetime,
     end: datetime,
-    room: Room | None,
     notes: str | None,
     associates_payload: list[dict] | None,
-) -> tuple[str | None, str | None]:
+):
     organizer = get_fixed_calendar_organizer()
     if organizer is None:
         return None, None
@@ -116,10 +111,9 @@ def sync_rescheduled_appointment_with_google(
     modality: str,
     start: datetime,
     end: datetime,
-    room: Room | None,
     notes: str | None,
     associates_payload: list[dict] | None,
-) -> tuple[str | None, str | None]:
+):
     organizer = get_fixed_calendar_organizer()
     if organizer is None:
         return instance.google_event_id, instance.google_meet_link
@@ -189,11 +183,17 @@ def sync_rescheduled_appointment_with_google(
     return event["id"], calendar_api.extract_meet_link(event)
 
 
-def sync_cancelled_appointment_with_google(instance: Appointment) -> bool:
+def sync_cancelled_appointment_with_google(instance: Appointment):
     if not instance.google_event_id:
         return False
     organizer = get_fixed_calendar_organizer()
     if organizer is None:
+        logger.error(
+            f"Google Calendar organizer is disconnected; cannot delete event "
+            f"{instance.google_event_id} for cancelled appointment {instance.pk}. "
+            f"The Google event may still exist even though the appointment is "
+            f"cancelled."
+        )
         return False
     associates = [
         link.associate
@@ -210,10 +210,10 @@ def sync_cancelled_appointment_with_google(instance: Appointment) -> bool:
         )
     except GOOGLE_SYNC_ERRORS as error:
         reason = describe_google_error(error)
-        logger.warning(
-            f"Google Calendar delete_event failed for appointment {instance.pk}: {reason}"
+        logger.error(
+            f"Google Calendar delete_event failed for appointment {instance.pk}: "
+            f"{reason}. The Google event may still exist even though the "
+            f"appointment is cancelled."
         )
         return False
-    instance.google_event_id = None
-    instance.google_meet_link = None
     return True
