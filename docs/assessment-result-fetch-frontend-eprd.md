@@ -81,6 +81,25 @@ arrays define the exact keys that must later be submitted under `data` and
 `profile_data`. A listed provider may have `is_api_enabled: false`; the
 create endpoint remains authoritative and will reject it.
 
+For every key returned in `fetch_profile_fields`, prefill `profile_data` from
+the current customer when a corresponding value is available:
+
+| Profile field | Prefill value |
+| --- | --- |
+| `full_name` | Trimmed first and last name joined with one space |
+| `age` | Completed calendar years calculated from the date of birth |
+| `gender` | Current gender value displayed for the customer profile |
+| `date_of_birth` | Date of birth in ISO `YYYY-MM-DD` format |
+| `email` | Customer contact email |
+| `phone` | Customer account phone |
+
+Prefill only requested keys and keep every prefilled value editable. Leave a
+requested value empty when the customer record does not provide it; staff must
+complete all empty values before submitting because the backend rejects empty
+profile fields. The submitting user is responsible for confirming that the
+profile data is accurate. The backend does not match these submitted values to
+the provider-returned identity.
+
 ### 2. List products
 
 Returns active products assigned to the assessment service. Send the selected
