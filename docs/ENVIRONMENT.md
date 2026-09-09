@@ -140,10 +140,11 @@ Staging/production use the same names with `STG_`/`PRD_` prefixes.
 
 `GOOGLE_CALENDAR_ID` is the one shared Google account every appointment
 event gets created on/updated/deleted from — not tied to any individual
-associate's own connection. It must be connected the normal way
-first (via `/google-calendar/connect/` + `/complete/`, same as any
-associate) so its tokens land on the `Associate` row whose `google_email`
-matches this value. See "Event sync" in `docs/google-calendar-integration.md`.
+associate's own connection. It must be connected via the normal
+`/google-calendar/connect/` + `/complete/` flow first — `/complete/` only
+accepts this exact account (400s on any other Google email) — so its tokens
+land on the `Associate` row whose login email matches this value. See
+"Event sync" in `docs/google-calendar-integration.md`.
 
 The callback (`GoogleCalendarCallbackView`) redirects the browser to
 `ADMIN_FRONTEND_URL` on both success and failure, so it must be set for this

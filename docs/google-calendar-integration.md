@@ -1,13 +1,16 @@
 # Google Calendar Integration
 
-Lets a staff member (an `Associate`) connect their Google Calendar, so their
-appointments in this system can show up there too - with a Google Meet link
-attached automatically.
+Lets one designated shared Google account (e.g. `care@biopeak.health`,
+`settings.GOOGLE_CALENDAR_ID`) get connected once, so every appointment
+booked in this system shows up on that calendar too - with a Google Meet
+link attached automatically. This is **not** a "each staff member connects
+their own calendar" feature - `/complete/` only accepts the one configured
+shared account, see "Identity" below.
 
 **Status: connect/disconnect and event sync are both live.** The
-connect/callback/complete/disconnect/refresh endpoints, Google API client,
-and the database columns they need (see "Database columns" below) are all
-in place and migrated. `insert_event()`/`patch_event()`/`delete_event()` are
+status/connect/callback/complete/disconnect/refresh endpoints, Google API
+client, and the database columns they need (see "Database columns" below)
+are all in place and migrated. `insert_event()`/`patch_event()`/`delete_event()` are
 wired into appointment book/reschedule/cancel (sync helpers in
 `integrations/google_calendar/google_sync.py`) - see "Event sync
 (book/reschedule/cancel)" below.
@@ -18,18 +21,23 @@ wired into appointment book/reschedule/cancel (sync helpers in
 
 Today, an `Appointment` in this system only exists in our own database. Staff
 don't get it on their phone/laptop calendar unless someone tells them by hand.
-This integration mirrors an appointment onto the staff member's own Google
-Calendar, so they get the normal Google reminders and a video call link if
-the appointment needs one.
+This integration mirrors every appointment onto one shared, connected Google
+Calendar account, so anyone watching that calendar gets the normal Google
+reminders and a video call link if the appointment needs one - regardless of
+which associate(s) are actually assigned to it (they're added as attendees,
+not organizers - see "Picking which calendar hosts the event" below).
 
 ## How it works, end to end
 
-1. **Staff member clicks "Connect Google Calendar"** somewhere in the admin
-   frontend. That takes them to a URL built by `build_auth_url()` - Google's
-   own consent screen, asking "allow this app to manage your calendar events?"
-   `/connect/` doesn't need to know who's connecting yet - see "Identity: how
-   we know which associate connected" below.
-2. **Staff member approves it, signed into their own Google account.** Google
+1. **Whoever administers the shared account clicks "Connect Google
+   Calendar"** somewhere in the admin frontend. That takes them to a URL
+   built by `build_auth_url()` - Google's own consent screen, asking "allow
+   this app to manage your calendar events?" `/connect/` doesn't need to
+   know who's connecting yet - see "Identity: how we know which associate
+   connected" below.
+2. **They approve it, signed into the shared Google account**
+   (`settings.GOOGLE_CALENDAR_ID`, e.g. `care@biopeak.health`) - not
+   whichever personal Google account they happen to be signed into. Google
    redirects their browser back to us with a one-time code.
 3. **We forward that code to the frontend**, unchanged - `/callback/` doesn't
    call Google or touch the database itself, it just redirects the browser
@@ -41,10 +49,12 @@ the appointment needs one.
    the code for tokens using `exchange_code()` - Google gives us back an
    `access_token` (short-lived, ~1 hour) and a `refresh_token` (long-lived,
    doesn't expire until revoked).
-5. **We look up which `Associate` this is for** by the Google account's own
-   email (`fetch_email()`), matched against `Associate.user.email` - see
-   "Identity" below - and save the tokens, encrypted, onto that row (see
-   "Database columns" below).
+5. **We check the connected account's own email** (`fetch_email()`) equals
+   `settings.GOOGLE_CALENDAR_ID` - if not, `/complete/` 400s and nothing is
+   saved. Only then do we look up which `Associate` gets the tokens, by
+   matching that same email against `Associate.user.email` - see "Identity"
+   below - and save the tokens, encrypted, onto that row (see "Database
+   columns" below).
 6. **When an appointment is created/rescheduled/cancelled**, after the DB
    write for that operation succeeds, we call `insert_event()` /
    `patch_event()` / `delete_event()` to create, update, or delete the
@@ -78,8 +88,8 @@ All under `integrations/google_calendar/`:
 | `calendar_api.py`                                     | Talks to Google's _calendar_ side - create/update/delete events on someone's calendar.                                                                                                                                                                                                                             |
 | `tokens.py`                                           | The glue: given an associate, hands back a token that's guaranteed to still be valid (refreshing it first if needed).                                                                                                                                                                                              |
 | `db.py`                                               | Persists a refreshed access/refresh token onto the `Associate` row via `save(update_fields=...)` - only the columns that changed, not a full-row save.                                                                                                                                                             |
-| `views.py`                                            | The five HTTP endpoints associates actually hit: connect, callback, complete, disconnect, refresh. See below.                                                                                                                                                                                                      |
-| `urls.py`                                             | Routes those five views under `/google-calendar/`.                                                                                                                                                                                                                                                                 |
+| `views.py`                                            | The six HTTP endpoints associates actually hit: status, connect, callback, complete, disconnect, refresh. See below.                                                                                                                                                                                               |
+| `urls.py`                                             | Routes those six views under `/google-calendar/`.                                                                                                                                                                                                                                                                  |
 | `google_sync.py`                                      | The appointment-side wiring: picks the fixed calendar organizer and syncs a booked/rescheduled/cancelled `Appointment` to Google Calendar. Called from `appointments/serializers/booking.py`. See "Event sync (book/reschedule/cancel)" below.                                                                     |
 | `appointments/utils/emails.py` (outside this package) | Builds the formatted event `description` text (`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`) - patient/service plus a modality-conditional clinic address or Meet-link note. See "Event description" below.                                                                       |
 
@@ -93,9 +103,10 @@ Connection/event data lives directly on `Associate` and `Appointment` - see
 | ------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /google-calendar/connect/`      | None (public)   | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). No body needed - see "Identity" below for why. The frontend navigates the browser there itself.                                                                                                                                                                                                                                                                                                                                                                            |
 | `GET /google-calendar/callback/`      | None (public)   | Google redirects the browser here after consent. Forwards `code` unchanged to `ADMIN_FRONTEND_URL` as `#code=...`, or `#connected=0&error=...` on a missing param. Raises a config error (`ImproperlyConfigured`) instead of redirecting if `ADMIN_FRONTEND_URL` isn't set. Does not touch the database.                                                                                                                                                                                                                                                  |
-| `POST /google-calendar/complete/`     | None (public)   | Frontend calls this with the `code` it got from `/callback/`. Exchanges the code with Google, fetches the connected account's email, and saves the tokens onto whichever associate's login email matches it. Returns `{"data": {"google_email": "...", "associate_id": "..."}}` on success.                                                                                                                                                                                                                                                               |
-| `DELETE /google-calendar/disconnect/` | Associate (JWT) | Revokes the token with Google and clears the signed-in associate's own `google_access_token`/`google_refresh_token`/`google_access_token_expires_at`. `google_email` is deliberately kept as a "last connected as \_\_\_" record - check `google_refresh_token` to know if actually still connected. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), this requires `is_admin=True` on at least one center assignment, since disconnecting that account kills sync for every center - 403 otherwise. |
+| `POST /google-calendar/complete/`     | None (public)   | Frontend calls this with the `code` it got from `/callback/`. Exchanges the code with Google and fetches the connected account's email - 400s immediately (`"This is not the shared Google Calendar account used for appointment sync..."`) unless that email case-insensitively equals `settings.GOOGLE_CALENDAR_ID`. Only then does it look up the active `Associate`/`User` whose login email matches, and saves the tokens onto that row (evicting any other associate that stale-held the same `google_email` first). Returns `{"data": {"google_email": "...", "associate_id": "..."}}` on success.                                                                                                                                                                                                                                                               |
+| `DELETE /google-calendar/disconnect/` | Associate (JWT) | Revokes the token with Google and clears the signed-in associate's own `google_access_token`/`google_refresh_token`/`google_access_token_expires_at`. `google_email` is deliberately kept as a "last connected as \_\_\_" record - check `google_refresh_token` to know if actually still connected. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), this requires the caller to be `is_active` **and** hold `is_admin=True` on at least one active center assignment, since disconnecting that account kills sync for every center - 403 otherwise. |
 | `POST /google-calendar/refresh/`      | Associate (JWT) | Forces a refresh of the signed-in associate's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_associate_google_tokens()`.                                                                                                                      |
+| `GET /google-calendar/`               | Associate (JWT) | Returns `{"data": {"google_email": "...", "is_connected": true/false}}` for the signed-in associate - `is_connected` is `bool(associate.google_refresh_token)`, not just whether `google_email` is set (see the "last connected as \_\_\_" note above). Never exposes the token columns themselves.                                                                                                                                                                                                                                                          |
 
 **Why `/connect/` doesn't redirect directly:** the callback (`/callback/`) is a
 plain browser navigation triggered by Google - it can't carry our
@@ -112,8 +123,8 @@ failed exchange, missing refresh token, no matching associate, a DB
 integrity error - has to be squeezed into a URL-safe error code instead of
 a proper JSON `detail` message. `/complete/` stays a normal `POST` the
 frontend calls with `fetch`/`axios`, so it can return a real, specific JSON
-error (e.g. "No Biopeak Nexus account uses this Google account's email")
-that the frontend can show directly. In a real frontend, `/callback/`
+error (e.g. "No active Biopeak Staff account uses this Google account's
+email...") that the frontend can show directly. In a real frontend, `/callback/`
 redirects to the frontend's own route with `code`, and the frontend's own
 JS calls `/complete/` - the "copy code out of the address bar" step used
 for manual Bruno testing is invisible once a real frontend exists.
@@ -122,18 +133,26 @@ for manual Bruno testing is invisible once a real frontend exists.
 Google itself, never from anything the frontend sends - there's no
 associate/user id passed to `/connect/` or `/complete/` for this. After
 exchanging the code, `/complete/` calls `fetch_email()` to get the connected
-account's own (Google-verified) email, and looks up the `Associate` whose
-**login** email (`Associate.user.email`, unique) matches it -
-`associate.google_email` (the "you're connected as \_\_\_" column) is a separate
-field that gets set to whatever email that lookup matched. Whoever actually
-signs into Google on the consent screen decides who gets the tokens - not
-whoever called `/connect/` or `/complete/`, so there's no way for one
-associate to mint a consent link and have a different associate's approval
-land tokens on the wrong row. Practical effect: **staff must connect the
-same Google account they log into Biopeak Nexus with.** A personal Gmail
-that differs from their work login email won't match any associate, and
-`/complete/` 400s with "No Biopeak Nexus account uses this Google account's
-email."
+account's own (Google-verified) email, and **first rejects it outright**
+unless it case-insensitively equals `settings.GOOGLE_CALENDAR_ID` - the one
+configured shared account (400: "This is not the shared Google Calendar
+account used for appointment sync. Connect the configured shared account
+instead."). This is not a per-associate "connect your own calendar" flow;
+only the one fixed shared account may ever hold tokens through this
+endpoint. Only past that check does it look up the `Associate` whose
+**login** email (`Associate.user.email`) matches that same email, requiring
+`Associate.is_active` **and** `User.is_active` (400: "No active Biopeak
+Staff account uses this Google account's email..." otherwise) -
+`associate.google_email` (the "you're connected as \_\_\_" column) is a
+separate field that gets set to whatever email that lookup matched. Whoever
+actually signs into Google on the consent screen decides who gets the
+tokens - not whoever called `/connect/` or `/complete/`, so there's no way
+for one associate to mint a consent link and have someone else's approval
+land tokens on the wrong row. Practical effect: **whoever administers the
+shared Google account must also be an active Biopeak Nexus staff login with
+that same email address** - if no active associate's login email matches
+`GOOGLE_CALENDAR_ID`, connecting is impossible until one is created/updated
+to match.
 
 **Why there's no CSRF `state` param.** `/complete/` never reads
 `request.user`, so there's no session-based action for a CSRF nonce to guard
@@ -171,12 +190,15 @@ and `appointments/migrations/0016_appointment_google_event_id_and_more.py`.
 
 ### `Associate` (`accounts/associates/models.py`)
 
-Each staff member can connect their own Google account once. The connection
-info is stored directly on their existing row.
+These columns exist on every `Associate`, but in practice only the one
+associate whose login email matches `settings.GOOGLE_CALENDAR_ID` will ever
+have them populated - `/complete/` rejects any other Google account (see
+"Identity" above), so this isn't a "each staff member connects their own
+calendar" set of columns despite living on every associate's row.
 
 | Column                           | Type                   | What it stores                                                         | Why we need it                                                                                                                                               |
 | -------------------------------- | ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `google_email`                   | Email (optional)       | The Google account's email, e.g. `priya@gmail.com`                     | Shown in the UI as "Connected as \_\_\_". Distinct from `associate.user.email` (the login email) - this is the _connected Google_ account, which may differ. |
+| `google_email`                   | Email (optional)       | The connected Google account's email, e.g. `care@biopeak.health` (should match `settings.GOOGLE_CALENDAR_ID`) | Shown in the UI as "Connected as \_\_\_". Distinct from `associate.user.email` (the login email) - this is the _connected Google_ account, which may differ. |
 | `google_access_token`            | Text (optional)        | An encrypted, short-lived Google access key (expires in about an hour) | Needed to make Google Calendar API calls on the staff member's behalf. Encrypted before saving - never stored as plain text.                                 |
 | `google_refresh_token`           | Text (optional)        | An encrypted, long-lived Google key that doesn't expire on its own     | Used to get a new `google_access_token` automatically once the old one expires, without asking the staff member to reconnect. Encrypted before saving.       |
 | `google_access_token_expires_at` | Date + time (optional) | When `google_access_token` stops working                               | Lets the code check "has this expired?" and refresh it first if so.                                                                                          |
@@ -188,16 +210,22 @@ the last-connected account (see "Why `/disconnect/` ..." above for why
 anything checking "is this associate connected" must test
 `google_refresh_token`, not `google_email`).
 
-**Uniqueness:** `google_email` must be unique - a plain `unique=True` (with
-`null=True`) is enough, since Postgres allows any number of `NULL`s under a
-unique constraint. Because disconnect leaves `google_email` in place, a later
-reconnect by a _different_ associate to the same Google account is handled
-at connect time instead: `GoogleCalendarCompleteView` proactively evicts
-whichever other associate currently holds that `google_email` - unlike a
-self-disconnect, this eviction **does** clear the evicted associate's
-`google_email` too (all four columns), since the new associate is about to
-be saved with that same `google_email` value and the old row must give it
-up first.
+**Uniqueness:** `google_email` must be unique, case-insensitively -
+`models.UniqueConstraint(Lower("google_email"), ...)`
+(`accounts/associates/models.py`), not a plain `unique=True`, since two
+emails that only differ by case are still the same Google account; lookups
+against it use `__iexact` throughout. Postgres allows any number of `NULL`s
+under the constraint either way. Because disconnect leaves `google_email` in
+place, a later reconnect by a _different_ associate to the same Google
+account is handled at connect time instead: `GoogleCalendarCompleteView`
+proactively evicts whichever other associate currently holds that
+`google_email` - unlike a self-disconnect, this eviction **does** clear the
+evicted associate's `google_email` too (all four columns), since the new
+associate is about to be saved with that same `google_email` value and the
+old row must give it up first. The evict-then-save runs inside one
+`transaction.atomic()` block, and the final `associate.save()` is still
+wrapped in `try/except IntegrityError` (400) to cover a race between two
+concurrent `/complete/` calls resolving to the same account.
 
 ### `Appointment` (`appointments/models.py`)
 
@@ -283,19 +311,21 @@ Calendar event is created on **one single shared account** -
 e.g. `care@biopeak.health`) - via `get_fixed_calendar_organizer()`, regardless
 of which associate is assigned to the appointment. That fixed account still
 has to go through the normal `/google-calendar/connect/` + `/complete/` flow
-like any associate - its tokens live on the `Associate` row whose
-`google_email` (the connected-Google-account column) matches
-`GOOGLE_CALENDAR_ID`. `get_fixed_calendar_organizer()` checks that
-`Associate` actually has a `google_refresh_token` too, not just a matching
-`google_email` - `google_email` alone can be stale (disconnect deliberately
-keeps it, see the "Disconnect" section below), and treating a stale match as
-"connected" would hard-fail every booking instead of gracefully skipping
-sync. Returns `None` ("proceed unsynced") if the setting is unset, no
-associate has that email, or that associate has since disconnected - only an
-actual Google API failure with a genuinely connected fixed account blocks
-the write. Because that same associate row is the one gate for org-wide
-sync, `/disconnect/` refuses to let it disconnect itself unless the caller
-also holds `is_admin=True` on a center assignment (see "Disconnect" above).
+- its tokens live on the one `Associate` row whose `google_email` (the
+connected-Google-account column) matches `GOOGLE_CALENDAR_ID` (`/complete/`
+rejects any other Google account outright, see "Identity" above).
+`get_fixed_calendar_organizer()` filters that `Associate` on `is_active=True`
+and `user__is_active=True` too, and separately checks a live
+`google_refresh_token` - `google_email` alone can be stale (disconnect
+deliberately keeps it, see the "Disconnect" section below), and treating a
+stale match as "connected" would hard-fail every booking instead of
+gracefully skipping sync. Returns `None` ("proceed unsynced") if the setting
+is unset, no active associate has that email, or that associate has since
+disconnected - only an actual Google API failure with a genuinely connected
+fixed account blocks the write. Because that same associate row is the one
+gate for org-wide sync, `/disconnect/` refuses to let it disconnect itself
+unless the caller is `is_active` and also holds `is_admin=True` on an active
+center assignment (see "Disconnect" above).
 
 **Attendees are unaffected by this change** - the appointment's actual
 assigned associates (doctor, health coach, care team) are still invited as
@@ -383,6 +413,17 @@ they were built for a date/time line that isn't in the message.
 `cancel` has no equivalent - `sync_cancelled_appointment_with_google()`
 only calls `delete_event()`, which doesn't touch `description`.
 
+**Every user-controlled piece of this text is HTML-escaped first**
+(`html.escape()`) - patient name, service name, and clinic address in
+`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`/
+`build_location_note()`, and the caller-supplied `notes` in `append_notes()`.
+Since Google Calendar's UI actually renders a handful of tags (`<b>` among
+them) from `description`, an unescaped patient name like
+`<script>...</script>` or an unescaped `notes` value containing `<b>` could
+otherwise break the intended formatting or inject markup into what everyone
+on the invite sees - only the literal `<b>...</b>` tags this code itself
+writes are meant to render as markup.
+
 ## Rescheduling and Meet links
 
 `patch_event()` takes `add_meet_link`, not `need_meet_link` - and it must only
@@ -393,6 +434,16 @@ rotates the Meet link, stranding anyone holding the old one. That's exactly
 why `sync_rescheduled_appointment_with_google()` gates it on
 `not instance.google_meet_link` - it must flip to `True` only the first
 time a link is added, never on a reschedule that already has one.
+
+`patch_event()` also takes `clear_meet_link` (mutually exclusive with
+`add_meet_link`) - `sync_rescheduled_appointment_with_google()` passes it
+`True` when the appointment already has a `google_meet_link` **and** the
+(possibly just-changed) `modality` is no longer `virtual`, so an appointment
+rescheduled away from virtual drops its Meet link instead of leaving a stale
+one on the Google event. Google only removes conference data when
+`conferenceData` is sent as an explicit `null` in the PATCH body - not an
+empty object - so that's exactly what `clear_meet_link=True` sends
+(`body["conferenceData"] = None` in `calendar_api.patch_event()`).
 
 `patch_event()` also always sends `location` / `description` / `attendees` in
 the body (empty when unset), unlike `insert_event()` which omits them when
