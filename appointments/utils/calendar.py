@@ -11,6 +11,7 @@ from appointments.models import (
     AssociateRosterEntry,
     Appointment,
     CareTeamAvailabilityBlock,
+    CenterCareTeamMember,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
@@ -19,6 +20,7 @@ from appointments.models import (
 from appointments.utils.care_teams import (
     live_associates_for_care_team,
     live_care_teams_for_associate,
+    members_with_live_center_role,
 )
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.constants import LeaveScope
@@ -373,11 +375,14 @@ def collect_associate_leave_events_for_associates(
     return merge_intervals(intervals), events
 
 
-def collect_care_team_block_events(
+def collect_care_team_block_intervals_by_team(
     center, care_teams, query_start, query_end, timezone_name
 ):
+    """Return {care_team_pk: merged intervals} for active blocks on these teams."""
+    intervals_by_team = {care_team.pk: [] for care_team in care_teams}
+    events = []
     if not care_teams:
-        return [], []
+        return intervals_by_team, events
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
@@ -389,9 +394,8 @@ def collect_care_team_block_events(
         recurring_block_in_query_range(query_start, query_end)
         | one_off_datetime_overlap(range_start, range_end)
     ).select_related("care_team")
-    intervals = []
-    events = []
     for block in blocks:
+        team_id = block.care_team.pk
         if block.is_recurring:
             block_intervals = expand_recurring_block(
                 block, query_start, query_end, timezone_name
@@ -399,7 +403,7 @@ def collect_care_team_block_events(
             extra = {
                 "reason": block.reason,
                 "is_recurring": True,
-                "care_team_id": str(block.care_team.pk),
+                "care_team_id": str(team_id),
                 "care_team_name": block.care_team.name,
             }
             for block_interval in block_intervals:
@@ -411,15 +415,15 @@ def collect_care_team_block_events(
                         extra,
                     )
                 )
-            intervals.extend(block_intervals)
+            intervals_by_team[team_id].extend(block_intervals)
         elif block.start_datetime and block.end_datetime:
             block_interval = (block.start_datetime, block.end_datetime)
             clipped = clip_intervals_to_range([block_interval], range_start, range_end)
-            intervals.extend(clipped)
+            intervals_by_team[team_id].extend(clipped)
             extra = {
                 "reason": block.reason,
                 "is_recurring": False,
-                "care_team_id": str(block.care_team.pk),
+                "care_team_id": str(team_id),
                 "care_team_name": block.care_team.name,
             }
             for clipped_interval in clipped:
@@ -428,7 +432,59 @@ def collect_care_team_block_events(
                         "care_team_block", block.pk, clipped_interval, extra
                     )
                 )
+    for team_id, team_intervals in intervals_by_team.items():
+        intervals_by_team[team_id] = merge_intervals(team_intervals)
+    return intervals_by_team, events
+
+
+def collect_care_team_block_events(
+    center, care_teams, query_start, query_end, timezone_name
+):
+    intervals_by_team, events = collect_care_team_block_intervals_by_team(
+        center, care_teams, query_start, query_end, timezone_name
+    )
+    intervals = []
+    for team_intervals in intervals_by_team.values():
+        intervals.extend(team_intervals)
     return merge_intervals(intervals), events
+
+
+def team_block_intervals_by_associate(
+    center, associates, query_start, query_end, timezone_name
+):
+    """
+    One membership query + one block query for all associates.
+    Returns {associate_pk: merged team-block intervals}.
+    """
+    result = {associate.pk: [] for associate in associates}
+    if not associates:
+        return result
+    memberships = list(
+        CenterCareTeamMember.objects.filter(
+            associate__in=associates,
+            care_team__center=center,
+            care_team__is_active=True,
+        ).select_related("care_team", "role", "associate")
+    )
+    live_members = members_with_live_center_role(center, memberships)
+    care_teams_by_id = {}
+    associate_team_ids = {associate.pk: set() for associate in associates}
+    for member in live_members:
+        care_teams_by_id[member.care_team.pk] = member.care_team
+        associate_team_ids[member.associate.pk].add(member.care_team.pk)
+    intervals_by_team, _ = collect_care_team_block_intervals_by_team(
+        center,
+        list(care_teams_by_id.values()),
+        query_start,
+        query_end,
+        timezone_name,
+    )
+    for associate in associates:
+        intervals = []
+        for team_id in associate_team_ids[associate.pk]:
+            intervals.extend(intervals_by_team.get(team_id, []))
+        result[associate.pk] = merge_intervals(intervals)
+    return result
 
 
 def collect_room_block_events(room, query_start, query_end, timezone_name):

@@ -17,6 +17,7 @@ from appointments.models import (
     AssociateAvailabilityBlock,
     AssociateLeave,
     CareTeamAvailabilityBlock,
+    CenterCareTeamMember,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
@@ -26,7 +27,10 @@ from appointments.utils.calendar import (
     expand_recurring_block,
     get_center_timezone_name,
 )
-from appointments.utils.care_teams import live_associates_for_care_team
+from appointments.utils.care_teams import (
+    live_associates_for_care_team,
+    members_with_live_center_role,
+)
 from appointments.utils.constants import (
     AppointmentAuditAction,
     BUSY_APPOINTMENT_STATUSES,
@@ -542,24 +546,32 @@ def detect_exceptions_for_appointment(appointment: Appointment) -> int:
         link.associate
         for link in appointment.associate_links.select_related("associate").all()
     ]
-    team_block_filter = models.Q(care_team__members__associate__in=associates)
-    if appointment.care_team is not None:
-        team_block_filter |= models.Q(care_team=appointment.care_team)
-    for block in (
-        CareTeamAvailabilityBlock.objects.filter(
+    team_ids = set()
+    if associates:
+        memberships = list(
+            CenterCareTeamMember.objects.filter(
+                associate__in=associates,
+                care_team__center=center,
+                care_team__is_active=True,
+            ).select_related("care_team", "role", "associate")
+        )
+        for member in members_with_live_center_role(center, memberships):
+            team_ids.add(member.care_team.pk)
+    if appointment.care_team_id:
+        team_ids.add(appointment.care_team_id)
+    if team_ids:
+        for block in CareTeamAvailabilityBlock.objects.filter(
             center=center,
+            care_team_id__in=team_ids,
             care_team__is_active=True,
             is_active=True,
-        )
-        .filter(team_block_filter)
-        .distinct()
-    ):
-        total_created += detect_exceptions_for_source(
-            ExceptionSourceType.CARE_TEAM_BLOCK,
-            block.pk,
-            sync=True,
-            center=center,
-        )
+        ):
+            total_created += detect_exceptions_for_source(
+                ExceptionSourceType.CARE_TEAM_BLOCK,
+                block.pk,
+                sync=True,
+                center=center,
+            )
 
     if appointment.room_id:
         for block in RoomAvailabilityBlock.objects.filter(

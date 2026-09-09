@@ -90,13 +90,18 @@ docs {
   - modality — virtual | in_person (not both)
   - date — YYYY-MM-DD (env slot_date)
 
+  Staff: derived from active CenterServiceRoleRequirement on the center assignment
+  (auto-pick free associate per role). Optional preferred care_team_id / doctor_id /
+  health_coach_id bias pools or add extras. Room-only preferred OK when roles exist.
+  Zero roles + no preferred staff → no slots (soft-skip).
+
   Optional preferred (omit empty UUIDs — pre-request strips blanks so they are not sent as ""):
   - room_id — optional with either person or care-team pref; required for in_person if service has no room type
   - care_team_id XOR doctor_id / health_coach_id
   - doctor_id, health_coach_id — preferred people (may combine with each other and room_id)
 
   Alternate payloads (edit body; leave unused preferred keys empty in env):
-  1) in_person + room only (default Development):
+  1) in_person + room only (default Development) — needs service role requirements:
      {customer_profile_id, service_id, modality: in_person, date, preferred: {room_id}}
   2) care team (+ optional room):
      preferred: {care_team_id, room_id?}
@@ -104,9 +109,10 @@ docs {
      preferred: {doctor_id?, health_coach_id?, room_id?}
   4) virtual (no room):
      {modality: virtual, preferred: {care_team_id} or {doctor_id, health_coach_id}}
+     (or omit preferred staff if service has role requirements)
 
   Response data: {date, timezone, duration_minutes, buffer_before_minutes, buffer_after_minutes, slots[], truncated}.
-  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id} — one pinned combo per start/end. Cap 200/day.
+  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id} — one pinned combo per start/end; associates always non-empty. Cap 200/day.
   Load-balance: fewest busy appts that day, then created_at/code/pk. Room equipment = first active on room.
   in_person always needs a room (preferred or service room type). Else 400 "A room is required for in-person appointments."
   Customer busy is global across centers.

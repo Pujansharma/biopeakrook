@@ -56,9 +56,13 @@ docs {
   Prefer pin from POST Find Slots (associates + room_id + equipment_id) — server validates free, does not re-pick.
   Incomplete pin (associates without room_id for in_person) → 400 "Pin requires room_id for in-person appointments."
   If pin omitted, send preferred; server resolves combo then validates.
+  Staff: from service role requirements (auto) and/or preferred care_team_id / doctor_id / health_coach_id.
+  Room-only preferred OK when roles exist. Zero roles + no preferred staff → 400
+  "At least one associate is required. Send a pin or preferred care_team_id / doctor_id / health_coach_id."
   preferred.care_team_id XOR doctor_id/health_coach_id; room_id optional with either.
   Pin + preferred.care_team_id stamps care_team only when every live team member is in the pin.
   Top-level care_team_id removed — use preferred.care_team_id.
+  Booked appointment always has non-empty associates[].
   Adjust start/end to match a slot. Overlap → 400 "Slot no longer available."
   customer_profile_id / service_id must be active at this center.
   Invalid room_id / equipment_id → 400 "Invalid room/equipment for this center."

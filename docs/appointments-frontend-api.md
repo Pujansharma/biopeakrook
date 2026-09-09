@@ -81,7 +81,9 @@ Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated
 - Incomplete pin (associates without `room_id` for in_person) → 400, never silent re-resolve.
 - `preferred.care_team_id` **XOR** `doctor_id` / `health_coach_id` (doctor+coach OK together).
 - `preferred.room_id` optional with either path.
-- If service has role requirements and you send neither complete pin nor preferred → 400.
+- **Staff source:** active `CenterServiceRoleRequirement` rows on the center assignment → eligible associates per role (auto-pick). Preferred `care_team_id` / `doctor_id` / `health_coach_id` bias or add extras. Room-only preferred is enough when roles exist.
+- Book/reschedule with role requirements and neither complete pin nor preferred → 400.
+- Every booked appointment has non-empty `associates[]` (`AppointmentAssociate` links). Guard: zero roles **and** no preferred staff → 400 / slots soft-skip (misconfigured service).
 - Pin + `preferred.care_team_id` stamps care team only when every live team member is in the pin.
 
 ### Weekday codes
@@ -182,6 +184,17 @@ Base: `/centers/<center_id>/appointments/`
 
 Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with doctor/coach.
 
+**Staff on each slot**
+
+| Center assignment | Preferred staff (`care_team_id` / `doctor_id` / `health_coach_id`) | Result |
+|---|---|---|
+| ≥1 active role requirement | omit OK | Auto-pick free associate per role |
+| ≥1 active role requirement | set | Prefer fills / biases role pools (+ extras) |
+| 0 role requirements | set | Staff from care team / preferred people as extras |
+| 0 role requirements | omit (room-only or none) | No slots (soft-skip) — configure roles or send preferred staff |
+
+`preferred.room_id` alone is fine when the service has role requirements (normal in_person path).
+
 **Example payloads**
 
 ```json
@@ -240,7 +253,7 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 
 Each slot = one pinned combo. Pass that pin into book.
 
-**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · care_team XOR people · service duration missing.
+**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · care_team XOR people · service duration missing · no staff path (zero role requirements and no preferred `care_team_id` / `doctor_id` / `health_coach_id`).
 
 ---
 
@@ -281,7 +294,7 @@ Each slot = one pinned combo. Pass that pin into book.
 
 **Response:** 201 `data` = appointment detail. Idempotent replay: 200 same shape.
 
-**Common 400:** pin incomplete · slot no longer available · invalid room/equipment · need preferred or pin when roles required.
+**Common 400:** pin incomplete · slot no longer available · invalid room/equipment · no staff path (zero roles + no preferred staff) · need preferred or pin when roles required.
 
 ---
 
@@ -296,8 +309,8 @@ Each slot = one pinned combo. Pass that pin into book.
 | `start` | today (no `search`); omit with `search` = all history | `YYYY-MM-DD` |
 | `granularity` | `week` | `day` \| `week` \| `month` — used only when a date window applies |
 | `search` | omit | string — customer name / email / phone, appointment `code`, service name |
-| `associate_id` | omit | UUID — appointment has this associate |
-| `role_id` | omit | UUID — appointment has this role |
+| `associate_id` | omit | UUID — appointment has this associate on `associates[]` |
+| `role_id` | omit | UUID — appointment has this role on `associates[]` |
 | `service_id` | omit | UUID |
 | `room_id` | omit | UUID |
 | `equipment_id` | omit | UUID |
@@ -305,7 +318,7 @@ Each slot = one pinned combo. Pass that pin into book.
 | `status` | omit | single: `confirmed` \| `checked_in` \| `in_progress` \| `completed` \| `cancelled` \| `no_show` |
 | `care_team_id` | omit | UUID |
 
-All optional filters AND with the date window when a window applies. `search` is OR across fields, then AND with UUID/`status` filters. `associate_id` and `role_id` together = OR (has associate **or** role). Blank/omit = no filter.
+All optional filters AND with the date window when a window applies. `search` is OR across fields, then AND with UUID/`status` filters. `associate_id` and `role_id` together = AND (same associate-link row). Blank/omit = no filter. `associate_id` / `role_id` match `associates[]` on the appointment (always present on booked rows).
 
 **Date window**
 
@@ -775,6 +788,7 @@ Same contracts as rooms:
 | `Pin requires room_id for in-person appointments.` | Incomplete pin |
 | `care_team_id cannot be combined with doctor_id or health_coach_id.` | Preferred XOR |
 | `Send preferred resources or a pinned associates list.` | Roles required, neither path |
+| `At least one associate is required. Send a pin or preferred care_team_id / doctor_id / health_coach_id.` | Misconfig: zero service role requirements and no preferred staff (not the normal roles / pin path) |
 | `Slot no longer available.` | Overlap / race on book/reschedule |
 | `Invalid room/equipment for this center.` | Bad pin IDs |
 | `Idempotency key was already used with a different payload.` | 409 |

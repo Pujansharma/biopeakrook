@@ -1,9 +1,11 @@
 import requests
 from django.conf import settings
+from requests import RequestException
 
 from core.utils.log import logger
 
 GRAPH_BASE_URL = "https://graph.facebook.com"
+WHATSAPP_HTTP_TIMEOUT = (5, 15)
 
 
 def is_whatsapp_configured():
@@ -105,7 +107,15 @@ def send_template(
         ]
 
     session = WhatsAppSession()
-    response = session.post(_messages_url(), json=payload)
+    try:
+        response = session.post(
+            _messages_url(),
+            json=payload,
+            timeout=WHATSAPP_HTTP_TIMEOUT,
+        )
+    except RequestException as exc:
+        logger.warning(f"WhatsApp send_template request failed: {exc}")
+        return 599, {"error": {"code": "request_failed", "message": str(exc)}}
     try:
         body = response.json()
     except ValueError:

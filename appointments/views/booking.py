@@ -135,13 +135,17 @@ def apply_appointment_list_filters(queryset, query_params):
     if error:
         return None, error
 
-    link_filter = Q()
-    if associate_id is not None:
-        link_filter |= Q(associate_links__associate_id=associate_id)
-    if role_id is not None:
-        link_filter |= Q(associate_links__role_id=role_id)
-    if associate_id is not None or role_id is not None:
-        queryset = queryset.filter(link_filter).distinct()
+    if associate_id is not None and role_id is not None:
+        queryset = queryset.filter(
+            associate_links__associate_id=associate_id,
+            associate_links__role_id=role_id,
+        ).distinct()
+    elif associate_id is not None:
+        queryset = queryset.filter(
+            associate_links__associate_id=associate_id
+        ).distinct()
+    elif role_id is not None:
+        queryset = queryset.filter(associate_links__role_id=role_id).distinct()
 
     return queryset, None
 

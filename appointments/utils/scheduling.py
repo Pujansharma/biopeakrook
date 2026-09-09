@@ -18,6 +18,7 @@ from appointments.utils.calendar import (
     expand_center_operating_hours,
     expand_roster_entries,
     get_center_timezone_name,
+    team_block_intervals_by_associate,
 )
 from appointments.utils.care_teams import (
     expand_care_team_for_assignment,
@@ -38,6 +39,10 @@ from inventory.models import Equipment, Room
 from programs.services.models import CenterServiceAssignment
 
 SLOT_CAP_PER_DAY = 200
+ASSOCIATES_REQUIRED_FOR_BOOKING = (
+    "At least one associate is required. Send a pin or preferred "
+    "care_team_id / doctor_id / health_coach_id."
+)
 
 
 def compute_exclusive_bounds(start, end, buffer_before, buffer_after):
@@ -258,6 +263,7 @@ def compute_associate_free_windows(
     query_end,
     timezone_name,
     appointment_busy_map,
+    team_block_intervals=None,
 ):
     center_hours = expand_center_operating_hours(
         center, query_start, query_end, timezone_name
@@ -275,10 +281,11 @@ def compute_associate_free_windows(
     closure_intervals, _ = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
-    care_teams = live_care_teams_for_associate(center, associate)
-    team_block_intervals, _ = collect_care_team_block_events(
-        center, care_teams, query_start, query_end, timezone_name
-    )
+    if team_block_intervals is None:
+        care_teams = live_care_teams_for_associate(center, associate)
+        team_block_intervals, _ = collect_care_team_block_events(
+            center, care_teams, query_start, query_end, timezone_name
+        )
     associate_busy = appointment_busy_map.get(str(associate.pk), [])
     busy_intervals = merge_intervals(
         block_intervals
@@ -344,6 +351,23 @@ def compute_equipment_free_windows(
     return subtract_intervals(base_intervals, busy_intervals)
 
 
+def unique_associates_from_resource_pools(resource_pools):
+    associates = []
+    seen_ids = set()
+    for role_pool in resource_pools["roles"]:
+        for associate in role_pool["associates"]:
+            if associate.pk in seen_ids:
+                continue
+            seen_ids.add(associate.pk)
+            associates.append(associate)
+    for associate in resource_pools.get("extra_associates", []):
+        if associate.pk in seen_ids:
+            continue
+        seen_ids.add(associate.pk)
+        associates.append(associate)
+    return associates
+
+
 def build_resource_free_window_cache(
     center,
     resource_pools,
@@ -352,30 +376,21 @@ def build_resource_free_window_cache(
     timezone_name,
     appointment_busy_map,
 ):
+    associates = unique_associates_from_resource_pools(resource_pools)
+    team_blocks_by_associate = team_block_intervals_by_associate(
+        center, associates, query_start, query_end, timezone_name
+    )
     associate_windows = {}
-    for role_pool in resource_pools["roles"]:
-        for associate in role_pool["associates"]:
-            associate_key = str(associate.pk)
-            if associate_key not in associate_windows:
-                associate_windows[associate_key] = compute_associate_free_windows(
-                    center,
-                    associate,
-                    query_start,
-                    query_end,
-                    timezone_name,
-                    appointment_busy_map["associate"],
-                )
-    for associate in resource_pools.get("extra_associates", []):
-        associate_key = str(associate.pk)
-        if associate_key not in associate_windows:
-            associate_windows[associate_key] = compute_associate_free_windows(
-                center,
-                associate,
-                query_start,
-                query_end,
-                timezone_name,
-                appointment_busy_map["associate"],
-            )
+    for associate in associates:
+        associate_windows[str(associate.pk)] = compute_associate_free_windows(
+            center,
+            associate,
+            query_start,
+            query_end,
+            timezone_name,
+            appointment_busy_map["associate"],
+            team_block_intervals=team_blocks_by_associate.get(associate.pk, []),
+        )
     room_windows = {}
     for room in resource_pools["rooms"]:
         room_windows[str(room.pk)] = compute_room_free_windows(
@@ -600,10 +615,17 @@ def ensure_free_windows_for_pools(
     appointment_busy_map,
     free_window_cache,
 ):
-    for associate in resource_pools.get("extra_associates", []):
-        associate_key = str(associate.pk)
-        if associate_key not in free_window_cache["associate"]:
-            free_window_cache["associate"][associate_key] = (
+    missing_associates = [
+        associate
+        for associate in resource_pools.get("extra_associates", [])
+        if str(associate.pk) not in free_window_cache["associate"]
+    ]
+    if missing_associates:
+        team_blocks_by_associate = team_block_intervals_by_associate(
+            center, missing_associates, query_start, query_end, timezone_name
+        )
+        for associate in missing_associates:
+            free_window_cache["associate"][str(associate.pk)] = (
                 compute_associate_free_windows(
                     center,
                     associate,
@@ -611,6 +633,9 @@ def ensure_free_windows_for_pools(
                     query_end,
                     timezone_name,
                     appointment_busy_map["associate"],
+                    team_block_intervals=team_blocks_by_associate.get(
+                        associate.pk, []
+                    ),
                 )
             )
     for room in resource_pools["rooms"]:
@@ -837,6 +862,10 @@ def resolve_appointment_combo(
             }
         )
     associates_payload.extend(extras)
+    if not associates_payload:
+        if soft:
+            return None
+        raise ValidationError(ASSOCIATES_REQUIRED_FOR_BOOKING)
     return {
         "associates": associates_payload,
         "room": room,
@@ -1256,6 +1285,8 @@ def resolve_booking_combo(
         customer_profile=customer_profile,
         exclude_appointment=exclude_appointment,
     )
+    if not associates:
+        raise ValidationError(ASSOCIATES_REQUIRED_FOR_BOOKING)
     return {
         "associates": associates,
         "room": room,
