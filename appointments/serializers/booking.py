@@ -216,9 +216,15 @@ def sync_new_appointment_and_save(
 
 def sync_cancelled_appointment_and_save(instance):
     if sync_cancelled_appointment_with_google(instance):
-        instance.save(
-            update_fields=["google_event_id", "google_meet_link", "updated_at"]
-        )
+        try:
+            instance.save(
+                update_fields=["google_event_id", "google_meet_link", "updated_at"]
+            )
+        except DatabaseError as error:
+            logger.warning(
+                f"Failed to clear google_event_id for appointment "
+                f"{instance.pk} after deleting it from Google Calendar: {error}"
+            )
 
 
 def sync_rescheduled_appointment_and_save(

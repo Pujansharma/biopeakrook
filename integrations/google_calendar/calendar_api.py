@@ -69,8 +69,8 @@ def patch_event(
     # add_meet_link=True rotates the Meet link if the event already has one -
     # only pass True the first time a Meet link is added to this event.
     # clear_meet_link=True drops an existing Meet link (e.g. modality changed
-    # from virtual to in-person) - conferenceDataVersion=1 with an empty
-    # conferenceData tells Google to remove it.
+    # from virtual to in-person), Google's API removes conference data when
+    # conferenceData is explicitly null, not an empty object.
     body = _event_body(title, start, end, location, notes, participant_emails)
     params = {}
     if add_meet_link:
@@ -82,7 +82,7 @@ def patch_event(
         }
         params["conferenceDataVersion"] = 1
     elif clear_meet_link:
-        body["conferenceData"] = {}
+        body["conferenceData"] = None
         params["conferenceDataVersion"] = 1
     if participant_emails:
         params["sendUpdates"] = "all"
