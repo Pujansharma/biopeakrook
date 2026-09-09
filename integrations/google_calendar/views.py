@@ -237,11 +237,17 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
                 )
             self.raise_bad_request("Failed to refresh the Google Calendar token")
 
-        new_refresh_token = encrypt(tokens["refresh_token"]) if "refresh_token" in tokens else None
+        access_token = tokens.get("access_token")
+        expires_in = tokens.get("expires_in")
+        if not access_token or not expires_in:
+            self.raise_bad_request("Google returned an unexpected token response.")
+
+        refresh_token = tokens.get("refresh_token")
+        new_refresh_token = encrypt(refresh_token) if refresh_token else None
         update_associate_google_tokens(
             associate,
-            access_token=encrypt(tokens["access_token"]),
-            expires_at=timezone.now() + timedelta(seconds=tokens["expires_in"]),
+            access_token=encrypt(access_token),
+            expires_at=timezone.now() + timedelta(seconds=expires_in),
             refresh_token=new_refresh_token,
         )
 

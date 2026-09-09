@@ -16,7 +16,8 @@ def get_center_clinic_address(center) -> str:
 def build_location_note(appointment: Appointment) -> str:
     if appointment.modality == AppointmentModes.VIRTUAL:
         return "This is a virtual appointment. Join using the Google Meet link on the calendar invite.\n\n"
-    return f"<b>Clinic Address:</b> {get_center_clinic_address(appointment.center)}\n\n"
+    clinic_address = html.escape(get_center_clinic_address(appointment.center))
+    return f"<b>Clinic Address:</b> {clinic_address}\n\n"
 
 
 def get_appointment_date(appointment: Appointment) -> str:
