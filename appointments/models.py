@@ -36,6 +36,15 @@ def _exclusive_range_expression():
     )
 
 
+def _care_team_one_off_range_expression():
+    return Func(
+        F("start_datetime"),
+        F("end_datetime"),
+        function="tstzrange",
+        template="%(function)s(%(expressions)s, '[)')",
+    )
+
+
 class AssociateRosterEntry(BaseUUIDModel):
     """Weekly recurring associate work hours at a center."""
 
@@ -299,6 +308,60 @@ class CenterCareTeamMember(BaseUUIDModel):
             models.UniqueConstraint(
                 fields=["care_team", "associate"],
                 name="uniq_center_care_team_associate",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CareTeamAvailabilityBlock(BaseUUIDModel):
+    """One-off or weekly recurring unavailability for a care team at a center."""
+
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, related_name="care_team_availability_blocks"
+    )
+    care_team = models.ForeignKey(
+        CenterCareTeam,
+        on_delete=models.CASCADE,
+        related_name="availability_blocks",
+    )
+    is_recurring = models.BooleanField(default=False)
+    start_datetime = models.DateTimeField(null=True, blank=True)
+    end_datetime = models.DateTimeField(null=True, blank=True)
+    day_of_week = models.CharField(choices=AppointmentDays, null=True, blank=True)
+    recurring_start_time = models.TimeField(null=True, blank=True)
+    recurring_end_time = models.TimeField(null=True, blank=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_until = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_care_team_availability_blocks",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["care_team", "is_active"]),
+            models.Index(fields=["center", "care_team", "is_active"]),
+        ]
+        constraints = [
+            ExclusionConstraint(
+                name="care_team_block_one_off_no_overlap",
+                expressions=[
+                    (F("care_team_id"), "="),
+                    (_care_team_one_off_range_expression(), "&&"),
+                ],
+                condition=Q(
+                    is_active=True,
+                    is_recurring=False,
+                    start_datetime__isnull=False,
+                    end_datetime__isnull=False,
+                ),
             ),
         ]
 

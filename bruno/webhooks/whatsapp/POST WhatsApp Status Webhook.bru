@@ -1,0 +1,52 @@
+meta {
+  name: POST WhatsApp Status Webhook
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/webhooks/whatsapp/
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-Hub-Signature-256: {{whatsapp_hub_signature}}
+}
+
+body:json {
+  {
+    "object": "whatsapp_business_account",
+    "entry": [
+      {
+        "id": "WABA_ID",
+        "changes": [
+          {
+            "field": "messages",
+            "value": {
+              "messaging_product": "whatsapp",
+              "metadata": {
+                "display_phone_number": "15550001111",
+                "phone_number_id": "PHONE_NUMBER_ID"
+              },
+              "statuses": [
+                {
+                  "id": "wamid.EXAMPLE",
+                  "status": "delivered",
+                  "timestamp": "1710000000",
+                  "recipient_id": "919999999999"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+
+docs {
+  Delivery/read/failed status callback. Signature must be HMAC-SHA256 of raw body with App Secret, header sha256=<hex>.
+  For local tests without signature, request returns 403 — set valid whatsapp_hub_signature.
+}

@@ -1,9 +1,12 @@
 import hashlib
 import json
+import re
 import time
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
+from django.db.models import F, Q, Value
+from django.db.models.functions import Concat
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
@@ -21,7 +24,7 @@ from appointments.serializers.booking import (
     AppointmentSlotFindSerializer,
 )
 from appointments.utils.calendar import get_center_timezone_name, parse_calendar_query_params
-from appointments.utils.constants import AvailabilityGranularity
+from appointments.utils.constants import AppointmentStatus, AvailabilityGranularity
 from appointments.utils.operations import invalidate_operations_cache
 from appointments.utils.intervals import datetime_range_for_dates, resolve_query_date_range
 from appointments.utils.metrics import (
@@ -34,6 +37,7 @@ from appointments.utils.scheduling import (
     find_appointment_slots,
     resolve_booking_combo,
 )
+from core.utils.db.functions import ExtractPartText
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView, BaseRetrieveAPIView
 from inventory.models import Equipment, Room
@@ -41,6 +45,115 @@ from inventory.models import Equipment, Room
 LIST_CAP = 500
 APPOINTMENT_CODE_CONSTRAINT = "uniq_appointment_code_per_center"
 IDEMPOTENCY_KEY_CONSTRAINT = "uniq_appointment_idempotency_key_per_center"
+UUID_QUERY_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+APPOINTMENT_LIST_UUID_FILTERS = (
+    ("service_id", "service_id"),
+    ("room_id", "room_id"),
+    ("equipment_id", "equipment_id"),
+    ("equipment_type_id", "equipment__equipment_type_id"),
+    ("care_team_id", "care_team_id"),
+)
+INVALID_APPOINTMENT_STATUS = (
+    "Invalid status. Use confirmed, checked_in, in_progress, "
+    "completed, cancelled, or no_show."
+)
+
+
+def parse_optional_uuid_query(query_params, param_name):
+    raw_value = (query_params.get(param_name) or "").strip()
+    if not raw_value:
+        return None, None
+    if UUID_QUERY_PATTERN.fullmatch(raw_value) is None:
+        return None, f"Invalid {param_name}."
+    return raw_value, None
+
+
+def appointment_list_uses_date_window(query_params):
+    search_params = (query_params.get("search") or "").strip()
+    start_raw = (query_params.get("start") or "").strip()
+    return not search_params or bool(start_raw)
+
+
+def apply_appointment_list_search(queryset, query_params):
+    search_params = (query_params.get("search") or "").strip()
+    if not search_params:
+        return queryset
+    queryset = queryset.annotate(
+        customer_full_name=Concat(
+            F("customer_profile__first_name"),
+            Value(" "),
+            F("customer_profile__last_name"),
+        ),
+        customer_national_phone=ExtractPartText(
+            F("customer_profile__customer__user__phone"),
+            Value("-"),
+            Value("-1"),
+        ),
+    )
+    search = Q()
+    search |= Q(customer_full_name__istartswith=search_params)
+    search |= Q(customer_full_name__icontains=search_params)
+    search |= Q(customer_profile__first_name__istartswith=search_params)
+    search |= Q(customer_profile__last_name__istartswith=search_params)
+    search |= Q(
+        customer_profile__customer__contact_email__istartswith=search_params
+    )
+    search |= Q(
+        customer_profile__customer__contact_email__icontains=search_params
+    )
+    search |= Q(customer_national_phone__istartswith=search_params)
+    search |= Q(code__icontains=search_params)
+    search |= Q(service__name__icontains=search_params)
+    return queryset.filter(search)
+
+
+def apply_appointment_list_filters(queryset, query_params):
+    filter_kwargs = {}
+    for param_name, field_name in APPOINTMENT_LIST_UUID_FILTERS:
+        value, error = parse_optional_uuid_query(query_params, param_name)
+        if error:
+            return None, error
+        if value is not None:
+            filter_kwargs[field_name] = value
+    if filter_kwargs:
+        queryset = queryset.filter(**filter_kwargs)
+
+    status = (query_params.get("status") or "").strip()
+    if status:
+        if status not in AppointmentStatus.values:
+            return None, INVALID_APPOINTMENT_STATUS
+        queryset = queryset.filter(status=status)
+
+    queryset = apply_appointment_list_search(queryset, query_params)
+
+    associate_id, error = parse_optional_uuid_query(query_params, "associate_id")
+    if error:
+        return None, error
+    role_id, error = parse_optional_uuid_query(query_params, "role_id")
+    if error:
+        return None, error
+
+    link_filter = Q()
+    if associate_id is not None:
+        link_filter |= Q(associate_links__associate_id=associate_id)
+    if role_id is not None:
+        link_filter |= Q(associate_links__role_id=role_id)
+    if associate_id is not None or role_id is not None:
+        queryset = queryset.filter(link_filter).distinct()
+
+    return queryset, None
+
+
+def appointment_list_applies_hard_cap(query_params):
+    if not appointment_list_uses_date_window(query_params):
+        return True
+    granularity = query_params.get("granularity", AvailabilityGranularity.WEEK)
+    return granularity in {
+        AvailabilityGranularity.WEEK,
+        AvailabilityGranularity.MONTH,
+    }
 
 
 class ConflictError(APIException):
@@ -273,39 +386,49 @@ class AppointmentListView(AppointmentBookingMixin, BaseListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        start_date, granularity = parse_calendar_query_params(
-            self.request, default_granularity=AvailabilityGranularity.WEEK
-        )
-        if granularity not in AvailabilityGranularity.values:
-            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
-        query_start, query_end = resolve_query_date_range(start_date, granularity)
-        range_start, range_end = datetime_range_for_dates(
-            query_start,
-            query_end,
-            get_center_timezone_name(self.get_center()),
-        )
-        return (
-            self.get_appointment_queryset()
-            .filter(
+        queryset = self.get_appointment_queryset()
+        if appointment_list_uses_date_window(self.request.query_params):
+            start_date, granularity = parse_calendar_query_params(
+                self.request, default_granularity=AvailabilityGranularity.WEEK
+            )
+            if granularity not in AvailabilityGranularity.values:
+                self.raise_bad_request(
+                    "Invalid granularity. Use day, week, or month."
+                )
+            query_start, query_end = resolve_query_date_range(
+                start_date, granularity
+            )
+            range_start, range_end = datetime_range_for_dates(
+                query_start,
+                query_end,
+                get_center_timezone_name(self.get_center()),
+            )
+            queryset = queryset.filter(
                 start_datetime__lt=range_end,
                 end_datetime__gt=range_start,
-            )
-            .order_by("start_datetime")
+            ).order_by("start_datetime")
+        else:
+            queryset = queryset.order_by("-start_datetime")
+        queryset, error = apply_appointment_list_filters(
+            queryset, self.request.query_params
         )
+        if error:
+            self.raise_bad_request(error)
+        return queryset
 
     def get(self, request, *args, **kwargs):
         started = time.monotonic()
         queryset = self.get_queryset()
-        total_count = queryset.count()
-        granularity = request.query_params.get("granularity", AvailabilityGranularity.WEEK)
-        truncated = False
-        if granularity in {
-            AvailabilityGranularity.WEEK,
-            AvailabilityGranularity.MONTH,
-        } and total_count > LIST_CAP:
-            truncated = True
-            queryset = queryset[:LIST_CAP]
-        serializer = self.get_serializer(queryset, many=True)
+        if appointment_list_applies_hard_cap(request.query_params):
+            page = list(queryset[: LIST_CAP + 1])
+            truncated = len(page) > LIST_CAP
+            page = page[:LIST_CAP]
+            total_count = len(page)
+            serializer = self.get_serializer(page, many=True)
+        else:
+            total_count = queryset.count()
+            truncated = False
+            serializer = self.get_serializer(queryset, many=True)
         data = {
             "appointments": serializer.data,
             "truncated": truncated,

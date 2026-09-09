@@ -1,0 +1,16 @@
+meta {
+  name: care-teams
+  type: folder
+  seq: 7
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Care team availability blocks. Team in URL. No roster/leave — those stay on associates.
+  Calendar GET lives under calendars/. Team block punches every current live member's calendar + slots.
+  POST 201 {detail, data}; data = array of created rows. Set care_team_block_id from data[0].id / data[n].id.
+  Env: care_team_id, care_team_block_id.
+}

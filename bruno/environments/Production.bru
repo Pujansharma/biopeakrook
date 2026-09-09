@@ -28,6 +28,10 @@ vars {
   equipment_downtime_id: 
   service_id: 
   care_team_id: 
+  care_team_block_id: 
+  doctor_id: 
+  health_coach_id: 
+  slot_date: 2026-09-05
   associate_id_2: 
   role_id_2: 
   diagnostics_address: 12 MG Road, Bengaluru, Karnataka 560001
@@ -36,9 +40,13 @@ vars {
   diagnostics_request_id: 
   diagnostics_test_id: 12345
   diagnostics_idempotency_key: 
+  whatsapp_webhook_verify_token: 
+  whatsapp_hub_signature: 
 }
 vars:secret [
   access_token,
   otp,
-  orange_webhook_secret
+  orange_webhook_secret,
+  whatsapp_webhook_verify_token,
+  whatsapp_hub_signature
 ]

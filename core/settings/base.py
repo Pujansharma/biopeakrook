@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "webhooks.bugspeaks",
     "webhooks.strand_genomics",
     "webhooks.orange_labs",
+    "webhooks.whatsapp",
     "pre_consultation",
 ]
 

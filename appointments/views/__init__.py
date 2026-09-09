@@ -7,6 +7,7 @@ from appointments.models import (
     AssociateAvailabilityBlock,
     AssociateLeave,
     AssociateRosterEntry,
+    CareTeamAvailabilityBlock,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
@@ -18,6 +19,8 @@ from appointments.serializers import (
     AssociateLeaveSerializer,
     AssociateRosterBulkUpsertSerializer,
     AssociateRosterEntrySerializer,
+    CareTeamAvailabilityBlockCreateSerializer,
+    CareTeamAvailabilityBlockSerializer,
     CenterClosureSerializer,
     CenterClosureWriteSerializer,
     CenterOperatingHourSerializer,
@@ -31,6 +34,7 @@ from appointments.serializers import (
 )
 from appointments.utils.calendar import (
     compute_associate_center_calendar,
+    compute_care_team_calendar,
     compute_center_calendar,
     compute_equipment_calendar,
     compute_room_calendar,
@@ -80,6 +84,79 @@ class AssociateCenterAvailabilityCalendarView(
             center, associate, start_date, granularity
         )
         return self.send_response("Associate availability retrieved.", data)
+
+
+class CareTeamAvailabilityCalendarView(CenterAvailabilityMixin, BaseGenericAPIView):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        center = self.get_center()
+        care_team = self.get_care_team()
+        start_date, granularity = parse_calendar_query_params(request)
+        if granularity not in AvailabilityGranularity.values:
+            self.raise_bad_request("Invalid granularity. Use day, week, or month.")
+        data = compute_care_team_calendar(
+            center, care_team, start_date, granularity
+        )
+        return self.send_response("Care team availability retrieved.", data)
+
+
+class CareTeamAvailabilityBlockListCreateView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseListCreateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    create_success_message = "Care team availability blocks created."
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return CareTeamAvailabilityBlockCreateSerializer
+        return CareTeamAvailabilityBlockSerializer
+
+    def get_queryset(self):
+        center = self.get_center()
+        care_team = self.get_care_team()
+        filter_kwargs = self.get_active_query_filter()
+        return (
+            CareTeamAvailabilityBlock.objects.filter(
+                center=center, care_team=care_team, **filter_kwargs
+            )
+            .select_related("care_team", "created_by", "center")
+            .order_by("-created_at")
+        )
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = serializer.save(
+            center=self.get_center(),
+            care_team=self.get_care_team(),
+            created_by=request.user,
+        )
+        scan_results = [
+            self.apply_exception_side_effects(
+                block, serializer.validated_data, created=True
+            )
+            for block in results
+        ]
+        data = CareTeamAvailabilityBlockSerializer(results, many=True).data
+        response = self.send_response(
+            self.create_success_message, data, status=201
+        )
+        return self.attach_exception_scan(response, scan_results)
+
+
+class CareTeamAvailabilityBlockDetailView(
+    CenterAvailabilityMixin, AvailabilityExceptionHooksMixin, BaseRetrieveUpdateAPIView
+):
+    permission_classes = [IsAdminUser | IsAssociateUser]
+    serializer_class = CareTeamAvailabilityBlockSerializer
+
+    def get_queryset(self):
+        center = self.get_center()
+        care_team = self.get_care_team()
+        return CareTeamAvailabilityBlock.objects.filter(
+            center=center, care_team=care_team
+        ).select_related("care_team", "created_by", "center")
 
 
 class RoomAvailabilityCalendarView(CenterAvailabilityMixin, BaseGenericAPIView):

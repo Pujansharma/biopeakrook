@@ -89,6 +89,35 @@ def care_team_associates_payload(members):
     return payload
 
 
+def live_members_for_care_team(center, care_team):
+    members = list(care_team.members.all())
+    return members_with_live_center_role(center, members)
+
+
+def live_associates_for_care_team(center, care_team):
+    return [member.associate for member in live_members_for_care_team(center, care_team)]
+
+
+def live_care_teams_for_associate(center, associate):
+    memberships = list(
+        CenterCareTeamMember.objects.filter(
+            associate=associate,
+            care_team__center=center,
+            care_team__is_active=True,
+        ).select_related("care_team", "role", "associate")
+    )
+    live_members = members_with_live_center_role(center, memberships)
+    care_teams = []
+    seen_ids = set()
+    for member in live_members:
+        care_team_id = member.care_team.pk
+        if care_team_id in seen_ids:
+            continue
+        seen_ids.add(care_team_id)
+        care_teams.append(member.care_team)
+    return care_teams
+
+
 def apply_care_team_to_resource_pools(resource_pools, members):
     member_by_role = {str(member.role.pk): member.associate for member in members}
     for role_pool in resource_pools["roles"]:

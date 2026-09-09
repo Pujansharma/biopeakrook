@@ -1,8 +1,13 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.associates.models import AssociateRole
-from appointments.models import CenterCareTeam, CenterCareTeamMember
+from appointments.models import (
+    CareTeamAvailabilityBlock,
+    CenterCareTeam,
+    CenterCareTeamMember,
+)
 from appointments.utils.care_teams import live_associate_center_assignments
 from appointments.utils.scheduling import get_associate_display_name
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
@@ -174,8 +179,14 @@ class CenterCareTeamSerializer(BaseModelSerializer):
     def update(self, instance, validated_data):
         members = validated_data.pop("members", None)
         members_in_payload = "members" in getattr(self, "initial_data", {})
+        was_active = instance.is_active
         with transaction.atomic():
             instance = super().update(instance, validated_data)
             if members_in_payload:
                 self.replace_members(instance, members)
+            if was_active and not instance.is_active:
+                CareTeamAvailabilityBlock.objects.filter(
+                    care_team=instance,
+                    is_active=True,
+                ).update(is_active=False, updated_at=timezone.now())
         return instance

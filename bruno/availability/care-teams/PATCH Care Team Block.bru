@@ -1,0 +1,36 @@
+meta {
+  name: PATCH Care Team Block
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/care-teams/{{care_team_id}}/blocks/{{care_team_block_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_active": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Soft-deactivate care team block (is_active=false). No effective_until — this is how recurring blocks end.
+  Care team + block id from URL. Set care_team_block_id from POST data[n].id or GET Care Team Blocks.
+}

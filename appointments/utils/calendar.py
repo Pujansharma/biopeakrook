@@ -10,10 +10,17 @@ from appointments.models import (
     AssociateLeave,
     AssociateRosterEntry,
     Appointment,
+    CareTeamAvailabilityBlock,
+    CenterCareTeamMember,
     EquipmentAvailabilityBlock,
     EquipmentDowntime,
     RoomAvailabilityBlock,
     RoomDowntime,
+)
+from appointments.utils.care_teams import (
+    live_associates_for_care_team,
+    live_care_teams_for_associate,
+    members_with_live_center_role,
 )
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.constants import LeaveScope
@@ -91,7 +98,7 @@ def serialize_event(event_type, event_id, interval, extra=None):
         "end": interval[1].isoformat(),
     }
     if extra:
-        payload.update(extra)
+        payload.update(dict(extra))
     return payload
 
 
@@ -142,6 +149,36 @@ def expand_roster_entries(center, associate, query_start, query_end, timezone_na
             )
         )
     return merge_intervals(intervals)
+
+
+def expand_roster_entries_for_associates(
+    center, associates, query_start, query_end, timezone_name
+):
+    roster_hours_by_associate = {associate.pk: [] for associate in associates}
+    if not associates:
+        return roster_hours_by_associate
+    roster_entries = AssociateRosterEntry.objects.filter(
+        center=center,
+        associate__in=associates,
+        is_active=True,
+    ).select_related("associate")
+    for roster_entry in roster_entries:
+        roster_hours_by_associate[roster_entry.associate.pk].extend(
+            expand_weekly_time_windows(
+                query_start,
+                query_end,
+                roster_entry.day_of_week,
+                roster_entry.start_time,
+                roster_entry.end_time,
+                timezone_name,
+            )
+        )
+    merged_hours = {}
+    for associate in associates:
+        merged_hours[associate.pk] = merge_intervals(
+            roster_hours_by_associate[associate.pk]
+        )
+    return merged_hours
 
 
 def expand_recurring_block(block, query_start, query_end, timezone_name):
@@ -237,6 +274,283 @@ def collect_associate_leave_events(center, associate, query_start, query_end, ti
                 )
             )
     return merge_intervals(intervals), events
+
+
+def collect_associate_block_events_for_associates(
+    center, associates, query_start, query_end, timezone_name
+):
+    if not associates:
+        return [], []
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    blocks = AssociateAvailabilityBlock.objects.filter(
+        center=center,
+        associate__in=associates,
+        is_active=True,
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_datetime_overlap(range_start, range_end)
+    ).select_related("associate")
+    intervals = []
+    events = []
+    for block in blocks:
+        extra = {
+            "reason": block.reason,
+            "associate_id": str(block.associate.pk),
+        }
+        if block.is_recurring:
+            extra["is_recurring"] = True
+            block_intervals = expand_recurring_block(
+                block, query_start, query_end, timezone_name
+            )
+            for block_interval in block_intervals:
+                events.append(
+                    serialize_event(
+                        "associate_block_recurring",
+                        block.pk,
+                        block_interval,
+                        dict(extra),
+                    )
+                )
+            intervals.extend(block_intervals)
+        elif block.start_datetime and block.end_datetime:
+            extra["is_recurring"] = False
+            block_interval = (block.start_datetime, block.end_datetime)
+            clipped = clip_intervals_to_range([block_interval], range_start, range_end)
+            intervals.extend(clipped)
+            for clipped_interval in clipped:
+                events.append(
+                    serialize_event(
+                        "associate_block",
+                        block.pk,
+                        clipped_interval,
+                        dict(extra),
+                    )
+                )
+    return merge_intervals(intervals), events
+
+
+def collect_associate_leave_events_for_associates(
+    center, associates, query_start, query_end, timezone_name
+):
+    if not associates:
+        return [], []
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    leaves = (
+        AssociateLeave.objects.filter(
+            associate__in=associates,
+            is_active=True,
+        )
+        .filter(
+            models.Q(scope=LeaveScope.ALL_CENTERS)
+            | models.Q(scope=LeaveScope.CENTER, center=center)
+        )
+        .filter(datetime_window_overlap(range_start, range_end))
+        .select_related("associate", "center")
+    )
+    intervals = []
+    events = []
+    for leave in leaves:
+        leave_interval = (leave.start_datetime, leave.end_datetime)
+        clipped = clip_intervals_to_range([leave_interval], range_start, range_end)
+        intervals.extend(clipped)
+        extra = {
+            "reason": leave.reason,
+            "scope": leave.scope,
+            "center_id": str(leave.center.pk) if leave.center else None,
+            "associate_id": str(leave.associate.pk),
+        }
+        for clipped_interval in clipped:
+            events.append(
+                serialize_event(
+                    "associate_leave",
+                    leave.pk,
+                    clipped_interval,
+                    dict(extra),
+                )
+            )
+    return merge_intervals(intervals), events
+
+
+def associate_block_intervals_by_associate(
+    center, associates, query_start, query_end, timezone_name
+):
+    """One block query for all associates. Returns {associate_pk: merged intervals}."""
+    result = {associate.pk: [] for associate in associates}
+    if not associates:
+        return result
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    blocks = AssociateAvailabilityBlock.objects.filter(
+        center=center,
+        associate__in=associates,
+        is_active=True,
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_datetime_overlap(range_start, range_end)
+    ).select_related("associate")
+    for block in blocks:
+        if block.is_recurring:
+            block_intervals = expand_recurring_block(
+                block, query_start, query_end, timezone_name
+            )
+            result[block.associate.pk].extend(block_intervals)
+        elif block.start_datetime and block.end_datetime:
+            block_interval = (block.start_datetime, block.end_datetime)
+            clipped = clip_intervals_to_range([block_interval], range_start, range_end)
+            result[block.associate.pk].extend(clipped)
+    return {
+        associate_id: merge_intervals(intervals)
+        for associate_id, intervals in result.items()
+    }
+
+
+def associate_leave_intervals_by_associate(
+    center, associates, query_start, query_end, timezone_name
+):
+    """One leave query for all associates. Returns {associate_pk: merged intervals}."""
+    result = {associate.pk: [] for associate in associates}
+    if not associates:
+        return result
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    leaves = (
+        AssociateLeave.objects.filter(
+            associate__in=associates,
+            is_active=True,
+        )
+        .filter(
+            models.Q(scope=LeaveScope.ALL_CENTERS)
+            | models.Q(scope=LeaveScope.CENTER, center=center)
+        )
+        .filter(datetime_window_overlap(range_start, range_end))
+        .select_related("associate")
+    )
+    for leave in leaves:
+        leave_interval = (leave.start_datetime, leave.end_datetime)
+        clipped = clip_intervals_to_range([leave_interval], range_start, range_end)
+        result[leave.associate.pk].extend(clipped)
+    return {
+        associate_id: merge_intervals(intervals)
+        for associate_id, intervals in result.items()
+    }
+
+
+def collect_care_team_block_intervals_by_team(
+    center, care_teams, query_start, query_end, timezone_name
+):
+    """Return {care_team_pk: merged intervals} for active blocks on these teams."""
+    intervals_by_team = {care_team.pk: [] for care_team in care_teams}
+    events = []
+    if not care_teams:
+        return intervals_by_team, events
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    blocks = CareTeamAvailabilityBlock.objects.filter(
+        center=center,
+        care_team__in=care_teams,
+        is_active=True,
+    ).filter(
+        recurring_block_in_query_range(query_start, query_end)
+        | one_off_datetime_overlap(range_start, range_end)
+    ).select_related("care_team")
+    for block in blocks:
+        team_id = block.care_team.pk
+        if block.is_recurring:
+            block_intervals = expand_recurring_block(
+                block, query_start, query_end, timezone_name
+            )
+            extra = {
+                "reason": block.reason,
+                "is_recurring": True,
+                "care_team_id": str(team_id),
+                "care_team_name": block.care_team.name,
+            }
+            for block_interval in block_intervals:
+                events.append(
+                    serialize_event(
+                        "care_team_block_recurring",
+                        block.pk,
+                        block_interval,
+                        extra,
+                    )
+                )
+            intervals_by_team[team_id].extend(block_intervals)
+        elif block.start_datetime and block.end_datetime:
+            block_interval = (block.start_datetime, block.end_datetime)
+            clipped = clip_intervals_to_range([block_interval], range_start, range_end)
+            intervals_by_team[team_id].extend(clipped)
+            extra = {
+                "reason": block.reason,
+                "is_recurring": False,
+                "care_team_id": str(team_id),
+                "care_team_name": block.care_team.name,
+            }
+            for clipped_interval in clipped:
+                events.append(
+                    serialize_event(
+                        "care_team_block", block.pk, clipped_interval, extra
+                    )
+                )
+    for team_id, team_intervals in intervals_by_team.items():
+        intervals_by_team[team_id] = merge_intervals(team_intervals)
+    return intervals_by_team, events
+
+
+def collect_care_team_block_events(
+    center, care_teams, query_start, query_end, timezone_name
+):
+    intervals_by_team, events = collect_care_team_block_intervals_by_team(
+        center, care_teams, query_start, query_end, timezone_name
+    )
+    intervals = []
+    for team_intervals in intervals_by_team.values():
+        intervals.extend(team_intervals)
+    return merge_intervals(intervals), events
+
+
+def team_block_intervals_by_associate(
+    center, associates, query_start, query_end, timezone_name
+):
+    """
+    One membership query + one block query for all associates.
+    Returns {associate_pk: merged team-block intervals}.
+    """
+    result = {associate.pk: [] for associate in associates}
+    if not associates:
+        return result
+    memberships = list(
+        CenterCareTeamMember.objects.filter(
+            associate__in=associates,
+            care_team__center=center,
+            care_team__is_active=True,
+        ).select_related("care_team", "role", "associate")
+    )
+    live_members = members_with_live_center_role(center, memberships)
+    care_teams_by_id = {}
+    associate_team_ids = {associate.pk: set() for associate in associates}
+    for member in live_members:
+        care_teams_by_id[member.care_team.pk] = member.care_team
+        associate_team_ids[member.associate.pk].add(member.care_team.pk)
+    intervals_by_team, _ = collect_care_team_block_intervals_by_team(
+        center,
+        list(care_teams_by_id.values()),
+        query_start,
+        query_end,
+        timezone_name,
+    )
+    for associate in associates:
+        intervals = []
+        for team_id in associate_team_ids[associate.pk]:
+            intervals.extend(intervals_by_team.get(team_id, []))
+        result[associate.pk] = merge_intervals(intervals)
+    return result
 
 
 def collect_room_block_events(room, query_start, query_end, timezone_name):
@@ -471,24 +785,35 @@ def build_calendar_days(
 def collect_appointment_busy_intervals(
     center, resource_type, resource_ids, range_start, range_end
 ):
-    appointments = (
-        Appointment.objects.filter(
-            center=center,
-            status__in=BUSY_APPOINTMENT_STATUSES,
-            start_datetime__lt=range_end,
-            end_datetime__gt=range_start,
-        )
-        .select_related(
-            "customer_profile",
-            "service",
-            "room",
-            "equipment",
-        )
-        .prefetch_related("associate_links__associate", "associate_links__role")
-    )
     resource_id_set = None
-    if resource_ids:
-        resource_id_set = {str(item) for item in resource_ids}
+    if resource_ids is not None:
+        resource_id_list = list(resource_ids)
+        if not resource_id_list:
+            return [], []
+        resource_id_set = {str(item) for item in resource_id_list}
+
+    appointments = Appointment.objects.filter(
+        center=center,
+        status__in=BUSY_APPOINTMENT_STATUSES,
+        start_datetime__lt=range_end,
+        end_datetime__gt=range_start,
+    )
+    if resource_type == "associate" and resource_id_set is not None:
+        appointments = appointments.filter(
+            associate_links__associate_id__in=resource_id_list
+        ).distinct()
+    elif resource_type == "room" and resource_id_set is not None:
+        appointments = appointments.filter(room_id__in=resource_id_list)
+    elif resource_type == "equipment" and resource_id_set is not None:
+        appointments = appointments.filter(equipment_id__in=resource_id_list)
+
+    appointments = appointments.select_related(
+        "customer_profile",
+        "service",
+        "room",
+        "equipment",
+    ).prefetch_related("associate_links__associate", "associate_links__role")
+
     intervals = []
     events = []
     for appointment in appointments:
@@ -603,6 +928,10 @@ def compute_associate_center_calendar(center, associate, start_date, granularity
     closure_intervals, closure_events = collect_closure_events(
         center, query_start, query_end, timezone_name
     )
+    care_teams = live_care_teams_for_associate(center, associate)
+    team_block_intervals, team_block_events = collect_care_team_block_events(
+        center, care_teams, query_start, query_end, timezone_name
+    )
     range_start, range_end = datetime_range_for_dates(
         query_start, query_end, timezone_name
     )
@@ -617,9 +946,16 @@ def compute_associate_center_calendar(center, associate, start_date, granularity
         block_intervals
         + leave_intervals
         + closure_intervals
+        + team_block_intervals
         + appointment_intervals
     )
-    events = block_events + leave_events + closure_events + appointment_events
+    events = (
+        block_events
+        + leave_events
+        + closure_events
+        + team_block_events
+        + appointment_events
+    )
     days = build_calendar_days(
         query_start,
         query_end,
@@ -632,6 +968,81 @@ def compute_associate_center_calendar(center, associate, start_date, granularity
         "resource_type": "associate",
         "center_id": str(center.pk),
         "associate_id": str(associate.pk),
+        "timezone": timezone_name,
+        "start": query_start.isoformat(),
+        "end": query_end.isoformat(),
+        "granularity": granularity,
+        "days": days,
+    }
+
+
+def compute_care_team_calendar(center, care_team, start_date, granularity):
+    query_start, query_end = resolve_query_date_range(start_date, granularity)
+    timezone_name = get_center_timezone_name(center)
+    associates = live_associates_for_care_team(center, care_team)
+    center_hours = expand_center_operating_hours(
+        center, query_start, query_end, timezone_name
+    )
+    roster_hours_by_associate = expand_roster_entries_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
+    member_bases = []
+    for associate in associates:
+        roster_hours = roster_hours_by_associate[associate.pk]
+        member_bases.append(intersect_intervals(center_hours, roster_hours))
+    if not member_bases:
+        base_intervals = []
+    else:
+        base_intervals = member_bases[0]
+        for member_base in member_bases[1:]:
+            base_intervals = intersect_intervals(base_intervals, member_base)
+    block_intervals, block_events = collect_associate_block_events_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
+    leave_intervals, leave_events = collect_associate_leave_events_for_associates(
+        center, associates, query_start, query_end, timezone_name
+    )
+    events = []
+    events.extend(block_events)
+    events.extend(leave_events)
+    closure_intervals, closure_events = collect_closure_events(
+        center, query_start, query_end, timezone_name
+    )
+    events.extend(closure_events)
+    team_block_intervals, team_block_events = collect_care_team_block_events(
+        center, [care_team], query_start, query_end, timezone_name
+    )
+    events.extend(team_block_events)
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    appointment_intervals, appointment_events = collect_appointment_busy_intervals(
+        center,
+        "associate",
+        [associate.pk for associate in associates],
+        range_start,
+        range_end,
+    )
+    events.extend(appointment_events)
+    busy_intervals = merge_intervals(
+        block_intervals
+        + leave_intervals
+        + closure_intervals
+        + team_block_intervals
+        + appointment_intervals
+    )
+    days = build_calendar_days(
+        query_start,
+        query_end,
+        base_intervals,
+        busy_intervals,
+        events,
+        timezone_name,
+    )
+    return {
+        "resource_type": "care_team",
+        "center_id": str(center.pk),
+        "care_team_id": str(care_team.pk),
         "timezone": timezone_name,
         "start": query_start.isoformat(),
         "end": query_end.isoformat(),

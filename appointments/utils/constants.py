@@ -35,6 +35,7 @@ class ExceptionSourceType(models.TextChoices):
     ASSOCIATE_LEAVE = "associate_leave", "Associate Leave"
     ASSOCIATE_BLOCK = "associate_block", "Associate Block"
     ASSOCIATE_ROSTER = "associate_roster", "Associate Roster"
+    CARE_TEAM_BLOCK = "care_team_block", "Care Team Block"
     ROOM_BLOCK = "room_block", "Room Block"
     EQUIPMENT_BLOCK = "equipment_block", "Equipment Block"
     ROOM_DOWNTIME = "room_downtime", "Room Downtime"

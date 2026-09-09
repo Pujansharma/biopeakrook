@@ -256,6 +256,64 @@ DJANGO_SUPERUSER_EMAIL=admin@yourdomain.com
 DJANGO_SUPERUSER_PASSWORD=secure_admin_password
 ```
 
+## WhatsApp Cloud API (appointment communications)
+
+Env-only credentials. Package: `integrations/communications/` (WhatsApp behind a channel façade). Webhook: `POST|GET /webhooks/whatsapp/`.
+
+If `*_WHATSAPP_ACCESS_TOKEN` or `*_WHATSAPP_PHONE_NUMBER_ID` is missing, appointment book/cancel/reschedule still succeed and outbox rows are marked `skipped`.
+
+### Development
+
+```env
+DEV_WHATSAPP_ACCESS_TOKEN=
+DEV_WHATSAPP_PHONE_NUMBER_ID=
+DEV_WHATSAPP_APP_SECRET=
+DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN=
+DEV_WHATSAPP_API_VERSION=v23.0
+DEV_WHATSAPP_WABA_ID=
+DEV_WHATSAPP_APP_ID=
+DEV_WHATSAPP_TEMPLATE_LANGUAGE=en
+DEV_WHATSAPP_TEMPLATE_CONFIRMED=appointment_confirmed
+DEV_WHATSAPP_TEMPLATE_CANCELLED=appointment_cancelled
+DEV_WHATSAPP_TEMPLATE_RESCHEDULED=appointment_rescheduled
+```
+
+### Staging / Production
+
+Same keys with `STG_` / `PRD_` prefixes.
+
+### Meta webhook setup
+
+1. Callback URL: `https://<host>/webhooks/whatsapp/`
+2. Verify token: same as `*_WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+3. Subscribe field: `messages` (delivery / read statuses)
+4. App secret: `*_WHATSAPP_APP_SECRET` (validates `X-Hub-Signature-256`)
+
+Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language.
+Templates use **named** body variables. Backend sends `parameter_name` + `text`.
+
+| Template | Named params |
+|---|---|
+| confirmed / rescheduled | `patient_name`, `appointment_date`, `appointment_time`, `service_name`, `clinic_address` |
+| cancelled | `patient_name`, `appointment_date`, `appointment_time`, `service_name` |
+
+`clinic_address` value format: `{center.name}, {address lines/city/state/pincode}`.
+
+Retry pending/failed sends: `uv run manage.py process_communication_outbox`
+
+User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+
+## Scheduled jobs (production)
+
+Wire these as EventBridge → ECS RunTask (or equivalent) on a ~1 min cadence. Not in `deploy-aws.yml` (image/service only).
+
+| Command | Purpose |
+|---|---|
+| `uv run manage.py process_communication_outbox` | Send WhatsApp outbox (`PENDING` / retryable `FAILED`) |
+| `uv run manage.py process_appointment_exception_scans` | Drain availability → appointment exception scan queue |
+
+Without the outbox cron, WhatsApp rows stay `PENDING` even when secrets are set. Without the exception-scan cron, care-team / roster / block writes enqueue scans that never run.
+
 ## Security Best Practices
 
 ### General Security
