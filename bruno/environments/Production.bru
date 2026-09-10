@@ -1,6 +1,9 @@
 vars {
   baseURL: https://api.biopeak.com
   phone: +91-9999999990
+  access_token: 
+  refresh_token: 
+  customer_access_token: 
   customer_user_id: 
   checklist_item_id: 
   provider_id: 
@@ -10,17 +13,40 @@ vars {
   lead_id: 
   home_center_id: 
   center_id: 
+  associate_id: 
+  role_id:  
+  room_type_id: 
+  equipment_type_id: 
+  room_id: 
+  equipment_id: 
+  closure_id: 
+  associate_block_id: 
+  associate_leave_id: 
+  room_block_id: 
+  room_downtime_id: 
+  equipment_block_id: 
+  equipment_downtime_id: 
+  service_id: 
+  care_team_id: 
+  care_team_block_id: 
+  doctor_id: 
+  health_coach_id: 
+  slot_date: 2026-09-05
+  associate_id_2: 
+  role_id_2: 
   diagnostics_address: 12 MG Road, Bengaluru, Karnataka 560001
   diagnostics_request_date: 2026-08-15
   diagnostics_slot_datetime: 2026-08-15T06:00:00
   diagnostics_request_id: 
   diagnostics_test_id: 12345
   diagnostics_idempotency_key: 
+  whatsapp_webhook_verify_token: 
+  whatsapp_hub_signature: 
 }
 vars:secret [
   access_token,
-  refresh_token,
-  customer_access_token,
   otp,
-  orange_webhook_secret
+  orange_webhook_secret,
+  whatsapp_webhook_verify_token,
+  whatsapp_hub_signature
 ]

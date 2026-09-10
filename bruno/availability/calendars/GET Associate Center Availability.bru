@@ -1,0 +1,36 @@
+meta {
+  name: GET Associate Center Availability
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/?start=2026-09-05&granularity=day
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2026-09-05
+  granularity: day
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Associate calendar at one center (roster intersect center hours minus blocks/leaves/closures).
+  Target associate must have an active assignment at center_id.
+  Sample start=2026-09-05 aligned with POST Associate Leave date.
+  Omit start → today. Each day includes day_of_week ("0"=Mon … "6"=Sun) and day_of_week_name.
+}

@@ -1,0 +1,14 @@
+meta {
+  name: care-teams
+  type: folder
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Center catalog: GET/POST /centers/{{center_id}}/care-teams/, GET/PATCH /centers/{{center_id}}/care-teams/{{care_team_id}}/.
+  No DELETE. List omit active = both. Min 2 members; unique role + associate per team.
+  Slots/book/reschedule expand only members with live AssociateCenterAssignment (active assignment, associate, role; role match). Stale required members → 400 cover-all-roles.
+}

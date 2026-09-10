@@ -128,6 +128,23 @@ class BaseServiceSerializerMeta(BaseSerializer):
             service=service, center_id__in=center_ids
         ).delete()
 
+    def validate_name(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        name = attrs.get("name")
+        if name is None and self.instance is not None:
+            name = self.instance.name
+        if name:
+            clash = Service.objects.filter(name__iexact=name)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"name": ["A service with this name already exists."]}
+                )
+        return attrs
+
 
 class ServiceSerializer(BaseServiceSerializerMeta, BaseModelSerializer):
     is_active = serializers.BooleanField(default=True, required=False)

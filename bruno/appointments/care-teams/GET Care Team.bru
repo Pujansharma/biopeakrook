@@ -1,0 +1,25 @@
+meta {
+  name: GET Care Team
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/care-teams/{{care_team_id}}/
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Retrieve one care team including inactive rows at this center.
+  Auth: bearer {{access_token}}. Set env center_id, care_team_id.
+}

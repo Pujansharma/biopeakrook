@@ -1,0 +1,36 @@
+meta {
+  name: PATCH Equipment Block
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/availability/equipment-blocks/{{equipment_id}}/{{equipment_block_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_active": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Soft-deactivate equipment block. Equipment from URL.
+  Set equipment_block_id from POST data[n].id or GET Equipment Blocks.
+}

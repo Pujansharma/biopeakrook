@@ -124,7 +124,7 @@ biopeak-nexus/
 ├── accounts/                    # All user/identity management
 │   ├── users/                   # Custom User model (email-based auth, UUID PK)
 │   ├── associates/              # Internal staff: Associate, AssociateRole, AssociateCenterAssignment
-│   ├── centers/                 # Centers: Center, CenterOperatingHour, CenterHoliday
+│   ├── centers/                 # Centers: Center, CenterOperatingHour, CenterClosure
 │   ├── customers/               # End users: Customer, CustomerProfile, CustomerOnboarding
 │   ├── verifications/           # OTP flows, email verification
 │   └── audits/                  # Audit log models
@@ -135,7 +135,7 @@ biopeak-nexus/
 │       ├── intervals.py         # Pure interval arithmetic (no Django dependency)
 │       ├── scheduling.py        # DB-aware slot finder
 │       ├── db.py                # Appointment CRUD helpers
-│       └── constants.py         # AppointmentStatus, ScheduleModes, AppointmentModes
+│       └── constants.py         # AppointmentStatus, AppointmentModes
 │
 ├── services/                    # Service catalogue
 │   ├── models.py                # Service, ServiceRequirement
@@ -161,8 +161,11 @@ biopeak-nexus/
     ├── MEMORY.md                 ← project memory for Claude
     ├── features.md
     ├── associate-roles-rbac.md
-    └── scheduling.md
+    ├── appointments-frontend-api.md
+    ├── scheduling.md             # stub → appointments-frontend-api.md
+    └── availability.md           # stub → appointments-frontend-api.md
 ```
+
 
 ### 4.4 Data Model Summary
 
@@ -171,13 +174,13 @@ biopeak-nexus/
 - `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField)
 - `AssociateCenterAssignment` — links associate ↔ center with role, is_admin, mode
 - `Customer` (1:1 User) + `CustomerProfile` (family members) + `CustomerOnboarding` (health data)
-- `Center` + `CenterOperatingHour` + `CenterHoliday`
+- `Center` + `CenterOperatingHour` + `CenterClosure`
 
 **Scheduling**
 - `Schedule` — recurring weekly availability (associate, day_of_week, start/end time, duration, buffer)
 - `BlockedPeriod` — one-off unavailability windows (UTC)
-- `Appointment` — booked sessions with full lifecycle (pending → confirmed → completed/cancelled)
-- `AppointmentHistory` — reschedule audit trail
+- `Appointment` — booked sessions; book lands `confirmed` (no `pending`). Cancel/reschedule from `confirmed` or `checked_in`; `in_progress` is not reversible. No-show from `confirmed` only.
+- `AppointmentHistory` — reschedule window snapshots; `AppointmentAuditLog` — appointment-scoped lifecycle trail
 
 **Services & Inventory**
 - `Service` + `ServiceRequirement` — service catalogue per center
@@ -241,7 +244,7 @@ Query: "30-min slots for associate X in room Y, week of Feb 1"
 2. INTERSECT all availability layers
 
 3. SUBTRACT busy periods
-   - CenterHoliday
+   - CenterClosure
    - BlockedPeriod (associate leave, etc.)
    - Existing Appointments
    - EquipmentMaintenance
@@ -315,7 +318,9 @@ uv run manage.py <command>
 | `docs/features.md` | Platform feature overview |
 | `docs/accounts-architecture.md` | Accounts segmentation — User, Associate, Customer models and rationale |
 | `docs/associate-roles-rbac.md` | RBAC design details |
-| `docs/scheduling.md` | Scheduling algorithm deep-dive |
+| `docs/appointments-frontend-api.md` | Appointments + availability FE API contract (slots, book, lifecycle, exceptions, ops, care teams, calendars, roster/blocks) |
+| `docs/scheduling.md` | Stub → `appointments-frontend-api.md` |
+| `docs/availability.md` | Stub → `appointments-frontend-api.md` |
 
 ---
 

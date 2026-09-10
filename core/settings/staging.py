@@ -1,3 +1,5 @@
+from corsheaders.defaults import default_headers
+
 from core.settings.base import *
 
 DEBUG = False
@@ -91,6 +93,7 @@ LOGGING = {
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = [*default_headers, "x-center-id", "idempotency-key"]
 
 # Other
 
@@ -107,3 +110,22 @@ METSIGHTS_API_KEY = config('STG_METSIGHTS_API_KEY', None)
 ORANGE_LABS_API_BASE_URL = config("STG_ORANGE_LABS_API_BASE_URL", None)
 ORANGE_LABS_API_KEY = config("STG_ORANGE_LABS_API_KEY", None)
 ORANGE_LABS_WEBHOOK_SECRET = config("STG_ORANGE_LABS_WEBHOOK_SECRET", None)
+
+# WhatsApp Cloud API (communications)
+WHATSAPP_ACCESS_TOKEN = config("STG_WHATSAPP_ACCESS_TOKEN", None)
+WHATSAPP_PHONE_NUMBER_ID = config("STG_WHATSAPP_PHONE_NUMBER_ID", None)
+WHATSAPP_APP_SECRET = config("STG_WHATSAPP_APP_SECRET", None)
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = config("STG_WHATSAPP_WEBHOOK_VERIFY_TOKEN", None)
+WHATSAPP_API_VERSION = config("STG_WHATSAPP_API_VERSION", "v23.0")
+WHATSAPP_WABA_ID = config("STG_WHATSAPP_WABA_ID", None)
+WHATSAPP_APP_ID = config("STG_WHATSAPP_APP_ID", None)
+WHATSAPP_TEMPLATE_LANGUAGE = config("STG_WHATSAPP_TEMPLATE_LANGUAGE", "en")
+WHATSAPP_TEMPLATE_CONFIRMED = config(
+    "STG_WHATSAPP_TEMPLATE_CONFIRMED", "appointment_confirmed"
+)
+WHATSAPP_TEMPLATE_CANCELLED = config(
+    "STG_WHATSAPP_TEMPLATE_CANCELLED", "appointment_cancelled"
+)
+WHATSAPP_TEMPLATE_RESCHEDULED = config(
+    "STG_WHATSAPP_TEMPLATE_RESCHEDULED", "appointment_rescheduled"
+)

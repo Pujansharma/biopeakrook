@@ -1,0 +1,49 @@
+meta {
+  name: PATCH Care Team
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseURL}}/centers/{{center_id}}/care-teams/{{care_team_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "Alpha",
+    "is_active": true,
+    "members": [
+      {
+        "associate_id": "{{associate_id}}",
+        "role_id": "{{role_id}}"
+      },
+      {
+        "associate_id": "{{associate_id_2}}",
+        "role_id": "{{role_id_2}}"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Partial update. members present = full replace (still min 2). Omit members to change name or is_active only.
+  Name unique per center, case-insensitive. Member replace uses the same eligibility rules as create, including active roles only (inactive role → 400 "Role is inactive.").
+  No DELETE; deactivate with is_active=false — also soft-deactivates that team's active availability blocks.
+  Reactivate team does not revive those blocks.
+  Auth: bearer {{access_token}}. Set env center_id, care_team_id.
+}

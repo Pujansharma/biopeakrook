@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from accounts.centers.models import Center, CenterOperatingHour, CenterHoliday
+from accounts.centers.models import Center, CenterOperatingHour, CenterClosure
 
 
 @admin.register(Center)
@@ -42,11 +42,11 @@ class CenterOperatingHoursAdmin(admin.ModelAdmin):
     search_fields = ["center__name", "center__id"]
 
 
-@admin.register(CenterHoliday)
-class CenterHolidayAdmin(admin.ModelAdmin):
+@admin.register(CenterClosure)
+class CenterClosureAdmin(admin.ModelAdmin):
     readonly_fields = ["id", "created_at", "updated_at"]
-    list_display = ["id", "center", "date", "created_at"]
+    list_display = ["id", "center", "date", "type", "reason", "created_at"]
     list_select_related = True
     raw_id_fields = ["center"]
-    list_filter = ["is_active"]
-    search_fields = ["center__name", "center__id"]
+    list_filter = ["is_active", "type"]
+    search_fields = ["center__name", "center__id", "reason"]

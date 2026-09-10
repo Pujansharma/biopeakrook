@@ -1,0 +1,35 @@
+meta {
+  name: PATCH Service
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseURL}}/services/{{service_id}}/
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "IR Sauna"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Update catalog service. Rename to an existing name (case-insensitive) → 400.
+  Same name on the same row is allowed. Set env service_id.
+}

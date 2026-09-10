@@ -1,26 +1,53 @@
 vars {
   baseURL: http://localhost:8000
-  phone: +91-9999999990
+  phone: +91-7338766426
+  access_token:
+  refresh_token: 
+  customer_access_token: 
   customer_user_id: 
   checklist_item_id: 
   provider_id: 
   product_id: 
   test_kit_provider_id: 
-  customer_profile_id: 
+  customer_profile_id: 019fb19b-7e6c-7686-b167-dd66ba0515d9
   lead_id: 
   home_center_id: 
-  center_id: 
+  center_id: 019e1543-e779-7356-9426-170a4f829615
+  associate_id: 019e2641-b708-762a-973a-4d193ff6105d
+  role_id: 019e1637-6abd-7093-b24c-9e170bd67ea9
+  room_type_id: 01a03557-d4ae-72a3-87d7-86f0ed623f75
+  equipment_type_id: 01a035af-2065-735c-b28d-9d54ce1d533d
+  room_id: 01a03561-2cd7-762a-ab98-2e5b6dbfbb21
+  equipment_id: 01a035b9-f94e-7226-a771-7117570b64c4
+  closure_id: 
+  associate_block_id: 01a042db-7633-77e5-8899-23eafaf02f7e
+  associate_leave_id: 
+  room_block_id: 
+  room_downtime_id: 
+  equipment_block_id: 
+  equipment_downtime_id: 
+  service_id: 019f5162-bbde-7459-bdbc-0f948369b512
+  care_team_id: 
+  care_team_block_id: 
+  doctor_id: 
+  health_coach_id: 
+  slot_date: 2026-09-05
+  associate_id_2: 
+  role_id_2: 
   diagnostics_address: 12 MG Road, Bengaluru, Karnataka 560001
   diagnostics_request_date: 2026-08-15
   diagnostics_slot_datetime: 2026-08-15T06:00:00
   diagnostics_request_id: 
   diagnostics_test_id: 12345
   diagnostics_idempotency_key: 
+  idempotency_key: {{$uuid}}
+  whatsapp_webhook_verify_token: 
+  whatsapp_hub_signature: 
 }
 vars:secret [
   access_token,
-  refresh_token,
-  customer_access_token,
   otp,
-  orange_webhook_secret
+  orange_webhook_secret,
+  whatsapp_webhook_verify_token,
+  whatsapp_hub_signature
 ]

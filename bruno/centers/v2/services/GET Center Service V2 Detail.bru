@@ -1,0 +1,30 @@
+meta {
+  name: GET Center Service V2 Detail
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/v2/services/{{service_id}}/
+  body: none
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  One assigned service + assignment config for this center.
+
+  Set env service_id (from GET List Center Services V2). Empty service_id → /services// → 404.
+}

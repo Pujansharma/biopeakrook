@@ -1,0 +1,35 @@
+meta {
+  name: GET Equipment Availability
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/availability/equipment/{{equipment_id}}/?start=2026-09-04&granularity=day
+  body: none
+  auth: bearer
+}
+
+params:query {
+  start: 2026-09-04
+  granularity: day
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Equipment calendar (center hours minus blocks/downtimes/closures).
+  Sample start=2026-09-04 aligned with POST Equipment Block One-off date.
+  Omit start → today. Each day includes day_of_week ("0"=Mon … "6"=Sun) and day_of_week_name.
+}

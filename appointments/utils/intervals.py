@@ -1,173 +1,152 @@
-from datetime import datetime, date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-type Interval = tuple[datetime, datetime]
+from appointments.utils.constants import AvailabilityGranularity
 
-IST = ZoneInfo("Asia/Kolkata")
-
-
-def expand_weekly_schedule(
-    day_of_week: str,
-    start_time: time,
-    end_time: time,
-    query_start: date,
-    query_end: date,
-    valid_from: date | None = None,
-    valid_until: date | None = None,
-) -> list[Interval]:
-    """
-    Expand a recurring weekly schedule rule into concrete datetime intervals
-    within the query range.
-
-    day_of_week: '0' (Monday) through '6' (Sunday), matching AppointmentDays.
-    """
-    target_weekday = int(day_of_week)
-    effective_start = max(query_start, valid_from) if valid_from else query_start
-    effective_end = min(query_end, valid_until) if valid_until else query_end
-
-    if effective_start > effective_end:
-        return []
-
-    # Jump to the first matching weekday on or after effective_start
-    days_ahead = (target_weekday - effective_start.weekday()) % 7
-    current = effective_start + timedelta(days=days_ahead)
-
-    intervals: list[Interval] = []
-    while current <= effective_end:
-        intervals.append(
-            (
-                datetime.combine(current, start_time, tzinfo=IST),
-                datetime.combine(current, end_time, tzinfo=IST),
-            )
-        )
-        current += timedelta(days=7)
-
-    return intervals
+UTC = ZoneInfo("UTC")
 
 
-def merge_intervals(intervals: list[Interval]) -> list[Interval]:
-    """
-    Merge overlapping or adjacent intervals into non-overlapping intervals.
-
-    Input:  [(9:00, 12:00), (11:00, 14:00), (15:00, 17:00)]
-    Output: [(9:00, 14:00), (15:00, 17:00)]
-    """
+def merge_intervals(intervals):
     if not intervals:
         return []
-
-    sorted_iv = sorted(intervals)
-    merged = [sorted_iv[0]]
-
-    for start, end in sorted_iv[1:]:
-        prev_start, prev_end = merged[-1]
-        if start <= prev_end:
-            merged[-1] = (prev_start, max(prev_end, end))
+    sorted_intervals = sorted(intervals, key=lambda item: item[0])
+    merged = [sorted_intervals[0]]
+    for interval_start, interval_end in sorted_intervals[1:]:
+        last_start, last_end = merged[-1]
+        if interval_start <= last_end:
+            merged[-1] = (last_start, max(last_end, interval_end))
         else:
-            merged.append((start, end))
-
+            merged.append((interval_start, interval_end))
     return merged
 
 
-def intersect_intervals(
-    a: list[Interval],
-    b: list[Interval],
-) -> list[Interval]:
-    """
-    Compute the intersection of two sorted, non-overlapping interval lists.
-
-    a = [(9:00, 12:00), (13:00, 17:00)]   # Room available
-    b = [(10:00, 15:00)]                    # Associate available
-    → [(10:00, 12:00), (13:00, 15:00)]     # Both available
-    """
-    result: list[Interval] = []
-    i = j = 0
-    while i < len(a) and j < len(b):
-        start = max(a[i][0], b[j][0])
-        end = min(a[i][1], b[j][1])
-        if start < end:
-            result.append((start, end))
-        if a[i][1] < b[j][1]:
-            i += 1
-        else:
-            j += 1
-    return result
+def intersect_intervals(first_intervals, second_intervals):
+    if not first_intervals or not second_intervals:
+        return []
+    first_sorted = sorted(first_intervals, key=lambda item: item[0])
+    second_sorted = sorted(second_intervals, key=lambda item: item[0])
+    results = []
+    second_index = 0
+    second_length = len(second_sorted)
+    for first_start, first_end in first_sorted:
+        while second_index < second_length and second_sorted[second_index][1] <= first_start:
+            second_index += 1
+        scan_index = second_index
+        while scan_index < second_length and second_sorted[scan_index][0] < first_end:
+            second_start, second_end = second_sorted[scan_index]
+            overlap_start = max(first_start, second_start)
+            overlap_end = min(first_end, second_end)
+            if overlap_start < overlap_end:
+                results.append((overlap_start, overlap_end))
+            scan_index += 1
+    return merge_intervals(results)
 
 
-def intersect_many(*interval_lists: list[Interval]) -> list[Interval]:
-    """
-    Intersect multiple interval lists.
+def subtract_intervals(available_intervals, busy_intervals):
+    if not available_intervals:
+        return []
+    if not busy_intervals:
+        return list(available_intervals)
+    busy_merged = merge_intervals(busy_intervals)
+    results = []
+    for available_start, available_end in available_intervals:
+        cursor = available_start
+        for busy_start, busy_end in busy_merged:
+            if busy_end <= cursor:
+                continue
+            if busy_start >= available_end:
+                break
+            if busy_start > cursor:
+                results.append((cursor, min(busy_start, available_end)))
+            cursor = max(cursor, busy_end)
+            if cursor >= available_end:
+                break
+        if cursor < available_end:
+            results.append((cursor, available_end))
+    return results
 
-    Returns the intervals where ALL resources are simultaneously available.
-    Each input list must be sorted and non-overlapping.
-    """
-    if not interval_lists:
+
+def expand_weekly_time_windows(
+    query_start,
+    query_end,
+    day_of_week,
+    start_time,
+    end_time,
+    timezone_name,
+    effective_from=None,
+    effective_until=None,
+):
+    zone = ZoneInfo(timezone_name)
+    target_weekday = int(day_of_week)
+    range_start = query_start
+    range_end = query_end
+    if effective_from and effective_from > range_start:
+        range_start = effective_from
+    if effective_until and effective_until < range_end:
+        range_end = effective_until
+    if range_start > range_end:
         return []
 
-    result = interval_lists[0]
-    for other in interval_lists[1:]:
-        result = intersect_intervals(result, other)
-        if not result:
-            return []
-    return result
+    results = []
+    current_day = range_start
+    while current_day <= range_end:
+        if current_day.weekday() == target_weekday:
+            start_local = datetime.combine(current_day, start_time, tzinfo=zone)
+            end_local = datetime.combine(current_day, end_time, tzinfo=zone)
+            results.append(
+                (start_local.astimezone(UTC), end_local.astimezone(UTC))
+            )
+        current_day += timedelta(days=1)
+    return results
 
 
-def subtract_intervals(
-    available: list[Interval],
-    busy: list[Interval],
-) -> list[Interval]:
-    """
-    Remove busy intervals from available intervals. Both lists must be sorted.
-
-    available = [(9:00, 17:00)]
-    busy = [(11:00, 12:00), (14:00, 15:00)]
-    → [(9:00, 11:00), (12:00, 14:00), (15:00, 17:00)]
-    """
-    result: list[Interval] = []
-    b_idx = 0
-
-    for avail_start, avail_end in available:
-        current = avail_start
-
-        while b_idx < len(busy) and busy[b_idx][1] <= current:
-            b_idx += 1
-
-        bi = b_idx
-        while bi < len(busy) and busy[bi][0] < avail_end:
-            busy_start, busy_end = busy[bi]
-            if busy_start > current:
-                result.append((current, min(busy_start, avail_end)))
-            current = max(current, busy_end)
-            bi += 1
-
-        if current < avail_end:
-            result.append((current, avail_end))
-
-    return result
+def full_day_interval(day_value, timezone_name):
+    zone = ZoneInfo(timezone_name)
+    day_start = datetime.combine(day_value, time.min, tzinfo=zone)
+    day_end = datetime.combine(day_value, time.max, tzinfo=zone)
+    return day_start.astimezone(UTC), day_end.astimezone(UTC)
 
 
-def split_into_slots(
-    intervals: list[Interval],
-    duration_minutes: int,
-    buffer_minutes: int = 0,
-) -> list[Interval]:
-    """
-    Split free intervals into fixed-duration bookable slots.
+def clip_intervals_to_range(intervals, range_start, range_end):
+    clipped = []
+    for interval_start, interval_end in intervals:
+        overlap_start = max(interval_start, range_start)
+        overlap_end = min(interval_end, range_end)
+        if overlap_start < overlap_end:
+            clipped.append((overlap_start, overlap_end))
+    return clipped
 
-    intervals = [(9:00, 12:00)]
-    duration = 30 min, buffer = 10 min
-    → [(9:00, 9:30), (9:40, 10:10), (10:20, 10:50), (11:00, 11:30)]
 
-    Buffer time is added AFTER each slot to prevent back-to-back bookings.
-    The last slot in an interval doesn't need trailing buffer space.
-    """
-    slots: list[Interval] = []
-    duration = timedelta(minutes=duration_minutes)
-    step = timedelta(minutes=duration_minutes + buffer_minutes)
+def resolve_query_date_range(start_date, granularity):
+    if granularity == AvailabilityGranularity.WEEK:
+        week_start = start_date - timedelta(days=start_date.weekday())
+        return week_start, week_start + timedelta(days=6)
+    if granularity == AvailabilityGranularity.MONTH:
+        month_start = start_date.replace(day=1)
+        if start_date.month == 12:
+            next_month = date(start_date.year + 1, 1, 1)
+        else:
+            next_month = date(start_date.year, start_date.month + 1, 1)
+        return month_start, next_month - timedelta(days=1)
+    return start_date, start_date
 
-    for start, end in intervals:
-        slot_start = start
-        while slot_start + duration <= end:
-            slots.append((slot_start, slot_start + duration))
-            slot_start += step
 
-    return slots
+def datetime_range_for_dates(query_start, query_end, timezone_name):
+    zone = ZoneInfo(timezone_name)
+    range_start = datetime.combine(query_start, time.min, tzinfo=zone).astimezone(UTC)
+    range_end = datetime.combine(query_end, time.max, tzinfo=zone).astimezone(UTC)
+    return range_start, range_end
+
+
+def split_into_slots(free_windows, duration_minutes, step_minutes):
+    if not free_windows or duration_minutes <= 0 or step_minutes <= 0:
+        return []
+    duration_delta = timedelta(minutes=duration_minutes)
+    step_delta = timedelta(minutes=step_minutes)
+    slots = []
+    for window_start, window_end in free_windows:
+        cursor = window_start
+        while cursor + duration_delta <= window_end:
+            slots.append((cursor, cursor + duration_delta))
+            cursor += step_delta
+    return sorted(slots, key=lambda item: item[0])

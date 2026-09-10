@@ -1,0 +1,34 @@
+meta {
+  name: GET List Equipment Types
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipment-types/?page=1&limit=10&search=
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  search: 
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List equipment types. Fields include description. portability: fixed | portable. Query: optional active=0|1 (omit = active + inactive).
+}

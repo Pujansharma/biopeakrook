@@ -1,0 +1,45 @@
+meta {
+  name: POST Create Equipment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipments/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "DEXA-001",
+    "equipment_type_id": "{{equipment_type_id}}",
+    "serial_number": "SN-001",
+    "setup_time": 5,
+    "cooldown_time": 5,
+    "requires_technician": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create equipment. Set env equipment_type_id first.
+  Optional: serial_number, setup_time, cooldown_time, requires_technician.
+  room_id optional; omit. Map equipment to room via room POST/PATCH.
+  Do not send operational_status on create; default is operational. Use PATCH to change.
+  Do not send code; server generates EQ-{center_code}-{seq} (e.g. EQ-CT-0001-0001).
+  equipment_type_id and room_id must be active for this center; inactive → 400.
+}

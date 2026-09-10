@@ -1,0 +1,121 @@
+meta {
+  name: POST Find Slots
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/slots/
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "customer_profile_id": "{{customer_profile_id}}",
+    "service_id": "{{service_id}}",
+    "modality": "in_person",
+    "date": "{{slot_date}}",
+    "preferred": {
+      "room_id": "{{room_id}}",
+      "care_team_id": "{{care_team_id}}",
+      "doctor_id": "{{doctor_id}}",
+      "health_coach_id": "{{health_coach_id}}"
+    }
+  }
+}
+
+script:pre-request {
+  const token =
+    bru.getEnvVar('access_token') ||
+    bru.getCollectionVar('access_token') ||
+    bru.getVar('access_token') ||
+    '';
+  if (!token) {
+    throw new Error('access_token missing — run Auth → Login Phone Direct (Development env)');
+  }
+  req.setHeader('Authorization', `Bearer ${token}`);
+
+  const centerId = (bru.getEnvVar('center_id') || '').trim();
+  const baseURL = (bru.getEnvVar('baseURL') || 'http://localhost:8000').replace(/\/$/, '');
+  if (!centerId) {
+    throw new Error('center_id missing — set Development env center_id');
+  }
+  req.setUrl(`${baseURL}/centers/${centerId}/appointments/slots/`);
+
+  let body = req.getBody();
+  if (typeof body === 'string') {
+    body = JSON.parse(body);
+  }
+  body = body || {};
+
+  const customerProfileId = (bru.getEnvVar('customer_profile_id') || '').trim();
+  const serviceId = (bru.getEnvVar('service_id') || '').trim();
+  if (customerProfileId) body.customer_profile_id = customerProfileId;
+  if (serviceId) body.service_id = serviceId;
+  const slotDate = (bru.getEnvVar('slot_date') || '').trim();
+  if (slotDate) body.date = slotDate;
+
+  const preferred = body.preferred || {};
+  const cleanedPreferred = {};
+  const preferredKeys = ['room_id', 'care_team_id', 'doctor_id', 'health_coach_id'];
+  for (const key of preferredKeys) {
+    const value = String(preferred[key] || '').trim();
+    if (value) cleanedPreferred[key] = value;
+  }
+  if (Object.keys(cleanedPreferred).length) {
+    body.preferred = cleanedPreferred;
+  } else {
+    delete body.preferred;
+  }
+  req.setBody(body);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  POST /centers/{{center_id}}/appointments/slots/
+  Auth: pre-request sets Authorization from env/collection access_token (auth none — avoids empty Bearer). Run Login Phone Direct first.
+
+  Required body:
+  - customer_profile_id — UUID, active profile assigned to this center
+  - service_id — UUID, active service assigned to this center
+  - modality — virtual | in_person (not both)
+  - date — YYYY-MM-DD (env slot_date)
+
+  Staff: derived from active CenterServiceRoleRequirement on the center assignment
+  (auto-pick free associate per role). Optional preferred care_team_id / doctor_id /
+  health_coach_id bias pools or add extras. Room-only preferred OK when roles exist.
+  Zero roles + no preferred staff → no slots (soft-skip).
+
+  Optional preferred (omit empty UUIDs — pre-request strips blanks so they are not sent as ""):
+  - room_id — optional with either person or care-team pref; required for in_person if service has no room type
+  - care_team_id XOR doctor_id / health_coach_id
+  - doctor_id, health_coach_id — preferred people (may combine with each other and room_id)
+
+  Alternate payloads (edit body; leave unused preferred keys empty in env):
+  1) in_person + room only (default Development) — needs service role requirements:
+     {customer_profile_id, service_id, modality: in_person, date, preferred: {room_id}}
+  2) care team (+ optional room):
+     preferred: {care_team_id, room_id?}
+  3) doctor / coach (+ optional room):
+     preferred: {doctor_id?, health_coach_id?, room_id?}
+  4) virtual (no room):
+     {modality: virtual, preferred: {care_team_id} or {doctor_id, health_coach_id}}
+     (or omit preferred staff if service has role requirements)
+
+  Response data: {date, timezone, duration_minutes, buffer_before_minutes, buffer_after_minutes, slots[], truncated}.
+  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id} — one pinned combo per start/end; associates always non-empty. Cap 200/day.
+  Load-balance: fewest busy appts that day, then created_at/code/pk. Room equipment = first active on room.
+  in_person always needs a room (preferred or service room type). Else 400 "A room is required for in-person appointments."
+  Customer busy is global across centers.
+  customer_profile_id / service_id must be active at this center. Missing, inactive, or other-center → 400 "Invalid customer profile for this center." / "Invalid service for this center."
+  care_team_id + doctor_id/health_coach_id → 400 "care_team_id cannot be combined with doctor_id or health_coach_id."
+}

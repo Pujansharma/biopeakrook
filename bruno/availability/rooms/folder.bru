@@ -1,0 +1,15 @@
+meta {
+  name: rooms
+  type: folder
+  seq: 5
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Room blocks and downtimes. Resource id in URL.
+  Blocks: one-off (date + times) or recurring (days_of_week → one row per day). GET list then PATCH each id to drop a series. Downtime: one-off only.
+  Env: room_id, room_block_id, room_downtime_id.
+}

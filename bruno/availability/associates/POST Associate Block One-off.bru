@@ -1,0 +1,40 @@
+meta {
+  name: POST Associate Block One-off
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/availability/associates/{{associate_id}}/blocks/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  content-type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "is_recurring": false,
+    "start_datetime": "2026-09-01T10:00:00+05:30",
+    "end_datetime": "2026-09-01T12:00:00+05:30",
+    "reason": "Internal meeting"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  One-off associate block. Associate from URL. No days_of_week.
+  POST 201 {detail, data}. data = array of created rows. Set associate_block_id from data[0].id for PATCH.
+  Rejects overlap with existing active blocks/leaves.
+}

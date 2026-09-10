@@ -1,0 +1,39 @@
+meta {
+  name: POST Create Equipment Type
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/v2/equipment-types/
+  body: json
+  auth: bearer
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "name": "DEXA",
+    "description": "Whole-body composition scanner",
+    "portability": "fixed"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Create equipment type. Unique name per center.
+  description optional (string, default empty).
+  portability: fixed or portable (default fixed).
+}

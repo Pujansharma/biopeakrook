@@ -1,0 +1,22 @@
+meta {
+  name: v2
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  Center inventory + service config v2. No DELETE — PATCH is_active=false.
+  List GET omit active → both active and inactive. Optional active=0|1 to filter.
+
+  Folders:
+  - room-types
+  - rooms (optional equipment_ids on create)
+  - equipment-types
+  - equipments (operational_status: operational | maintenance | downtime)
+  - services (assignment duration/buffers/modality/resources)
+
+  Associates: X-Center-ID must match URL center_id.
+  Env: center_id, room_type_id, equipment_type_id, room_id, equipment_id, service_id.
+}

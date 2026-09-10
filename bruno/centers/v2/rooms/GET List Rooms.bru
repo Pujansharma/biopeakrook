@@ -1,0 +1,40 @@
+meta {
+  name: GET List Rooms
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/centers/{{center_id}}/v2/rooms/?page=1&limit=10
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 10
+  search:
+  type_active:
+  ~room_type_id: {{room_type_id}}
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  List rooms. Nested room_type.
+  Query: page, limit, search, optional active=0|1 (omit = active + inactive).
+  type_active=0|1 (1 = attached type and type.is_active; 0 = type null or inactive type; omit = no type-active filter).
+  Separate from room active=. Optional room_type_id UUID filter disabled by default — enable to filter.
+  Omit / blank room_type_id = no type-id filter. Junk UUID → 400.
+}
