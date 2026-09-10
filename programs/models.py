@@ -90,6 +90,11 @@ class ProgramService(BaseUUIDModel):
     reports_count = models.PositiveBigIntegerField(default=0, editable=False)
     raw_data_count = models.PositiveBigIntegerField(default=0, editable=False)
 
+    fetch_count = models.PositiveBigIntegerField(default=0, editable=False)
+    fetch_results_count = models.PositiveBigIntegerField(default=0, editable=False)
+    fetch_documents_count = models.PositiveBigIntegerField(default=0, editable=False)
+    fetch_pending_count = models.PositiveBigIntegerField(default=0, editable=False)
+
     class Meta:
         ordering = ["-created_at"]
 
