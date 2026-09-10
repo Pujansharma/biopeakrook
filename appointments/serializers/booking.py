@@ -1,5 +1,7 @@
+import functools
 from datetime import timedelta
 
+from django.db import Error as DatabaseError
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -19,6 +21,10 @@ from appointments.utils.constants import (
     AppointmentStatus,
     ExceptionResolution,
 )
+from appointments.utils.emails import (
+    build_appointment_confirmed_notes,
+    build_appointment_rescheduled_notes,
+)
 from appointments.utils.exceptions import (
     detect_exceptions_for_appointment,
     resolve_exceptions_for_appointment,
@@ -34,7 +40,13 @@ from appointments.utils.transitions import (
     validate_transition,
 )
 from core.utils.constants import AppointmentModes
+from core.utils.log import logger
 from core.utils.serializers import BaseSerializer
+from integrations.google_calendar.google_sync import (
+    sync_cancelled_appointment_with_google,
+    sync_new_appointment_with_google,
+    sync_rescheduled_appointment_with_google,
+)
 from integrations.communications import (
     schedule_queue_appointment_cancelled,
     schedule_queue_appointment_confirmed,
@@ -162,6 +174,7 @@ def create_appointment_record(
         room=room,
         equipment=equipment,
         care_team=care_team,
+        notes=validated_data.get("notes"),
         created_by=actor,
     )
     create_appointment_associates(
@@ -172,6 +185,72 @@ def create_appointment_record(
     )
     create_audit_log(appointment, actor, AppointmentAuditAction.CREATE)
     return appointment
+
+
+def sync_new_appointment_and_save(
+    appointment,
+    customer_profile,
+    modality,
+    start,
+    end,
+    notes,
+    associates_payload,
+):
+    google_event_id, google_meet_link = sync_new_appointment_with_google(
+        customer_profile=customer_profile,
+        modality=modality,
+        start=start,
+        end=end,
+        notes=build_appointment_confirmed_notes(appointment, notes),
+        associates_payload=associates_payload,
+    )
+    if google_event_id:
+        appointment.google_event_id = google_event_id
+        appointment.google_meet_link = google_meet_link
+        try:
+            appointment.save(
+                update_fields=["google_event_id", "google_meet_link", "updated_at"]
+            )
+        except DatabaseError as error:
+            logger.warning(
+                f"Failed to persist google_event_id for appointment "
+                f"{appointment.pk} after it was created in Google Calendar: {error}"
+            )
+
+
+def sync_rescheduled_appointment_and_save(
+    instance,
+    customer_profile,
+    modality,
+    start,
+    end,
+    notes,
+    associates_payload,
+):
+    google_event_id, google_meet_link = sync_rescheduled_appointment_with_google(
+        instance,
+        customer_profile=customer_profile,
+        modality=modality,
+        start=start,
+        end=end,
+        notes=build_appointment_rescheduled_notes(instance, notes),
+        associates_payload=associates_payload,
+    )
+    if (google_event_id, google_meet_link) != (
+        instance.google_event_id,
+        instance.google_meet_link,
+    ):
+        instance.google_event_id = google_event_id
+        instance.google_meet_link = google_meet_link
+        try:
+            instance.save(
+                update_fields=["google_event_id", "google_meet_link", "updated_at"]
+            )
+        except DatabaseError as error:
+            logger.warning(
+                f"Failed to persist google_event_id for appointment "
+                f"{instance.pk} after syncing it with Google Calendar: {error}"
+            )
 
 
 class AppointmentPreferredSerializer(BaseSerializer):
@@ -251,6 +330,7 @@ class AppointmentBookSerializer(BaseSerializer):
     associates = AppointmentAssociateInputSerializer(many=True, required=False)
     room_id = serializers.UUIDField(required=False, allow_null=True)
     equipment_id = serializers.UUIDField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def validate_modality(self, value):
         if value == AppointmentModes.BOTH:
@@ -334,6 +414,18 @@ class AppointmentBookSerializer(BaseSerializer):
                     appointment=appointment,
                     expires_at=timezone.now() + timedelta(hours=IDEMPOTENCY_TTL_HOURS),
                 )
+            transaction.on_commit(
+                functools.partial(
+                    sync_new_appointment_and_save,
+                    appointment=appointment,
+                    customer_profile=validated_data["customer_profile"],
+                    modality=validated_data["modality"],
+                    start=validated_data["start"],
+                    end=validated_data["end"],
+                    notes=validated_data.get("notes"),
+                    associates_payload=associates_payload,
+                )
+            )
             schedule_queue_appointment_confirmed(appointment)
         return appointment
 
@@ -402,6 +494,8 @@ class AppointmentListSerializer(BaseSerializer):
     )
     room = AppointmentRoomNestedSerializer(allow_null=True)
     equipment = AppointmentEquipmentNestedSerializer(allow_null=True)
+    notes = serializers.CharField(allow_null=True)
+    google_meet_link = serializers.URLField(allow_null=True)
 
 
 class AppointmentDetailSerializer(AppointmentListSerializer):
@@ -460,6 +554,9 @@ class AppointmentCancelSerializer(BaseSerializer):
                 AppointmentAuditAction.CANCEL,
                 note=instance.cancel_reason,
             )
+            transaction.on_commit(
+                functools.partial(sync_cancelled_appointment_with_google, instance)
+            )
             schedule_queue_appointment_cancelled(instance)
         return instance
 
@@ -493,6 +590,14 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         attrs = super().validate(attrs)
         appointment = self.context["appointment"]
         validate_transition(appointment.status, "reschedule")
+        if attrs["customer_profile"].pk != appointment.customer_profile.pk:
+            raise serializers.ValidationError(
+                {"customer_profile_id": ["Cannot change the customer on a reschedule."]}
+            )
+        if attrs["service"].pk != appointment.service.pk:
+            raise serializers.ValidationError(
+                {"service_id": ["Cannot change the service on a reschedule."]}
+            )
         return attrs
 
     def update(self, instance, validated_data):
@@ -508,6 +613,9 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         validated_data.pop("equipment_id", None)
         validated_data.pop("customer_profile_id", None)
         validated_data.pop("service_id", None)
+        notes = validated_data.pop("notes", None)
+        if notes is None:
+            notes = instance.notes
         buffer_before = assignment.buffer_before
         buffer_after = assignment.buffer_after
         exclusive_start, exclusive_end = compute_exclusive_bounds(
@@ -537,6 +645,7 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
             instance.room = room
             instance.equipment = equipment
             instance.care_team = care_team
+            instance.notes = notes
             instance.status = AppointmentStatus.CONFIRMED
             instance.is_late = False
             instance.late_by = None
@@ -553,6 +662,18 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
                 instance,
                 actor,
                 AppointmentAuditAction.RESCHEDULE,
+            )
+            transaction.on_commit(
+                functools.partial(
+                    sync_rescheduled_appointment_and_save,
+                    instance=instance,
+                    customer_profile=validated_data["customer_profile"],
+                    modality=validated_data["modality"],
+                    start=validated_data["start"],
+                    end=validated_data["end"],
+                    notes=notes,
+                    associates_payload=associates_payload,
+                )
             )
             schedule_queue_appointment_rescheduled(
                 instance,

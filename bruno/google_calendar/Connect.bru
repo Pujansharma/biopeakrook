@@ -1,0 +1,47 @@
+meta {
+  name: Connect
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/google-calendar/connect/
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Returns Google's consent-screen URL as JSON ({"data": {"auth_url": "..."}}).
+  The frontend navigates the browser there itself.
+
+  No body needed — this no longer names which associate is connecting, and
+  there's no `state` param either; identity is worked out later in
+  /complete/ from the connected Google account's own email (matched against
+  Associate.user.email). Whichever Google account the staff member actually
+  signs into on the consent screen decides who gets connected — not
+  whoever called /connect/.
+
+  Method: POST
+  Path: /google-calendar/connect/
+  Source: integrations.google_calendar.views.GoogleCalendarConnectView
+  Auth: None — authentication_classes = [] (this view never reads request.user; identity is resolved in /complete/ instead, see above, so IsAssociateUser can't come back here without also removing authentication_classes = []).
+
+  Manual end-to-end flow (no real frontend running locally):
+  1. Run this request. Copy data.auth_url from the response.
+  2. Paste auth_url into a real browser, signed in as the Google account
+     you want to connect. Approve consent.
+  3. Google redirects to DEV_GOOGLE_REDIRECT_URI, which itself redirects to
+     ADMIN_FRONTEND_URL/#code=... (a URL fragment, not a query string — still
+     visible in the address bar). The page itself may 404 (no frontend
+     needed) — just copy `code` out of the address bar.
+  4. Paste it into this environment's google_oauth_code var, then run
+     Complete.bru.
+}

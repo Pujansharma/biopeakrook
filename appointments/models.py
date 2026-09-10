@@ -426,6 +426,11 @@ class Appointment(BaseUUIDModel):
         blank=True,
         related_name="booked_appointments",
     )
+    notes = models.TextField(null=True, blank=True)
+    google_event_id = models.CharField(
+        max_length=255, null=True, blank=True, unique=True
+    )
+    google_meet_link = models.URLField(null=True, blank=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
