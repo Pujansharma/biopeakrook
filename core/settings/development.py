@@ -59,7 +59,7 @@ MAILERS = {
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = [*default_headers, "x-center-id"]
+CORS_ALLOW_HEADERS = [*default_headers, "x-center-id", "idempotency-key"]
 
 PASSWORD_BASE_URL = config("DEV_PASSWORD_BASE_URL", "")
 

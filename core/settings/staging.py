@@ -1,3 +1,5 @@
+from corsheaders.defaults import default_headers
+
 from core.settings.base import *
 
 DEBUG = False
@@ -91,6 +93,7 @@ LOGGING = {
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = [*default_headers, "x-center-id", "idempotency-key"]
 
 # Other
 
