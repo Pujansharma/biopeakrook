@@ -17,6 +17,7 @@ from programs.composites.utils.db import (
 from programs.models import ProgramService, TherapyProgramService
 from programs.program_services.utils.db import (
     update_program_service_document_counts,
+    update_program_service_fetch_counts,
     update_program_service_results_count,
     update_result_documents_count,
 )
@@ -223,6 +224,7 @@ class AssessmentServiceResultRequestSerializer(BaseModelSerializer):
         validated_data["created_by"] = created_by
 
         result_request = super().create(validated_data)
+        update_program_service_fetch_counts(program_service.pk)
         start_result_request_task(result_request)
         return result_request
 
@@ -301,6 +303,7 @@ class ResultRequestRefetchSerializer(BaseModelSerializer):
             )
             update_program_service_results_count(program_service.pk)
             update_program_service_document_counts(program_service.pk)
+            update_program_service_fetch_counts(program_service.pk)
             update_composite_program_results_count(program_service.program.pk)
             update_composite_program_document_counts(program_service.program.pk)
 
@@ -346,6 +349,7 @@ class ResultRequestCancelSerializer(BaseModelSerializer):
 
         result_request.status = ResultRequestStatus.CANCELLED
         result_request.save(update_fields=["status", "updated_at"])
+        update_program_service_fetch_counts(result_request.program_service.pk)
         return result_request
 
 
@@ -558,6 +562,7 @@ class AssessmentServiceDocumentSerializer(
             service_document = super().create(validated_data)
             update_result_documents_count(current_service_result.pk)
             update_program_service_document_counts(program_service.pk)
+            update_program_service_fetch_counts(program_service.pk)
             update_composite_program_document_counts(
                 program_service.program.pk
             )
@@ -647,6 +652,10 @@ class AssessmentProgramServiceSerializer(BaseModelSerializer):
             "documents_count",
             "reports_count",
             "raw_data_count",
+            "fetch_count",
+            "fetch_results_count",
+            "fetch_documents_count",
+            "fetch_pending_count",
             "created_date",
             "created_by",
             "is_active",
@@ -664,6 +673,10 @@ class AssessmentProgramServiceSerializer(BaseModelSerializer):
             "documents_count",
             "reports_count",
             "raw_data_count",
+            "fetch_count",
+            "fetch_results_count",
+            "fetch_documents_count",
+            "fetch_pending_count",
             "created_date",
             "is_active",
             "created_at",

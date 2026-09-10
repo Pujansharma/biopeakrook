@@ -5,6 +5,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.utils.log import logger
+from programs.program_services.utils.db import update_program_service_fetch_counts
 from programs.program_services.utils.results import get_result_fetch_handler
 from programs.services.models import ResultRequest
 from programs.services.utils.constants import ResultRequestStatus
@@ -59,6 +60,7 @@ def handle_result_request(result_request):
     if not handler:
         error_message = "Result fetching is not supported for this product."
         mark_result_request_failed(result_request.pk, error_message)
+        update_program_service_fetch_counts(result_request.program_service.pk)
         logger.error(
             f"Result request failed: result_request_id={result_request.pk} "
             f"error={error_message}"
@@ -77,6 +79,7 @@ def handle_result_request(result_request):
         f"product_callback={product_callback}"
     )
     handler(result_request, provider_api_data)
+    update_program_service_fetch_counts(result_request.program_service.pk)
     logger.info(
         f"Result request handler ended: result_request_id={result_request.pk} "
         f"provider_callback={provider_callback} "
@@ -125,6 +128,9 @@ class ResultRequestThread(threading.Thread):
                 mark_result_request_failed(
                     result_request.pk,
                     "An internal error occurred while fetching this result.",
+                )
+                update_program_service_fetch_counts(
+                    result_request.program_service.pk
                 )
                 logger.info(
                     f"Result request flow ended: "
