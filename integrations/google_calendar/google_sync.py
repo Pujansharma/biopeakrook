@@ -1,13 +1,16 @@
-from datetime import datetime
-
 import requests
 from cryptography.fernet import InvalidToken
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.db import Error as DatabaseError
 
 from accounts.associates.models import Associate
-from accounts.customers.models import CustomerProfile
 from appointments.models import Appointment
+from appointments.utils.constants import AppointmentStatus
+from appointments.utils.emails import (
+    build_appointment_confirmed_notes,
+    build_appointment_rescheduled_notes,
+)
 from core.utils.constants import AppointmentModes
 from core.utils.log import logger
 from integrations.google_calendar import calendar_api
@@ -16,14 +19,24 @@ from integrations.google_calendar.tokens import get_valid_access_token
 GOOGLE_SYNC_ERRORS = (
     requests.RequestException, ValueError, InvalidToken, ImproperlyConfigured,
 )
-GOOGLE_CALENDAR_ID = getattr(settings, "GOOGLE_CALENDAR_ID", None)
+GOOGLE_EVENT_ID_CONFLICT = 409
+STALE_GOOGLE_EVENT_STATUSES = (404, 410)
+
+
+def is_google_calendar_configured():
+    return bool(getattr(settings, "GOOGLE_CALENDAR_ID", None))
+
+
+def google_calendar_event_id(appointment):
+    return appointment.pk.hex
 
 
 def get_fixed_calendar_organizer():
-    if not GOOGLE_CALENDAR_ID:
+    calendar_id = getattr(settings, "GOOGLE_CALENDAR_ID", None)
+    if not calendar_id:
         return None
     organizer = Associate.objects.filter(
-        google_email__iexact=GOOGLE_CALENDAR_ID, is_active=True, user__is_active=True
+        google_email__iexact=calendar_id, is_active=True, user__is_active=True
     ).first()
     if organizer is None or not organizer.google_refresh_token:
         return None
@@ -65,165 +78,193 @@ def build_attendee_emails(
     return emails
 
 
-def resolve_associates_from_payload(associates_payload: list[dict] | None):
-    if not associates_payload:
-        return []
-    associate_ids = [entry["associate_id"] for entry in associates_payload]
-    return list(Associate.objects.filter(pk__in=associate_ids).select_related("user"))
-
-
-def sync_new_appointment_with_google(
-    customer_profile: CustomerProfile,
-    modality: str,
-    start: datetime,
-    end: datetime,
-    notes: str | None,
-    associates_payload: list[dict] | None,
-):
-    organizer = get_fixed_calendar_organizer()
-    if organizer is None:
-        logger.error(
-            "Google Calendar organizer is disconnected; cannot create an "
-            "event for this appointment. The appointment will have no "
-            "Google Calendar sync."
+def load_appointment_for_google_sync(appointment_id):
+    return (
+        Appointment.objects.select_related(
+            "customer_profile__customer",
+            "service",
+            "center",
         )
-        return None, None
-    associates = resolve_associates_from_payload(associates_payload)
-    try:
-        access_token = get_valid_access_token(organizer)
-        event = calendar_api.insert_event(
-            access_token,
-            title=f"Appointment Confirmed",
-            start=start,
-            end=end,
-            location=None,
-            notes=notes,
-            need_meet_link=modality == AppointmentModes.VIRTUAL,
-            participant_emails=build_attendee_emails(
-                customer_profile.customer.contact_email, associates, organizer
-            ),
-        )
-    except GOOGLE_SYNC_ERRORS as error:
-        reason = describe_google_error(error)
-        logger.warning(f"Google Calendar insert_event failed during booking: {reason}")
-        return None, None
-    return event["id"], calendar_api.extract_meet_link(event)
-
-
-def sync_rescheduled_appointment_with_google(
-    instance: Appointment,
-    customer_profile: CustomerProfile,
-    modality: str,
-    start: datetime,
-    end: datetime,
-    notes: str | None,
-    associates_payload: list[dict] | None,
-):
-    organizer = get_fixed_calendar_organizer()
-    if organizer is None:
-        logger.error(
-            f"Google Calendar organizer is disconnected; cannot sync the "
-            f"reschedule for appointment {instance.pk}. Its Google Calendar "
-            f"event, if any, will be stale."
-        )
-        return instance.google_event_id, instance.google_meet_link
-    associates = resolve_associates_from_payload(associates_payload)
-
-    title = f"Appointment Rescheduled"
-    location = None
-    attendee_emails = build_attendee_emails(
-        customer_profile.customer.contact_email, associates, organizer
+        .prefetch_related("associate_links__associate__user")
+        .filter(pk=appointment_id)
+        .first()
     )
-    # Reuse the existing Meet link if there is one patch_event() only
-    # rotates it when add_meet_link=True, and rotating strands anyone
-    # holding the old link. Only add a fresh one if the appointment doesn't
-    # have one yet and the (possibly just-changed) modality is virtual. If
-    # the modality moved away from virtual, drop the Meet link instead.
+
+
+def appointment_has_reschedule_history(appointment):
+    return appointment.history_entries.exists()
+
+
+def google_event_title(has_reschedule_history):
+    if has_reschedule_history:
+        return "Appointment Rescheduled"
+    return "Appointment Confirmed"
+
+
+def google_event_notes(appointment, has_reschedule_history):
+    if has_reschedule_history:
+        return build_appointment_rescheduled_notes(appointment, appointment.notes)
+    return build_appointment_confirmed_notes(appointment, appointment.notes)
+
+
+def associates_for_appointment(appointment):
+    return [
+        link.associate
+        for link in appointment.associate_links.all()
+        if link.associate is not None
+    ]
+
+
+def persist_google_event(appointment, event_id, meet_link):
+    if (
+        appointment.google_event_id == event_id
+        and appointment.google_meet_link == meet_link
+    ):
+        return
+    appointment.google_event_id = event_id
+    appointment.google_meet_link = meet_link
+    try:
+        appointment.save(
+            update_fields=["google_event_id", "google_meet_link", "updated_at"]
+        )
+    except DatabaseError as error:
+        logger.warning(
+            f"Failed to persist google_event_id for appointment "
+            f"{appointment.pk} after Google Calendar sync: {error}"
+        )
+        raise ValueError(
+            f"Failed to persist google_event_id for appointment {appointment.pk}"
+        ) from error
+
+
+def is_stale_google_event_error(error):
+    response = getattr(error, "response", None)
+    return (
+        response is not None
+        and response.status_code in STALE_GOOGLE_EVENT_STATUSES
+    )
+
+
+def is_google_event_conflict_error(error):
+    response = getattr(error, "response", None)
+    return response is not None and response.status_code == GOOGLE_EVENT_ID_CONFLICT
+
+
+def delete_google_event(appointment, organizer, access_token):
+    event_id = appointment.google_event_id or google_calendar_event_id(appointment)
+    associates = associates_for_appointment(appointment)
+    calendar_api.delete_event(
+        access_token,
+        event_id,
+        participant_emails=build_attendee_emails(
+            appointment.customer_profile.customer.contact_email,
+            associates,
+            organizer,
+        ),
+    )
+
+
+def upsert_google_event(appointment, organizer, access_token):
+    associates = associates_for_appointment(appointment)
+    has_reschedule_history = appointment_has_reschedule_history(appointment)
+    title = google_event_title(has_reschedule_history)
+    notes = google_event_notes(appointment, has_reschedule_history)
+    attendee_emails = build_attendee_emails(
+        appointment.customer_profile.customer.contact_email,
+        associates,
+        organizer,
+    )
+    deterministic_id = google_calendar_event_id(appointment)
     needs_new_meet_link = (
-        modality == AppointmentModes.VIRTUAL and not instance.google_meet_link
+        appointment.modality == AppointmentModes.VIRTUAL
+        and not appointment.google_meet_link
     )
     needs_clear_meet_link = (
-        modality != AppointmentModes.VIRTUAL and bool(instance.google_meet_link)
+        appointment.modality != AppointmentModes.VIRTUAL
+        and bool(appointment.google_meet_link)
     )
-    needs_insert = not instance.google_event_id
-    try:
-        access_token = get_valid_access_token(organizer)
-        if not needs_insert:
-            try:
-                event = calendar_api.patch_event(
-                    access_token,
-                    instance.google_event_id,
-                    title=title,
-                    start=start,
-                    end=end,
-                    location=location,
-                    notes=notes,
-                    add_meet_link=needs_new_meet_link,
-                    clear_meet_link=needs_clear_meet_link,
-                    participant_emails=attendee_emails,
-                )
-            except requests.HTTPError as error:
-                stale_event = (
-                    error.response is not None
-                    and error.response.status_code in (404, 410)
-                )
-                if not stale_event:
-                    raise
-                # The event is gone from this organizer's calendar (e.g. the
-                # assigned associates changed since it was created) - mirror
-                # it fresh instead of failing the whole reschedule.
-                needs_insert = True
-        if needs_insert:
-            event = calendar_api.insert_event(
+    stored_event_id = appointment.google_event_id
+    if stored_event_id:
+        try:
+            event = calendar_api.patch_event(
                 access_token,
+                stored_event_id,
                 title=title,
-                start=start,
-                end=end,
-                location=location,
+                start=appointment.start_datetime,
+                end=appointment.end_datetime,
+                location=None,
                 notes=notes,
-                need_meet_link=modality == AppointmentModes.VIRTUAL,
+                add_meet_link=needs_new_meet_link,
+                clear_meet_link=needs_clear_meet_link,
                 participant_emails=attendee_emails,
             )
-    except GOOGLE_SYNC_ERRORS as error:
-        reason = describe_google_error(error)
-        logger.warning(
-            f"Google Calendar sync failed for appointment {instance.pk} reschedule: {reason}"
+            persist_google_event(
+                appointment, event["id"], calendar_api.extract_meet_link(event)
+            )
+            return
+        except requests.HTTPError as error:
+            if not is_stale_google_event_error(error):
+                raise
+    try:
+        event = calendar_api.insert_event(
+            access_token,
+            title=title,
+            start=appointment.start_datetime,
+            end=appointment.end_datetime,
+            location=None,
+            notes=notes,
+            need_meet_link=appointment.modality == AppointmentModes.VIRTUAL,
+            participant_emails=attendee_emails,
+            event_id=deterministic_id,
         )
-        return instance.google_event_id, instance.google_meet_link
-    return event["id"], calendar_api.extract_meet_link(event)
+    except requests.HTTPError as error:
+        if not is_google_event_conflict_error(error):
+            raise
+        event = calendar_api.get_event(access_token, deterministic_id)
+        event = calendar_api.patch_event(
+            access_token,
+            event["id"],
+            title=title,
+            start=appointment.start_datetime,
+            end=appointment.end_datetime,
+            location=None,
+            notes=notes,
+            add_meet_link=needs_new_meet_link,
+            clear_meet_link=needs_clear_meet_link,
+            participant_emails=attendee_emails,
+        )
+    persist_google_event(
+        appointment, event["id"], calendar_api.extract_meet_link(event)
+    )
 
 
-def sync_cancelled_appointment_with_google(instance: Appointment):
-    if not instance.google_event_id:
-        return False
+def apply_google_desired_state(appointment):
     organizer = get_fixed_calendar_organizer()
     if organizer is None:
         logger.error(
-            f"Google Calendar organizer is disconnected; cannot delete event "
-            f"{instance.google_event_id} for cancelled appointment {instance.pk}. "
-            f"The Google event may still exist even though the appointment is "
-            f"cancelled."
+            f"Google Calendar organizer is disconnected; cannot sync "
+            f"appointment {appointment.pk}."
         )
-        return False
-    associates = [
-        link.associate
-        for link in instance.associate_links.select_related("associate__user")
-    ]
-    try:
-        access_token = get_valid_access_token(organizer)
-        calendar_api.delete_event(
-            access_token,
-            instance.google_event_id,
-            participant_emails=build_attendee_emails(
-                instance.customer_profile.customer.contact_email, associates, organizer
-            ),
-        )
-    except GOOGLE_SYNC_ERRORS as error:
-        reason = describe_google_error(error)
-        logger.error(
-            f"Google Calendar delete_event failed for appointment {instance.pk}: "
-            f"{reason}. The Google event may still exist even though the "
-            f"appointment is cancelled."
-        )
-        return False
-    return True
+        return "Google Calendar organizer is disconnected"
+    access_token = get_valid_access_token(organizer)
+    if appointment.status == AppointmentStatus.CANCELLED:
+        delete_google_event(appointment, organizer, access_token)
+        return None
+    upsert_google_event(appointment, organizer, access_token)
+    appointment.refresh_from_db(
+        fields=["status", "google_event_id", "google_meet_link"]
+    )
+    if appointment.status == AppointmentStatus.CANCELLED:
+        delete_google_event(appointment, organizer, access_token)
+    return None
+
+
+def sync_appointment_with_google(appointment_id):
+    """
+    Match Google Calendar to the live appointment. Returns a skip reason
+    string, or None on success. Raises GOOGLE_SYNC_ERRORS on API failure.
+    """
+    appointment = load_appointment_for_google_sync(appointment_id)
+    if appointment is None:
+        return "Appointment no longer exists"
+    return apply_google_desired_state(appointment)

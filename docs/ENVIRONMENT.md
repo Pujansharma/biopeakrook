@@ -351,18 +351,32 @@ Templates use **named** body variables. Backend sends `parameter_name` + `text`.
 
 Retry pending/failed sends: `uv run manage.py process_communication_outbox`
 
-User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+Book / cancel / reschedule enqueue **WhatsApp + Google Calendar** outbox rows. Google is desired-state from the live appointment (insert / patch / delete). Max 2 attempts. Wake: optional SQS (`*_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL`) — one message per enqueue that has work; FIFO queue uses `MessageGroupId=communication-outbox` and 60s dedup. Unset URL = no-op (local: run the management command). User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+
+```env
+DEV_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL=
+AWS_REGION=ap-south-1
+```
+
+Staging / production: `STG_` / `PRD_` prefix on the queue URL.
 
 ## Scheduled jobs (production)
 
-Wire these as EventBridge → ECS RunTask (or equivalent) on a ~1 min cadence. Not in `deploy-aws.yml` (image/service only).
+Not in `deploy-aws.yml` (image/service only).
 
-| Command | Purpose |
-|---|---|
-| `uv run manage.py process_communication_outbox` | Send WhatsApp outbox (`PENDING` / retryable `FAILED`) |
-| `uv run manage.py process_appointment_exception_scans` | Drain availability → appointment exception scan queue |
+| Trigger | Command | Purpose |
+|---|---|---|
+| SQS wake (on outbox insert) | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync |
+| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh` | Retry outbox (attempt 2) + drain exception scans |
 
-Without the outbox cron, WhatsApp rows stay `PENDING` even when secrets are set. Without the exception-scan cron, care-team / roster / block writes enqueue scans that never run.
+Cap concurrent ECS RunTasks at 1 for the wake consumer. Sweep script:
+
+```bash
+python manage.py process_communication_outbox
+python manage.py process_appointment_exception_scans
+```
+
+Without the outbox worker/sweep, WhatsApp and Google Calendar rows stay `PENDING`. Without the exception-scan drain, care-team / roster / block writes enqueue scans that never run.
 
 ## Security Best Practices
 

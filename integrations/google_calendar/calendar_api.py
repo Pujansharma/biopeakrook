@@ -33,12 +33,24 @@ def extract_meet_link(google_event: dict):
     return None
 
 
+def get_event(access_token: str, event_id: str):
+    response = requests.get(
+        f"{EVENTS_URL}/{event_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def insert_event(
     access_token: str, title: str, start: datetime, end: datetime,
     location: str | None = None, notes: str | None = None, need_meet_link: bool = False,
-    participant_emails: list[str] | None = None,
+    participant_emails: list[str] | None = None, event_id: str | None = None,
 ):
     body = _event_body(title, start, end, location, notes, participant_emails)
+    if event_id:
+        body["id"] = event_id
     params = {}
     if need_meet_link:
         body["conferenceData"] = {

@@ -156,7 +156,7 @@ biopeak-nexus/
 │       ├── calendar_api.py      # insert_event/patch_event/delete_event
 │       ├── tokens.py            # get_valid_access_token() — refresh-if-expired glue
 │       ├── db.py                # Persist tokens onto the Associate row
-│       ├── google_sync.py       # Appointment-side wiring, called from appointments/serializers/booking.py
+│       ├── google_sync.py       # Desired-state Calendar sync, called from communication outbox worker
 │       ├── views.py             # status/connect/callback/complete/disconnect/refresh
 │       └── urls.py              # Routes under /google-calendar/
 │

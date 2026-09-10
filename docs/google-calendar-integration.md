@@ -7,12 +7,9 @@ link attached automatically. This is **not** a "each staff member connects
 their own calendar" feature - `/complete/` only accepts the one configured
 shared account, see "Identity" below.
 
-**Status: connect/disconnect and event sync are both live.** The
-status/connect/callback/complete/disconnect/refresh endpoints, Google API
-client, and the database columns they need (see "Database columns" below)
-are all in place and migrated. `insert_event()`/`patch_event()`/`delete_event()` are
-wired into appointment book/reschedule/cancel (sync helpers in
-`integrations/google_calendar/google_sync.py`) - see "Event sync
+**Status: connect/disconnect and event sync are both live.** Event sync
+runs from the communication outbox worker (same book/cancel/reschedule
+hooks as WhatsApp), not inline on the request. See "Event sync
 (book/reschedule/cancel)" below.
 
 ---
@@ -56,11 +53,12 @@ not organizers - see "Picking which calendar hosts the event" below).
    below - and save the tokens, encrypted, onto that row (see "Database
    columns" below).
 6. **When an appointment is created/rescheduled/cancelled**, after the DB
-   write for that operation succeeds, we call `insert_event()` /
-   `patch_event()` / `delete_event()` to create, update, or delete the
-   matching event on the fixed calendar account, and save the Google event's
-   ID + Meet link on the `Appointment` row's `google_event_id` /
-   `google_meet_link` columns - see "Event sync" below.
+   write commits we enqueue a Google Calendar row on `CommunicationOutbox`
+   (same hook as WhatsApp). A wake worker / 10-minute sweep calls
+   `insert_event()` / `patch_event()` / `delete_event()` and saves the
+   Google event's ID + Meet link on `Appointment.google_event_id` /
+   `google_meet_link` - see "Event sync" below. The book/cancel/reschedule
+   request never calls Google.
 7. **Before every Google API call**, `get_valid_access_token()` checks if the
    saved access token has expired - if so, it silently uses the refresh token
    to get a new one first. It re-reads the associate row right before doing
@@ -90,7 +88,7 @@ All under `integrations/google_calendar/`:
 | `db.py`                                               | Persists a refreshed access/refresh token onto the `Associate` row via `save(update_fields=...)` - only the columns that changed, not a full-row save.                                                                                                                                                             |
 | `views.py`                                            | The six HTTP endpoints associates actually hit: status, connect, callback, complete, disconnect, refresh. See below.                                                                                                                                                                                               |
 | `urls.py`                                             | Routes those six views under `/google-calendar/`.                                                                                                                                                                                                                                                                  |
-| `google_sync.py`                                      | The appointment-side wiring: picks the fixed calendar organizer and syncs a booked/rescheduled/cancelled `Appointment` to Google Calendar. Called from `appointments/serializers/booking.py`. See "Event sync (book/reschedule/cancel)" below.                                                                     |
+| `google_sync.py`                                      | Desired-state sync: match Google Calendar to the live `Appointment`. Called from the communication outbox worker (`process_google_outbox_message`), not from the book/cancel/reschedule request. See "Event sync (book/reschedule/cancel)" below.                                                                     |
 | `appointments/utils/emails.py` (outside this package) | Builds the formatted event `description` text (`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`) - patient/service plus a modality-conditional clinic address or Meet-link note. See "Event description" below.                                                                       |
 
 `integrations/models.py` is empty - this feature doesn't get its own tables.
@@ -266,44 +264,29 @@ when something changes" feature that isn't built yet.
 
 ## Event sync (book/reschedule/cancel)
 
-Sync is best-effort: a Google Calendar outage, misconfiguration, or any
-other API failure is logged and swallowed, and the appointment create/
-reschedule/cancel proceeds exactly as if nothing was synced. **A Google
-Calendar failure must never block, fail, or roll back an appointment
-operation in Biopeak Nexus.** This applies the same way whether there's no
-connected organizer at all, or a connected organizer whose API call fails -
-either way, sync is skipped and the appointment write stands.
+Sync is best-effort and **asynchronous**. Book / cancel / reschedule enqueue
+WhatsApp + Google Calendar rows on `CommunicationOutbox` via
+`schedule_queue_*` (`transaction.on_commit`). The request never calls Google.
+**A Google Calendar failure must never block, fail, or roll back an
+appointment operation in Biopeak Nexus.**
 
-Code: `integrations/google_calendar/google_sync.py` -
-`sync_new_appointment_with_google()`, `sync_rescheduled_appointment_with_google()`,
-`sync_cancelled_appointment_with_google()`, called from
-`appointments/serializers/booking.py` (`AppointmentBookSerializer.create`,
-`AppointmentRescheduleSerializer.update`, `AppointmentCancelSerializer.update`)
-through `transaction.on_commit(...)`, registered inside each operation's
-`transaction.atomic()` block but only actually run once that block has
-committed - a booking/reschedule/cancel rejected by the database (an
-overlap, an idempotency conflict) never reaches Google at all, and the DB
-connection isn't held open for the duration of the Google HTTP call. Book
-and reschedule go through a module-level `sync_*_appointment_and_save()`
-wrapper in `booking.py` that also persists the returned
-`google_event_id`/`google_meet_link` onto the row in a follow-up
-`save(update_fields=...)`. Cancel has no such wrapper - `transaction.on_commit(...)`
-calls `sync_cancelled_appointment_with_google()` directly (via
-`functools.partial`), since cancel never needs to persist anything new (see
-"On cancel" below).
-Each function catches `GOOGLE_SYNC_ERRORS` (`requests.RequestException`,
-`ValueError`, `InvalidToken`, `ImproperlyConfigured`) plus an unrecovered
-`requests.HTTPError` internally, logs via `core.utils.log.logger`, and
-returns a "no sync happened" result instead of raising - `(None, None)`
-for create, the untouched `(instance.google_event_id, instance.google_meet_link)`
-for reschedule, and `False` for cancel. Nothing about the appointment write
-itself is skipped or rolled back. If the Google call succeeds but the
-follow-up `appointment.save(update_fields=[...])` in
-`sync_new_appointment_and_save()`/`sync_rescheduled_appointment_and_save()`
-(`booking.py`) then fails with a `DatabaseError`, that's logged
-(`logger.warning`) and swallowed too - by design, the Google event is
-**not** deleted to compensate, so it can end up existing on the calendar
-with no `google_event_id` pointer in our DB in that (rare) case.
+Worker: `uv run manage.py process_communication_outbox` (wake on insert +
+10-minute sweep). `process_google_outbox_message` calls
+`sync_appointment_with_google()` in `integrations/google_calendar/google_sync.py`.
+That function **desired-states** from the live appointment (not a replay of
+queued event types): cancelled → `delete_event`; otherwise insert/patch.
+Google event `id` is the appointment UUID hex so retries are idempotent
+(HTTP 409 → get + patch). Max 2 attempts. Stale Google `SENDING` retries;
+stale WhatsApp `SENDING` is skipped. One open Google row per appointment
+(coalesce). Wake publishes one SQS message per enqueue that has work, not
+per row. `google_meet_link` may be null on the book 201 until the worker
+runs.
+
+`GOOGLE_SYNC_ERRORS` (`requests.RequestException`, `ValueError`,
+`InvalidToken`, `ImproperlyConfigured`) fail the outbox row (retry once,
+then skip). Organizer disconnected is retryable `FAILED`. Persist of
+`google_event_id` / `google_meet_link` swallowing `DatabaseError` is
+unchanged — deterministic event id still lets the next run patch/delete.
 
 **Picking which calendar hosts the event.** Every appointment's Google
 Calendar event is created on **one single shared account** -
@@ -327,59 +310,22 @@ gate for org-wide sync, `/disconnect/` refuses to let it disconnect itself
 unless the caller is `is_active` and also holds `is_admin=True` on an active
 center assignment (see "Disconnect" above).
 
-**Attendees are unaffected by this change** - the appointment's actual
-assigned associates (doctor, health coach, care team) are still invited as
-ordinary Google Calendar attendees, resolved per-call from the _current_
-`associates_payload` (book/reschedule) or the appointment's saved
-`associate_links` (cancel, since associates aren't changing there); only who
-_owns and hosts_ the event changed. Attendee list = the customer's
-`contact_email` plus the login `email` of every one of those associates
-(the fixed organizer itself is excluded if it happens to also be one of
-them).
+**Attendees are unaffected by this change** - assigned associates (doctor,
+health coach, care team) are invited as ordinary Google Calendar attendees,
+resolved from the appointment's saved `associate_links` at worker time; only
+who _owns and hosts_ the event is the fixed organizer. Attendee list = the
+customer's `contact_email` plus those associates' login `email` (the fixed
+organizer itself is excluded if it is also assigned).
 
-**On book** (`sync_new_appointment_with_google`) - `insert_event()` on the
-organizer's calendar, _after_ the `Appointment` row is created and that
-transaction has committed (via `transaction.on_commit(...)`), so a booking
-rejected by the DB (e.g. an overlap or idempotency conflict) never creates a
-Google event that would otherwise be orphaned. `need_meet_link=True` only
-when `modality` is `virtual`. Returns
-`(google_event_id, google_meet_link)`, which the caller saves onto the row
-in a follow-up save right after. The event title is the fixed string
-`"Appointment Confirmed"` - it does not include the service name or
-appointment code.
+**On book** - worker `insert_event()` with deterministic id, `need_meet_link=True`
+only when `modality` is `virtual`. Title `"Appointment Confirmed"`.
 
-**On reschedule** (`sync_rescheduled_appointment_with_google`) - event title
-is the fixed string `"Appointment Rescheduled"` (also no service name/code).
-If the appointment has no `google_event_id` yet (e.g. the fixed account was
-connected _after_ the original booking), it creates a fresh event.
-Otherwise `patch_event()` updates the existing event's time/room/attendees.
-`add_meet_link` is `True` only when the appointment doesn't already have a
-`google_meet_link` **and** the (possibly just-changed on this same
-reschedule) `modality` is `virtual` - e.g. an in-person appointment
-rescheduled to virtual picks up a Meet link it never had. If a Meet link
-already exists, it's always left alone (`add_meet_link=False`) - reschedules
-never rotate an existing Meet link. If Google returns 404/410 (the event no longer exists on the fixed
-account's calendar - e.g. someone deleted it by hand directly in Google
-Calendar, or the shared account was disconnected and a different Google
-account connected under the same `GOOGLE_CALENDAR_ID` email since), a fresh
-event is created in the same call instead of failing the reschedule. Called
-_after_ the reschedule's own DB writes have committed (via
-`transaction.on_commit(...)`), so a rejected reschedule (e.g. an overlap)
-never touches Google at all. Returns `(google_event_id, google_meet_link)`
-for the caller to persist in a small follow-up save.
+**On reschedule** - title `"Appointment Rescheduled"`. Patch existing id;
+404/410 → insert. `add_meet_link` only when virtual and no Meet link yet.
+`clear_meet_link` when leaving virtual.
 
-**On cancel** (`sync_cancelled_appointment_with_google`) - `delete_event()`
-using the fixed organizer, called _after_ the cancellation's own DB writes
-have committed (via `transaction.on_commit(...)`), so a rejected cancel
-never deletes a still-live Google event. Returns a plain `bool` and
-deliberately does **not** touch `instance.google_event_id`/
-`instance.google_meet_link` at all, even on a successful delete - those
-two columns are kept on a cancelled appointment as a record of what was
-synced, now pointing at a Google event that no longer exists after a
-successful delete. A delete failure (or a disconnected organizer) is
-surfaced via `logger.error` (not just a warning) so ops can find and clean
-up the orphaned Google event by hand. No-ops (returns `False`, nothing to
-raise) if the appointment was never synced.
+**On cancel** - worker `delete_event()` (404/410 already success). Does
+**not** clear `google_event_id` / `google_meet_link` — historical record.
 
 ## Event description
 
