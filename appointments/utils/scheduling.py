@@ -2,6 +2,7 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.customers.models import CustomerCenterAssignment
@@ -1081,9 +1082,12 @@ def find_appointment_slots(
         base_windows, duration_minutes, step_minutes
     )
 
+    now = timezone.now()
     slots = []
     truncated = False
     for slot_start, slot_end in candidate_slots:
+        if slot_start < now:
+            continue
         exclusive_start, exclusive_end = compute_exclusive_bounds(
             slot_start,
             slot_end,

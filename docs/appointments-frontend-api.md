@@ -69,7 +69,7 @@ available = base − blocks − leaves/downtimes − closures − busy appointme
 | Associate | Center hours ∩ roster | Blocks, leaves, closures |
 | Room / equipment | Center hours | Blocks, downtimes, closures |
 
-Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated: true` if more).
+Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated: true` if more). Slots with `start` before request time are omitted (today’s past windows; past dates → empty `slots`).
 
 ### Pin vs preferred
 
@@ -161,7 +161,7 @@ Base: `/centers/<center_id>/appointments/`
 
 ### POST `…/slots/` — Find slots
 
-**Purpose:** One calendar day of bookable pinned combos for a customer + service.
+**Purpose:** One calendar day of bookable pinned combos for a customer + service. Past starts (`start` < now) are not returned.
 
 **Body (required)**
 
