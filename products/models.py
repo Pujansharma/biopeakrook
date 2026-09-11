@@ -25,6 +25,9 @@ class Provider(BaseUUIDModel):
     fetch_fields = ArrayField(
         base_field=models.CharField(max_length=50), null=True, blank=True
     )
+    fetch_profile_fields = ArrayField(
+        base_field=models.CharField(max_length=50), default=list, blank=True
+    )
     is_api_enabled = models.BooleanField(default=False)
 
     created_by = models.ForeignKey(

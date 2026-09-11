@@ -572,6 +572,10 @@ class CompositeProgramServiceSerializer(BaseModelSerializer):
             "documents_count",
             "reports_count",
             "raw_data_count",
+            "fetch_count",
+            "fetch_results_count",
+            "fetch_documents_count",
+            "fetch_pending_count",
 
             "cancellation_reason",
             "cancelled_by",

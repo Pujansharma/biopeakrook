@@ -178,9 +178,10 @@ class CustomerTherapyProgramSerializer(BaseModelSerializer):
             "is_active": True,
         }
         if get_user_account_type(created_by) == UserType.ASSOCIATE:
+            _associate = getattr(created_by, 'associate')
             filter_kwargs.update(
                 {
-                    "associate_assignments__associate": created_by.associate,
+                    "associate_assignments__associate": _associate,
                     "associate_assignments__is_active": True,
                 }
             )
