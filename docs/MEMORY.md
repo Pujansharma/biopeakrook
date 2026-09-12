@@ -37,6 +37,10 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 - Slots/book/reschedule: preference mandatory for preferred path; no leftover auto-fill from service role/room pools. Staff+room from preferred or pin only. `health_coach_id` → 400 use `specialty_id`. `doctor_id` = live role name contains doctor; `specialty_id` = live non-doctor. Same person both → 400. Dup associate on apt → 400 (+ DB unique).
 - Room types on assignment: OR eligibility. Write via `RoomType.filter_active(center=...)`. Center service V2 write/read `required_room_type_ids[]` (not singular).
 
+## 2026-09-12 — Center associate list role filter
+
+- `GET /centers/<uuid>/associates/?role=0|1` uses `Exists` on `AssociateCenterAssignmentRole`. Never `role_links__` JOIN — N active roles duplicated the assignment N times.
+
 ---
 
 ## Non-obvious decisions
