@@ -7,17 +7,13 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/care-teams/?page=1&limit=10&search=
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
   page: 1
   limit: 10
   search: 
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

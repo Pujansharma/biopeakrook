@@ -7,16 +7,12 @@ meta {
 post {
   url: {{baseURL}}/centers/{{center_id}}/v2/rooms/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   X-Center-ID: {{center_id}}
   Content-Type: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 body:json {

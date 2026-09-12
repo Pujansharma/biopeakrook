@@ -7,7 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/availability/closures/?active=1
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
@@ -18,10 +18,6 @@ params:query {
 
 headers {
   X-Center-ID: {{center_id}}
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

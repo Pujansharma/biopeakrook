@@ -7,16 +7,12 @@ meta {
 post {
   url: {{baseURL}}/google-calendar/complete/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   Accept: application/json
   Content-Type: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 body:json {
@@ -50,7 +46,7 @@ docs {
   Source: integrations.google_calendar.views.GoogleCalendarCompleteView
   Auth: None — authentication_classes = [] (this view never reads
   request.user; the email match is what decides whose tokens actually get
-  saved). The `auth: bearer` on this request is harmless but unnecessary.
+  saved). Collection may attach Bearer if logged in; view ignores it.
 
   Success: {"detail": "Google Calendar connected.", "data": {"google_email": "...", "associate_id": "..."}}
 }

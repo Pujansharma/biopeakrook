@@ -7,15 +7,11 @@ meta {
 get {
   url: {{baseURL}}/google-calendar/
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   Accept: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

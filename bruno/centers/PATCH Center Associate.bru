@@ -7,16 +7,12 @@ meta {
 patch {
   url: {{baseURL}}/centers/associates/{{associate_id}}/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   X-Center-ID: {{center_id}}
   Content-Type: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 body:json {

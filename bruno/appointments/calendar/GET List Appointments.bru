@@ -7,7 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/appointments/?start=2026-09-01&granularity=week
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
@@ -22,10 +22,6 @@ params:query {
   ~equipment_type_id: {{equipment_type_id}}
   ~status: confirmed
   ~care_team_id: {{care_team_id}}
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

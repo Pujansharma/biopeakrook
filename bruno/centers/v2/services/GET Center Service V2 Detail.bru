@@ -7,15 +7,11 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/v2/services/{{service_id}}/
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   X-Center-ID: {{center_id}}
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

@@ -7,11 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/appointments/exceptions/count/
   body: none
-  auth: bearer
-}
-
-auth:bearer {
-  token: {{access_token}}
+  auth: inherit
 }
 
 settings {

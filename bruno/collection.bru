@@ -24,6 +24,24 @@ vars:pre-request {
   diagnostics_idempotency_key: 
 }
 
+script:pre-request {
+  const url = String(req.getUrl() || '');
+  if (url.includes('/webhooks/') || url.includes('/google-calendar/callback')) {
+    return;
+  }
+  const token =
+    bru.getEnvVar('access_token') ||
+    bru.getCollectionVar('access_token') ||
+    bru.getVar('access_token') ||
+    '';
+  if (token) {
+    req.setHeader('Authorization', `Bearer ${token}`);
+  }
+}
+
 docs {
   Biopeak Nexus API — synced incrementally from Django.
+  Auth: collection pre-request sets Authorization from env/collection access_token
+  (skips empty runtime var — avoids 401 "Authorization header must contain two space-delimited values").
+  Run Auth → Login Phone Direct first. Webhooks + Google callback skip JWT.
 }
