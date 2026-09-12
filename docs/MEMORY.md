@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-09-11 — Multi-role associates, multi room types, preference-only booking
+
+- **Migrations landed:** `associates.0020` — drop `AssociateCenterAssignment.role`, add `AssociateCenterAssignmentRole`; `services.0008` — drop `CenterServiceAssignment.required_room_type`, add `CenterServiceRoomTypeRequirement`; `appointments.0019` — `AppointmentAssociate` UniqueConstraint `(appointment, associate)`. Schema bootstrap removed from tests.
+- **Associate API hard-break:** write `role_ids[]` only; response `role_ids` + `roles[]`; no singular `role`/`role_id`. Admin still cannot get care roles. RBAC `AssociateFeaturePermission` = OR across multi-roles.
+- **Customer linked associates:** `CustomerAssociateSerializer` exposes `roles`/`role_ids` from `current_center_assignment` through-links (not singular `role`).
+- **Care team member** still one `role_id` per row; that role must be ∈ associate's live roles at center.
+- **Slots/book/reschedule:** preference mandatory for preferred path; no leftover auto-fill from service role/room pools. Staff+room from preferred or pin only. `health_coach_id` → 400 use `specialty_id`. `doctor_id` = live role name contains doctor; `specialty_id` = live non-doctor. Same person both → 400. Dup associate on apt → 400 (+ DB unique).
+- **Room types on assignment:** OR eligibility. Write via `RoomType.filter_active(center=...)`. Center service V2 write/read `required_room_type_ids[]` (not singular).
+
+
 ## User Preferences
 
 - Always explain things alongside clickable code links (`[file.py:42](path/to/file.py#L42)`), not prose-only — every explanation of code/bugs/behavior should point at the actual lines.
@@ -17,7 +27,7 @@
 - "update collection" / "update bruno" → update `bruno/` (requests, folders, envs).
 - API collection source of truth is Bruno at `bruno/`. Envs: `bruno/environments/{Development,Production}.bru`. Folder vars omitted so they cannot shadow env tokens.
 - **Bruno auth token (2026-09-04):** 401 `"Authorization header must contain two space-delimited values"` = empty Bearer (not Django). Empty runtime `access_token` masks env. `GET List Center Services V2`: `auth: none` + pre-request `req.setHeader('Authorization', 'Bearer ' + env/collection token)`. Login Phone Direct: `bru.deleteVar('access_token')` before set. Associates same symptom if token empty — re-login. Never send empty optional query keys — `~param:`.
-- **Bruno Find Slots body (2026-09-05):** `POST .../appointments/slots/` preferred keys `room_id`, `care_team_id`, `doctor_id`, `health_coach_id`. Empty interpolated UUIDs (`care_team_id:` blank in env) → DRF 400 not a valid UUID. Request uses `auth: none` + pre-request: env token, env `center_id` URL, strip blank preferred keys, overlay env `customer_profile_id`/`service_id`/`slot_date`. `care_team_id` XOR `doctor_id`/`health_coach_id`. Env: `slot_date`, `doctor_id`, `health_coach_id`.
+- **Bruno Find Slots body (2026-09-11):** `POST .../appointments/slots/` preferred keys `room_id`, `care_team_id`, `doctor_id`, `specialty_id` (hard-break: `health_coach_id` → 400). Empty interpolated UUIDs → strip in pre-request (blank UUID → DRF 400). `auth: none` + pre-request Bearer from env. `care_team_id` XOR `doctor_id`/`specialty_id`. Env: `slot_date`, `doctor_id`, `specialty_id`.
 - **Always add or update Bruno** (2026-08-26): API add/change → update `bruno/` same change. Never miss.
 - **List active filter query param** (2026-08-27): `active=0|1` on list endpoints. Model/DB/body/response field stays `is_active`. Never `is_active` as query param name.
 - **Center associate list `role` (2026-09-03):** `GET /centers/<uuid>/associates/?role=0|1`. `1` = role FK set and `AssociateRole.is_active`. `0` = role null or inactive role. Omit / junk = no role filter. User `active=` stays separate. Not `role_type`. Bruno: `bruno/centers/GET List Center Associates.bru`.

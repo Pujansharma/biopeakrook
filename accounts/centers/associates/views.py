@@ -22,10 +22,8 @@ class CenterAssociateDetailView(BaseRetrieveUpdateAPIView):
                 center=center,
             )
             .prefetch_related("created_by")
-            .select_related(
-                "associate__user",
-                "role",
-            )
+            .select_related("associate__user")
+            .prefetch_related("role_links__role")
         )
 
     def get_object(self):

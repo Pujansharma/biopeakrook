@@ -59,13 +59,6 @@ class CenterServiceAssignment(BaseUUIDModel):
         default=0, help_text="Buffer minutes after the appointment"
     )
     modality = models.CharField(choices=AppointmentModes, default=AppointmentModes.BOTH)
-    required_room_type = models.ForeignKey(
-        "inventory.RoomType",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="service_assignments",
-    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -99,6 +92,31 @@ class CenterServiceRoleRequirement(BaseUUIDModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["assignment", "role"], name="uniq_assignment_role_requirement"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class CenterServiceRoomTypeRequirement(BaseUUIDModel):
+    assignment = models.ForeignKey(
+        CenterServiceAssignment,
+        on_delete=models.CASCADE,
+        related_name="room_type_requirements",
+    )
+    room_type = models.ForeignKey(
+        "inventory.RoomType",
+        on_delete=models.PROTECT,
+        related_name="service_room_type_requirements",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "room_type"],
+                name="uniq_assignment_room_type_requirement",
             )
         ]
 

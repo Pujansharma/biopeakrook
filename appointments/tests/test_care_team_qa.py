@@ -8,6 +8,7 @@ from django.test import TestCase
 from accounts.associates.models import (
     Associate,
     AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
     AssociateRole,
 )
 from accounts.centers.models import Center
@@ -35,15 +36,26 @@ def create_role(center, name):
     return AssociateRole.objects.create(center=center, name=name, is_active=True)
 
 
+def assign_roles(assignment, *roles):
+    AssociateCenterAssignmentRole.objects.filter(assignment=assignment).delete()
+    AssociateCenterAssignmentRole.objects.bulk_create(
+        [
+            AssociateCenterAssignmentRole(assignment=assignment, role=role)
+            for role in roles
+            if role is not None
+        ]
+    )
+
+
 def create_assigned_associate(center, email, role):
     user = User.objects.create_user(email=email)
     associate = Associate.objects.create(user=user)
-    AssociateCenterAssignment.objects.create(
+    assignment = AssociateCenterAssignment.objects.create(
         associate=associate,
         center=center,
-        role=role,
         is_active=True,
     )
+    assign_roles(assignment, role)
     return associate
 
 

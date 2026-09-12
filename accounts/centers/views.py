@@ -145,8 +145,14 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
 
         role_query = self.request.query_params.get("role")
         role_filters = {
-            "1": Q(role__isnull=False, role__is_active=True),
-            "0": Q(role__isnull=True) | Q(role__is_active=False),
+            "1": Q(
+                role_links__is_active=True,
+                role_links__role__is_active=True,
+            ),
+            "0": ~Q(
+                role_links__is_active=True,
+                role_links__role__is_active=True,
+            ),
         }
         role_filter = role_filters.get(role_query, Q())
 
@@ -168,10 +174,8 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
                 **filter_kwargs,
             )
             .prefetch_related("created_by")
-            .select_related(
-                "associate__user",
-                "role",
-            )
+            .select_related("associate__user")
+            .prefetch_related("role_links__role")
         )
 
     def perform_create(self, serializer):

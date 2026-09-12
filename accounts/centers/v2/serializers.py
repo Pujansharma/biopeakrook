@@ -12,6 +12,7 @@ from inventory.utils.constants import EquipmentPortability, EquipmentOperational
 from programs.services.models import (
     CenterServiceAssignment,
     CenterServiceRoleRequirement,
+    CenterServiceRoomTypeRequirement,
     Service,
 )
 
@@ -401,6 +402,14 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
         allow_empty=True,
         allow_null=True,
     )
+    required_room_types = RoomTypeNestedSerializer(many=True, read_only=True)
+    required_room_type_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        allow_empty=True,
+        allow_null=True,
+    )
     modality = serializers.ChoiceField(
         choices=AppointmentModes.choices, required=False, default=AppointmentModes.BOTH
     )
@@ -421,49 +430,42 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             "buffer_after",
             "modality",
             "modality_code",
-            "required_room_type_id",
-            "required_room_type",
+            "required_room_type_ids",
+            "required_room_types",
             "required_role_ids",
             "required_roles",
             "is_active",
             "created_at",
             "updated_at",
         ]
-        extra_kwargs = {
-            "required_room_type": {"read_only": True},
-        }
-
-    def get_fields(self):
-        fields = super().get_fields()
-        center = self.context.get("center")
-        room_type_queryset = RoomType.objects.none()
-        if center is not None:
-            room_type_queryset = RoomType.objects.filter_active(center=center)
-
-        fields["required_room_type"] = RoomTypeNestedSerializer(read_only=True)
-        fields["required_room_type_id"] = serializers.PrimaryKeyRelatedField(
-            source="required_room_type",
-            queryset=room_type_queryset,
-            write_only=True,
-            required=False,
-            allow_null=True,
-            error_messages={
-                "does_not_exist": "Invalid or inactive room type for this center."
-            },
-        )
-        return fields
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation["modality"] = instance.modality
-        role_requirements = list(
-            instance.role_requirements.filter(is_active=True).select_related("role")
-        )
-        representation["required_role_ids"] = [
-            requirement.role_id for requirement in role_requirements
-        ]
+        roles = []
+        for requirement in instance.role_requirements.all():
+            if not requirement.is_active:
+                continue
+            if not requirement.role.is_active:
+                continue
+            roles.append(requirement.role)
+        representation["required_role_ids"] = [role.pk for role in roles]
         representation["required_roles"] = AssociateRoleNestedSerializer(
-            [requirement.role for requirement in role_requirements], many=True
+            roles, many=True
+        ).data
+        room_types = []
+        for requirement in instance.room_type_requirements.all():
+            if not requirement.is_active:
+                continue
+            if not requirement.room_type.is_active:
+                continue
+            room_types.append(requirement.room_type)
+        representation["required_room_type_ids"] = [
+            room_type.pk for room_type in room_types
+        ]
+        representation["required_room_types"] = RoomTypeNestedSerializer(
+            room_types,
+            many=True,
         ).data
         return representation
 
@@ -472,6 +474,11 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             role_ids = attrs.get("required_role_ids") or []
             attrs["required_role_ids"] = self._resolve_roles(
                 self.context["center"], role_ids
+            )
+        if "required_room_type_ids" in attrs:
+            room_type_ids = attrs.get("required_room_type_ids") or []
+            attrs["required_room_type_ids"] = self._resolve_room_types(
+                self.context["center"], room_type_ids
             )
         return attrs
 
@@ -496,16 +503,52 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             )
         return roles
 
+    def _resolve_room_types(self, center, room_type_ids):
+        if not room_type_ids:
+            return []
+        room_types = list(
+            RoomType.objects.filter_active(center=center, pk__in=room_type_ids)
+        )
+        found_ids = {room_type.pk for room_type in room_types}
+        missing_ids = set(room_type_ids) - found_ids
+        if missing_ids:
+            raise serializers.ValidationError(
+                {
+                    "required_room_type_ids": (
+                        "Invalid or inactive room types for this center: "
+                        f"{', '.join(str(room_type_id) for room_type_id in missing_ids)}"
+                    )
+                }
+            )
+        return room_types
+
     def update(self, instance, validated_data):
         roles = validated_data.pop("required_role_ids", None)
+        room_types = validated_data.pop("required_room_type_ids", None)
         with transaction.atomic():
             instance = super().update(instance, validated_data)
             if roles is not None:
                 CenterServiceRoleRequirement.objects.filter(assignment=instance).delete()
                 CenterServiceRoleRequirement.objects.bulk_create(
                     [
-                        CenterServiceRoleRequirement(assignment=instance, role=role)
+                        CenterServiceRoleRequirement(
+                            assignment=instance,
+                            role_id=role.pk,
+                        )
                         for role in roles
+                    ]
+                )
+            if room_types is not None:
+                CenterServiceRoomTypeRequirement.objects.filter(
+                    assignment=instance
+                ).delete()
+                CenterServiceRoomTypeRequirement.objects.bulk_create(
+                    [
+                        CenterServiceRoomTypeRequirement(
+                            assignment=instance,
+                            room_type_id=room_type.pk,
+                        )
+                        for room_type in room_types
                     ]
                 )
         return instance

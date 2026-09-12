@@ -21,7 +21,7 @@ auth:bearer {
 
 body:json {
   {
-    "role_id": "{{role_id}}",
+    "role_ids": ["{{role_id}}"],
     "is_active": true
   }
 }
@@ -34,11 +34,14 @@ settings {
 docs {
   Update center associate assignment. pk = associate UUID (same as list id). Center from X-Center-ID, not URL.
   
-  Care role: role_id (UUID from GET List Center Roles). Rejected if associate is_admin. Must belong to this center.
+  HARD-BREAK: write `role_ids` UUID[] only (no `role_id`). Response: `role_ids` + nested `roles[]` (no singular `role` / `role_id`).
+  Omit role_ids = leave unchanged; [] / null = clear. Admin associates cannot have care roles.
+  Roles must be active for this center (or system); inactive → 400.
+  
   Care-staff flag: is_care_staff.
   Status: is_active (user active flag).
   
-  PATCH partial — send only fields to change. PUT needs email, first_name, role_id.
+  PATCH partial — send only fields to change.
   
-  Auth: bearer {{access_token}}. Set env center_id, associate_id, role_id.
+  Auth: bearer {{access_token}}. Set env center_id, associate_id, role_id (sample UUID for role_ids[]).
 }

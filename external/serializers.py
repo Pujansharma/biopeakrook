@@ -4,6 +4,7 @@ from accounts.associates.serializers import (
     BaseAssociateRoleSerializer,
     AssociateSourceMixinSerializer,
 )
+from accounts.associates.utils.db import assignment_active_roles
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import (
     CustomerProfile,
@@ -276,7 +277,8 @@ class ExternalCustomerAssociateSerializer(
 
     image = serializers.ImageField(source="associate.user.image", read_only=True)
 
-    role = BaseAssociateRoleSerializer(read_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomerAssociateAssignment
@@ -288,7 +290,8 @@ class ExternalCustomerAssociateSerializer(
             "last_name",
             "gender",
             "image",
-            "role",
+            "roles",
+            "role_ids",
             "title",
             "description",
             "tagline",
@@ -297,6 +300,15 @@ class ExternalCustomerAssociateSerializer(
             "professions",
             "has_verified_badge",
         ]
+
+    def get_roles(self, instance):
+        assignment = getattr(instance, "current_center_assignment", None)
+        roles = assignment_active_roles(assignment)
+        return BaseAssociateRoleSerializer(roles, many=True).data
+
+    def get_role_ids(self, instance):
+        assignment = getattr(instance, "current_center_assignment", None)
+        return [role.pk for role in assignment_active_roles(assignment)]
 
     def create(self, validated_data):
         pass

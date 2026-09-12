@@ -355,10 +355,10 @@ Book / cancel / reschedule enqueue **WhatsApp + Google Calendar** outbox rows. G
 
 ```env
 DEV_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL=
-AWS_REGION=ap-south-1
+AWS_REGION=
 ```
 
-Staging / production: `STG_` / `PRD_` prefix on the queue URL.
+Staging / production: `STG_` / `PRD_` prefix on the queue URL. Set `AWS_REGION` in secrets/env to the SQS region (same value you use for AWS; no hardcoded default in code).
 
 ## Scheduled jobs (production)
 

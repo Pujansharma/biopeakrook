@@ -172,14 +172,6 @@ class AssociateCenterAssignment(BaseUUIDModel):
         "centers.Center", on_delete=models.CASCADE, related_name="associate_assignments"
     )
 
-    role = models.ForeignKey(
-        AssociateRole,
-        related_name="role_assignments",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
-
     # Center-specific configuration
     mode = models.CharField(
         choices=AppointmentModes,
@@ -212,6 +204,33 @@ class AssociateCenterAssignment(BaseUUIDModel):
             # )
         ]
         verbose_name = "Associate-Center Assignment"
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AssociateCenterAssignmentRole(BaseUUIDModel):
+    """Through table: many care roles per associate×center assignment."""
+
+    assignment = models.ForeignKey(
+        AssociateCenterAssignment,
+        on_delete=models.CASCADE,
+        related_name="role_links",
+    )
+    role = models.ForeignKey(
+        AssociateRole,
+        on_delete=models.PROTECT,
+        related_name="assignment_role_links",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "role"],
+                name="uniq_assignment_role_link",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"

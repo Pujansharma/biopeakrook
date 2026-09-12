@@ -265,7 +265,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
             filter_kwargs["center_id"] = center_id
             subquery_filter_kwargs["center_id"] = center_id
         if role_id:
-            filter_kwargs["role_id"] = role_id
+            filter_kwargs["role_links__role"] = role_id
         account = get_user_account_type(user)
 
         if account == UserType.ASSOCIATE:
@@ -280,7 +280,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
 
         return (
             AssociateCenterAssignment.objects.select_related("associate__user")
-            .prefetch_related("created_by", "center")
+            .prefetch_related("created_by", "center", "role_links__role")
             .annotate(
                 exists=Exists(exists_subquery),
                 full_name=Concat(
@@ -327,7 +327,7 @@ class CustomerAssociateListView(BaseListAPIView):
             center_ids = {header_center_id}
 
         if role_id:
-            filter_kwargs["current_center_assignment__role"] = role_id
+            filter_kwargs["current_center_assignment__role_links__role"] = role_id
 
         search_param = self.request.query_params.get("search", "").strip()
         if search_param:
@@ -359,9 +359,13 @@ class CustomerAssociateListView(BaseListAPIView):
             .filter(search, customer_profile_id=self.kwargs["pk"], **filter_kwargs)
             .select_related(
                 "associate__user",
-                "current_center_assignment__role",
+                "current_center_assignment",
             )
-            .prefetch_related("center", "created_by")
+            .prefetch_related(
+                "center",
+                "created_by",
+                "current_center_assignment__role_links__role",
+            )
             .order_by("-created_at")
             .distinct()
         )

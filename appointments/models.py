@@ -527,6 +527,10 @@ class AppointmentAssociate(BaseUUIDModel):
                 fields=["appointment", "role"],
                 name="uniq_appointment_associate_role",
             ),
+            models.UniqueConstraint(
+                fields=["appointment", "associate"],
+                name="uniq_appointment_associate",
+            ),
             ExclusionConstraint(
                 name="appointment_associate_no_overlap",
                 expressions=[

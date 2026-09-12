@@ -24,6 +24,7 @@ from inventory.utils.constants import EquipmentOperationalStatus
 from programs.services.models import (
     CenterServiceAssignment,
     CenterServiceRoleRequirement,
+    CenterServiceRoomTypeRequirement,
     Service,
 )
 
@@ -272,8 +273,10 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
         return Prefetch(
             "center_assignments",
             queryset=CenterServiceAssignment.objects.filter(**assignment_filter)
-            .prefetch_related("role_requirements__role")
-            .select_related("required_room_type"),
+            .prefetch_related(
+                "role_requirements__role",
+                "room_type_requirements__room_type",
+            ),
         )
 
     def get_queryset(self):
@@ -321,11 +324,11 @@ class CenterServiceV2ListView(CenterV2Mixin, BaseListAPIView):
             )
         )
         has_live_room = Exists(
-            CenterServiceAssignment.objects.filter(
-                service_id=OuterRef("pk"),
-                center=center,
-                required_room_type__isnull=False,
-                required_room_type__is_active=True,
+            CenterServiceRoomTypeRequirement.objects.filter(
+                assignment__service_id=OuterRef("pk"),
+                assignment__center=center,
+                is_active=True,
+                room_type__is_active=True,
             )
         )
         is_virtual_assignment = Exists(
@@ -385,8 +388,10 @@ class CenterServiceV2DetailView(CenterV2Mixin, BaseRetrieveUpdateAPIView):
                 Prefetch(
                     "center_assignments",
                     queryset=CenterServiceAssignment.objects.filter(center=center)
-                    .prefetch_related("role_requirements__role")
-                    .select_related("required_room_type"),
+                    .prefetch_related(
+                        "role_requirements__role",
+                        "room_type_requirements__room_type",
+                    ),
                 )
             )
             .distinct()
@@ -405,8 +410,10 @@ class CenterServiceV2DetailView(CenterV2Mixin, BaseRetrieveUpdateAPIView):
         service = self.get_object()
         assignment = (
             CenterServiceAssignment.objects.filter(center=center, service=service)
-            .prefetch_related("role_requirements__role")
-            .select_related("required_room_type")
+            .prefetch_related(
+                "role_requirements__role",
+                "room_type_requirements__room_type",
+            )
             .first()
         )
         if not assignment:

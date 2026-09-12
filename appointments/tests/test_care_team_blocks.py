@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from accounts.associates.models import (
     Associate,
     AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
     AssociateRole,
 )
 from accounts.centers.models import Center
@@ -26,6 +27,17 @@ WINDOW_START = datetime(2026, 9, 12, 10, 0, tzinfo=UTC)
 WINDOW_END = datetime(2026, 9, 12, 12, 0, tzinfo=UTC)
 
 
+def assign_roles(assignment, *roles):
+    AssociateCenterAssignmentRole.objects.filter(assignment=assignment).delete()
+    AssociateCenterAssignmentRole.objects.bulk_create(
+        [
+            AssociateCenterAssignmentRole(assignment=assignment, role=role)
+            for role in roles
+            if role is not None
+        ]
+    )
+
+
 def create_team_fixture():
     center = Center.objects.create(name="Block Overlap Center", code="CT-BLK")
     doctor_role = AssociateRole.objects.create(
@@ -38,12 +50,14 @@ def create_team_fixture():
     coach_user = User.objects.create_user(email="blk-coach@example.com")
     doctor = Associate.objects.create(user=doctor_user)
     coach = Associate.objects.create(user=coach_user)
-    AssociateCenterAssignment.objects.create(
-        associate=doctor, center=center, role=doctor_role, is_active=True
+    assignment = AssociateCenterAssignment.objects.create(
+        associate=doctor, center=center, is_active=True
     )
-    AssociateCenterAssignment.objects.create(
-        associate=coach, center=center, role=coach_role, is_active=True
+    assign_roles(assignment, doctor_role)
+    assignment = AssociateCenterAssignment.objects.create(
+        associate=coach, center=center, is_active=True
     )
+    assign_roles(assignment, coach_role)
     serializer = CenterCareTeamSerializer(
         data={
             "name": "Block Team",

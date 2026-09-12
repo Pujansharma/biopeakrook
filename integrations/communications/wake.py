@@ -15,7 +15,7 @@ def outbox_wake_queue_url():
 
 
 def outbox_wake_region():
-    return getattr(settings, "AWS_REGION", None) or "ap-south-1"
+    return getattr(settings, "AWS_REGION", None)
 
 
 def is_fifo_queue(queue_url):

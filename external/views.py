@@ -321,8 +321,8 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
                 **filter_kwargs,
             )
             .annotate(
-                role=FilteredRelation(
-                    "associate__center_assignments__role",
+                current_center_assignment=FilteredRelation(
+                    "associate__center_assignments",
                     condition=Q(
                         associate__center_assignments__center_id=F("center_id")
                     ),
@@ -330,8 +330,9 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
             )
             .select_related(
                 "associate__user",
-                "role",
+                "current_center_assignment",
             )
+            .prefetch_related("current_center_assignment__role_links__role")
             .prefetch_related("center", "created_by")
             .order_by("-created_at")
         )
