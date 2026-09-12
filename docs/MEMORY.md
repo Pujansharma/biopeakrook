@@ -41,6 +41,10 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 
 - `GET /centers/<uuid>/associates/?role=0|1` uses `Exists` on `AssociateCenterAssignmentRole`. Never `role_links__` JOIN — N active roles duplicated the assignment N times.
 
+## 2026-09-12 — Care teams `members_live`
+
+- `GET /centers/<uuid>/care-teams/?members_live=0|1`. `1` = drop teams with any non-live member (inactive user, inactive assignment, inactive/unmapped role link, inactive `AssociateRole`). `0` = only teams with ≥1 broken member. Omit/junk = no filter. Independent of team `active=`. `Exists` on members, not JOIN. Same live rules as booking `members_with_live_center_role`.
+
 ---
 
 ## Non-obvious decisions

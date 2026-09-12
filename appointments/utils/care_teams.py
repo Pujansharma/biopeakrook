@@ -1,12 +1,40 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
+from django.db.models import Exists, OuterRef, Prefetch, Q
 
-from accounts.associates.models import AssociateCenterAssignment
+from accounts.associates.models import (
+    AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
+)
 from accounts.associates.utils.db import (
     active_role_links_prefetch,
     assignment_holds_role,
 )
 from appointments.models import CenterCareTeam, CenterCareTeamMember
+
+
+def members_live_filter(query_value):
+    has_broken_member = Exists(
+        CenterCareTeamMember.objects.filter(
+            care_team_id=OuterRef("pk"),
+        ).exclude(
+            Exists(
+                AssociateCenterAssignmentRole.objects.filter(
+                    assignment__associate_id=OuterRef("associate_id"),
+                    assignment__center_id=OuterRef("care_team__center_id"),
+                    assignment__is_active=True,
+                    assignment__associate__user__is_active=True,
+                    is_active=True,
+                    role_id=OuterRef("role_id"),
+                    role__is_active=True,
+                )
+            )
+        )
+    )
+    filters = {
+        "1": ~has_broken_member,
+        "0": has_broken_member,
+    }
+    return filters.get(query_value, Q())
 
 
 def load_active_center_care_team(center, care_team_id):
@@ -72,30 +100,16 @@ def members_with_live_center_role(center, members):
     return eligible_members
 
 
-def expand_care_team_for_assignment(center, care_team_id, assignment):
+def expand_care_team_for_assignment(center, care_team_id):
     """
     Return all live care-team members at this center.
 
     Member role must be among the associate's live multi-roles at the center.
-    `assignment` kept for call-site compatibility.
     """
-    del assignment
     team = load_active_center_care_team(center, care_team_id)
     members = members_with_live_center_role(center, list(team.members.all()))
     members.sort(key=care_team_member_role_sort_key)
     return members
-
-
-def care_team_associates_payload(members):
-    payload = []
-    for member in members:
-        payload.append(
-            {
-                "role_id": str(member.role.pk),
-                "associate_id": member.associate.pk,
-            }
-        )
-    return payload
 
 
 def live_members_for_care_team(center, care_team):
@@ -125,13 +139,3 @@ def live_care_teams_for_associate(center, associate):
         seen_ids.add(care_team_id)
         care_teams.append(member.care_team)
     return care_teams
-
-
-def apply_care_team_to_resource_pools(resource_pools, members):
-    member_by_role = {str(member.role.pk): member.associate for member in members}
-    for role_pool in resource_pools["roles"]:
-        associate = member_by_role.get(role_pool["role_id"])
-        if associate is None:
-            role_pool["associates"] = []
-            continue
-        role_pool["associates"] = [associate]

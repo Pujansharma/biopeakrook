@@ -220,7 +220,6 @@ class CareTeamEmptyLiveMembersTests(TestCase):
             resolve_pinned_care_team(
                 self.center,
                 self.care_team.pk,
-                self.assignment,
                 [
                     {
                         "role_id": str(self.doctor_role.pk),

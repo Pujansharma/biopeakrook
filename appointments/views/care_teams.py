@@ -4,6 +4,7 @@ from appointments.mixins import CenterAppointmentsMixin
 from appointments.models import CenterCareTeam, CenterCareTeamMember
 from appointments.permissions import CenterAppointmentPermission
 from appointments.serializers.care_teams import CenterCareTeamSerializer
+from appointments.utils.care_teams import members_live_filter
 from core.utils.views.main import BaseListCreateAPIView, BaseRetrieveUpdateAPIView
 
 
@@ -52,7 +53,11 @@ class CenterCareTeamListCreateView(CenterCareTeamViewMeta, BaseListCreateAPIView
         return (
             super()
             .get_queryset()
-            .filter(search, **filter_kwargs)
+            .filter(
+                search,
+                members_live_filter(self.request.query_params.get("members_live")),
+                **filter_kwargs,
+            )
             .order_by("-created_at")
         )
 

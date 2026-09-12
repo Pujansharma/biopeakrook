@@ -33,7 +33,6 @@ from appointments.utils.care_teams import (
     expand_care_team_for_assignment,
     live_associate_center_assignments,
     live_care_teams_for_associate,
-    load_active_center_care_team,
 )
 from appointments.utils.constants import BUSY_APPOINTMENT_STATUSES
 from appointments.utils.intervals import (
@@ -204,11 +203,6 @@ def validate_customer_profile_for_center(customer_profile, center):
         raise ValidationError(
             "Customer profile is not assigned to this center."
         )
-
-
-def get_eligible_associates_for_role(center, role, modality):
-    by_role = get_eligible_associates_by_roles(center, [role], modality)
-    return by_role.get(str(role.pk), [])
 
 
 def get_eligible_associates_by_roles(center, roles, modality):
@@ -766,21 +760,17 @@ def build_resolve_resource_pools(center, assignment, modality, preferred):
         "equipment_by_room_id": {},
         "extra_associates": [],
         "care_team": None,
-        "care_team_members": [],
         "preferred_entries": [],
     }
 
     care_team_id = preferred.get("care_team_id")
     if care_team_id:
-        care_team_members = expand_care_team_for_assignment(
-            center, care_team_id, assignment
-        )
+        care_team_members = expand_care_team_for_assignment(center, care_team_id)
         if not care_team_members:
             raise ValidationError(
                 "Care team has no live members at this center."
             )
         resource_pools["care_team"] = care_team_members[0].care_team
-        resource_pools["care_team_members"] = care_team_members
         for member in care_team_members:
             resource_pools["extra_associates"].append(member.associate)
             resource_pools["preferred_entries"].append(
@@ -1326,13 +1316,12 @@ def validate_appointment_allocation(
             raise ValidationError("Selected equipment is not available.")
 
 
-def resolve_pinned_care_team(center, care_team_id, assignment, associates):
+def resolve_pinned_care_team(center, care_team_id, associates):
     """
     Stamp care_team on pin path only when every live team member appears in the pin.
-    Extra pin rows (filled missing service roles) are allowed.
+    Extra pin rows are allowed.
     """
-    team = load_active_center_care_team(center, care_team_id)
-    members = expand_care_team_for_assignment(center, care_team_id, assignment)
+    members = expand_care_team_for_assignment(center, care_team_id)
     if not members:
         raise ValidationError(
             "Care team has no live members at this center."
@@ -1346,7 +1335,7 @@ def resolve_pinned_care_team(center, care_team_id, assignment, associates):
             raise ValidationError(
                 "Pinned associates do not match the preferred care team."
             )
-    return team
+    return members[0].care_team
 
 
 def resolve_booking_combo(
@@ -1423,7 +1412,7 @@ def resolve_booking_combo(
         care_team_id = preferred.get("care_team_id")
         if care_team_id:
             care_team = resolve_pinned_care_team(
-                center, care_team_id, assignment, associates
+                center, care_team_id, associates
             )
 
     validate_appointment_allocation(
