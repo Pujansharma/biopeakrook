@@ -62,10 +62,10 @@ MISSING_SPECIALTY_ROLE_MESSAGE = (
     "specialty_id must hold a live non-doctor role."
 )
 AMBIGUOUS_DOCTOR_ROLE_MESSAGE = (
-    "doctor_id matches more than one live doctor role. Pin role_id."
+    "doctor_id matches more than one live doctor role."
 )
 AMBIGUOUS_SPECIALTY_ROLE_MESSAGE = (
-    "specialty_id matches more than one live non-doctor role. Pin role_id."
+    "specialty_id matches more than one live non-doctor role."
 )
 
 

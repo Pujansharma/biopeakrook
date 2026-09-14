@@ -82,7 +82,7 @@ Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated
 - `preferred.care_team_id` **XOR** `doctor_id` / `specialty_id` (doctor + specialty OK together).
 - Allowed preferred combos: care_team±room · doctor±room · specialty±room · doctor+specialty±room (room required for in_person; forbidden for virtual).
 - **Staff+room source:** preferred only, or pin from Find Slots. No leftover fill from `CenterServiceRoleRequirement` / room-type pool.
-- `doctor_id` must hold **exactly one** live role with `"doctor"` in the name; `specialty_id` must hold **exactly one** live non-doctor role. Zero matches → 400 missing-role. Two+ matching hats → 400 pin `associates[].role_id`. Do **not** pick from service required roles (pref person may be extra). Same person both IDs → 400. Same associate cannot appear twice on an appointment.
+- FE always sends `preferred`. `specialty_id` = service-mapped person; `doctor_id` may be extra (not on the service). `doctor_id` must hold **exactly one** live role with `"doctor"` in the name; `specialty_id` must hold **exactly one** live non-doctor role. Zero matches → 400 missing-role. Two+ matching hats → 400 (ops data guard; not a pin/`role_id` path). Do **not** pick from service required roles. Same person both IDs → 400. Same associate cannot appear twice on an appointment.
 - Old `health_coach_id` → 400 `"Use specialty_id instead of health_coach_id."`
 - If assignment has room-type requirements, preferred/pin room must be active at center and `room_type_ref` in that set (OR).
 - Find Slots: preferred required. Book/reschedule: complete pin OR valid preferred.
