@@ -24,6 +24,6 @@ settings {
 }
 
 docs {
-  List center care teams. Nested members (associate + role). Query: search, optional active=0|1 (omit = active + inactive), optional members_live=0|1 (1 = only teams where every member is live at center with mapped role active; 0 = teams with any inactive member/role mapping; omit/junk = no filter). Independent of active=.
+  List center care teams. Nested members (associate + role). Query: search, optional active=0|1 (omit = active + inactive), optional members_live=0|1 (1 = every member live at center with mapped role active; 0 = any inactive member/role mapping; omit/junk = no filter). Independent of active=. Min 2 members always. Not the bookable-team picker — booking still expands leftover live members.
   Auth: bearer {{access_token}}. Set env center_id.
 }

@@ -1,40 +1,12 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Exists, OuterRef, Prefetch, Q
+from django.db.models import Prefetch
 
-from accounts.associates.models import (
-    AssociateCenterAssignment,
-    AssociateCenterAssignmentRole,
-)
+from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.utils.db import (
     active_role_links_prefetch,
     assignment_holds_role,
 )
 from appointments.models import CenterCareTeam, CenterCareTeamMember
-
-
-def members_live_filter(query_value):
-    has_broken_member = Exists(
-        CenterCareTeamMember.objects.filter(
-            care_team_id=OuterRef("pk"),
-        ).exclude(
-            Exists(
-                AssociateCenterAssignmentRole.objects.filter(
-                    assignment__associate_id=OuterRef("associate_id"),
-                    assignment__center_id=OuterRef("care_team__center_id"),
-                    assignment__is_active=True,
-                    assignment__associate__user__is_active=True,
-                    is_active=True,
-                    role_id=OuterRef("role_id"),
-                    role__is_active=True,
-                )
-            )
-        )
-    )
-    filters = {
-        "1": ~has_broken_member,
-        "0": has_broken_member,
-    }
-    return filters.get(query_value, Q())
 
 
 def load_active_center_care_team(center, care_team_id):

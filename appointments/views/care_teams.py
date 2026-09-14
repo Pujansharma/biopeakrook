@@ -1,10 +1,10 @@
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
 
+from accounts.associates.models import AssociateCenterAssignmentRole
 from appointments.mixins import CenterAppointmentsMixin
 from appointments.models import CenterCareTeam, CenterCareTeamMember
 from appointments.permissions import CenterAppointmentPermission
 from appointments.serializers.care_teams import CenterCareTeamSerializer
-from appointments.utils.care_teams import members_live_filter
 from core.utils.views.main import BaseListCreateAPIView, BaseRetrieveUpdateAPIView
 
 
@@ -50,12 +50,37 @@ class CenterCareTeamListCreateView(CenterCareTeamViewMeta, BaseListCreateAPIView
         if search_params:
             search |= Q(name__istartswith=search_params)
             search |= Q(name__icontains=search_params)
+        has_broken_member = Exists(
+            CenterCareTeamMember.objects.filter(
+                care_team_id=OuterRef("pk"),
+            ).exclude(
+                Exists(
+                    AssociateCenterAssignmentRole.objects.filter(
+                        assignment__associate_id=OuterRef("associate_id"),
+                        assignment__center_id=OuterRef("care_team__center_id"),
+                        assignment__is_active=True,
+                        assignment__associate__user__is_active=True,
+                        is_active=True,
+                        role_id=OuterRef("role_id"),
+                        role__is_active=True,
+                    )
+                )
+            )
+        )
+        members_live_filters = {
+            "1": ~has_broken_member,
+            "0": has_broken_member,
+        }
+        members_live_filter = members_live_filters.get(
+            self.request.query_params.get("members_live"),
+            Q(),
+        )
         return (
             super()
             .get_queryset()
             .filter(
                 search,
-                members_live_filter(self.request.query_params.get("members_live")),
+                members_live_filter,
                 **filter_kwargs,
             )
             .order_by("-created_at")

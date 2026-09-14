@@ -534,7 +534,7 @@ Base: `/centers/<center_id>/care-teams/`
 
 ### GET `…/care-teams/`
 
-**Query:** `search` (name), `active=0|1` (omit = both), `members_live=0|1` (omit/junk = no filter; `1` = every member live at center with mapped role active; `0` = any member inactive or mapped role inactive/unmapped), `page`, `limit`. Independent of `active`.
+**Query:** `search` (name), `active=0|1` (omit = both), `members_live=0|1` (omit/junk = no filter; `1` = every member live at center with mapped role active; `0` = any member inactive or mapped role inactive/unmapped; not the bookable-team picker — booking still expands leftover live members), `page`, `limit`. Independent of `active`. Team always has ≥2 members.
 
 ### POST `…/care-teams/`
 
