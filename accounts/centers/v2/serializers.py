@@ -1,8 +1,8 @@
 from django.db import transaction
-from django.db.models import Q
 from rest_framework import serializers
 
 from accounts.associates.models import AssociateRole
+from accounts.associates.utils.roles import resolve_center_roles
 from accounts.centers.utils.db import generate_equipment_code, generate_room_code
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.constants import AppointmentModes
@@ -492,8 +492,10 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
     def validate(self, attrs):
         if "required_role_ids" in attrs:
             role_ids = attrs.get("required_role_ids") or []
-            attrs["required_role_ids"] = self._resolve_roles(
-                self.context["center"], role_ids
+            attrs["required_role_ids"] = resolve_center_roles(
+                self.context["center"],
+                role_ids,
+                field_name="required_role_ids",
             )
         if "required_room_type_ids" in attrs:
             room_type_ids = attrs.get("required_room_type_ids") or []
@@ -501,27 +503,6 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
                 self.context["center"], room_type_ids
             )
         return attrs
-
-    def _resolve_roles(self, center, role_ids):
-        if not role_ids:
-            return []
-        roles = list(
-            AssociateRole.objects.filter_active(
-                Q(pk__in=role_ids) & (Q(is_system=True) | Q(center=center))
-            )
-        )
-        found_ids = {role.pk for role in roles}
-        missing_ids = set(role_ids) - found_ids
-        if missing_ids:
-            raise serializers.ValidationError(
-                {
-                    "required_role_ids": (
-                        "Invalid or inactive roles for this center: "
-                        f"{', '.join(str(role_id) for role_id in missing_ids)}"
-                    )
-                }
-            )
-        return roles
 
     def _resolve_room_types(self, center, room_type_ids):
         if not room_type_ids:

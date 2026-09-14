@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
-from accounts.associates.utils.db import (
+from accounts.associates.utils.roles import (
     active_role_links_prefetch,
     assignment_active_roles,
     assignment_holds_role,

@@ -1,7 +1,8 @@
 from rest_framework.permissions import IsAuthenticated
 
 from accounts.associates.utils.constants import AssociateRoleFeature
-from accounts.associates.utils.db import assignment_active_roles, get_associate_roles
+from accounts.associates.utils.db import get_associate_roles
+from accounts.associates.utils.roles import assignment_active_roles
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 

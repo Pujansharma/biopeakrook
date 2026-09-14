@@ -8,16 +8,15 @@ from accounts.associates.models import (
     AssociateCenterAssignment,
     AssociateRole,
 )
-from accounts.associates.utils.db import (
-    active_role_links_prefetch,
-    assignment_active_roles,
-    replace_assignment_roles,
-    resolve_center_roles,
-)
 from accounts.associates.utils.constants import AssociateTitle
 from accounts.associates.utils.db import (
     create_associate_user_account,
+    replace_assignment_roles,
     update_associate_centers_count,
+)
+from accounts.associates.utils.roles import (
+    assignment_active_roles,
+    resolve_center_roles,
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer
@@ -51,11 +50,18 @@ from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
 
 def assignment_roles_representation(assignment):
+    if assignment is None:
+        return {"role_ids": [], "roles": []}
+    cached = getattr(assignment, "_assignment_roles_representation", None)
+    if cached is not None:
+        return cached
     roles = assignment_active_roles(assignment)
-    return {
+    payload = {
         "role_ids": [role.pk for role in roles],
         "roles": BaseAssociateRoleSerializer(roles, many=True).data,
     }
+    assignment._assignment_roles_representation = payload
+    return payload
 
 
 class AssignmentRoleIdsField(serializers.ListField):
@@ -1057,39 +1063,43 @@ class CenterAssociateDetailSerializer(
         if errors:
             raise serializers.ValidationError(errors)
 
-        roles = None
-        if role_ids is not serializers.empty:
-            if instance.is_admin and role_ids:
-                raise serializers.ValidationError(
-                    {"role_ids": "Roles cannot be assigned to admin associates."}
-                )
+        will_be_admin = validated_data.get("is_admin", instance.is_admin)
+        if will_be_admin and role_ids is not serializers.empty and role_ids:
+            raise serializers.ValidationError(
+                {"role_ids": "Roles cannot be assigned to admin associates."}
+            )
+
+        roles = []
+        replace_roles = will_be_admin
+        if not will_be_admin and role_ids is not serializers.empty:
             roles = resolve_center_roles(instance.center, role_ids or [])
+            replace_roles = True
 
         was_active = user.is_active
 
-        if user_data:
-            for key, value in user_data.items():
-                setattr(user, key, value)
-            user.save(update_fields=[*user_data.keys(), "updated_at"])
-
-        if associate_data:
-            associate = instance.associate
-            for key, value in associate_data.items():
-                setattr(associate, key, value)
-            associate.save(update_fields=[*associate_data.keys(), "updated_at"])
-
-        if "is_active" in user_data:
-            is_now_active = user_data["is_active"]
-            if not is_now_active and was_active:
-                increment_inactive_staff_count(instance.center.pk)
-            if is_now_active and not was_active:
-                decrement_inactive_staff_count(instance.center.pk)
-            if is_now_active != was_active:
-                update_organization_staff_count()
         with transaction.atomic():
+            if user_data:
+                for key, value in user_data.items():
+                    setattr(user, key, value)
+                user.save(update_fields=[*user_data.keys(), "updated_at"])
+
+            if associate_data:
+                associate = instance.associate
+                for key, value in associate_data.items():
+                    setattr(associate, key, value)
+                associate.save(update_fields=[*associate_data.keys(), "updated_at"])
+
+            if "is_active" in user_data:
+                is_now_active = user_data["is_active"]
+                if not is_now_active and was_active:
+                    increment_inactive_staff_count(instance.center.pk)
+                if is_now_active and not was_active:
+                    decrement_inactive_staff_count(instance.center.pk)
+                if is_now_active != was_active:
+                    update_organization_staff_count()
             instance = super().update(instance, validated_data)
-            if role_ids is not serializers.empty:
-                replace_assignment_roles(instance, roles or [])
+            if replace_roles:
+                replace_assignment_roles(instance, roles)
         return instance
 
     def to_representation(self, instance):

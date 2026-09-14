@@ -1,10 +1,9 @@
 from rest_framework import serializers
 
 from accounts.associates.serializers import (
-    BaseAssociateRoleSerializer,
     AssociateSourceMixinSerializer,
+    assignment_roles_representation,
 )
-from accounts.associates.utils.db import assignment_active_roles
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import (
     CustomerProfile,
@@ -303,12 +302,11 @@ class ExternalCustomerAssociateSerializer(
 
     def get_roles(self, instance):
         assignment = getattr(instance, "current_center_assignment", None)
-        roles = assignment_active_roles(assignment)
-        return BaseAssociateRoleSerializer(roles, many=True).data
+        return assignment_roles_representation(assignment)["roles"]
 
     def get_role_ids(self, instance):
         assignment = getattr(instance, "current_center_assignment", None)
-        return [role.pk for role in assignment_active_roles(assignment)]
+        return assignment_roles_representation(assignment)["role_ids"]
 
     def create(self, validated_data):
         pass

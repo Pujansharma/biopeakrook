@@ -6,9 +6,8 @@ from rest_framework import serializers
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.associates.serializers import (
     BaseAssociateSerializer,
-    BaseAssociateRoleSerializer,
+    assignment_roles_representation,
 )
-from accounts.associates.utils.db import assignment_active_roles
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer, BaseCenterSerializer
 from accounts.centers.utils.db import (
@@ -831,17 +830,11 @@ class CustomerAssociateSerializer(BaseModelSerializer):
 
     def get_roles(self, instance):
         assignment = instance.current_center_assignment
-        if assignment is None:
-            return []
-        return BaseAssociateRoleSerializer(
-            assignment_active_roles(assignment), many=True
-        ).data
+        return assignment_roles_representation(assignment)["roles"]
 
     def get_role_ids(self, instance):
         assignment = instance.current_center_assignment
-        if assignment is None:
-            return []
-        return [role.pk for role in assignment_active_roles(assignment)]
+        return assignment_roles_representation(assignment)["role_ids"]
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)

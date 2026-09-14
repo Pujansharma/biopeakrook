@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 
 from accounts.associates.models import AssociateCenterAssignment
-from accounts.associates.utils.db import (
+from accounts.associates.utils.roles import (
     active_role_links_prefetch,
     assignment_holds_role,
 )

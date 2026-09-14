@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.associates.models import AssociateRole
-from accounts.associates.utils.db import assignment_holds_role
+from accounts.associates.utils.roles import assignment_holds_role
 from appointments.models import (
     CareTeamAvailabilityBlock,
     CenterCareTeam,
