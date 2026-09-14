@@ -55,6 +55,18 @@ HEALTH_COACH_ID_REJECT_MESSAGE = (
     "Use specialty_id instead of health_coach_id."
 )
 PREFERRED_REQUIRED_MESSAGE = "preferred is required."
+MISSING_DOCTOR_ROLE_MESSAGE = (
+    "doctor_id must hold a live role with doctor in the role name."
+)
+MISSING_SPECIALTY_ROLE_MESSAGE = (
+    "specialty_id must hold a live non-doctor role."
+)
+AMBIGUOUS_DOCTOR_ROLE_MESSAGE = (
+    "doctor_id matches more than one live doctor role. Pin role_id."
+)
+AMBIGUOUS_SPECIALTY_ROLE_MESSAGE = (
+    "specialty_id matches more than one live non-doctor role. Pin role_id."
+)
 
 
 def compute_exclusive_bounds(start, end, buffer_before, buffer_after):
@@ -244,18 +256,34 @@ def role_is_doctor(role):
     return "doctor" in (role.name or "").lower()
 
 
+def pick_unique_role(roles, empty_message, ambiguous_message):
+    if not roles:
+        raise ValidationError(empty_message)
+    if len(roles) > 1:
+        raise ValidationError(ambiguous_message)
+    return roles[0]
+
+
 def pick_doctor_role(roles):
-    for role in roles:
-        if role_is_doctor(role):
-            return role
-    return None
+    return pick_unique_role(
+        [role for role in roles if role_is_doctor(role)],
+        MISSING_DOCTOR_ROLE_MESSAGE,
+        AMBIGUOUS_DOCTOR_ROLE_MESSAGE,
+    )
 
 
 def pick_specialty_role(roles):
-    for role in roles:
-        if not role_is_doctor(role):
-            return role
-    return None
+    return pick_unique_role(
+        [role for role in roles if not role_is_doctor(role)],
+        MISSING_SPECIALTY_ROLE_MESSAGE,
+        AMBIGUOUS_SPECIALTY_ROLE_MESSAGE,
+    )
+
+
+PREFERRED_PERSON_ROLE_PICKERS = {
+    "doctor_id": pick_doctor_role,
+    "specialty_id": pick_specialty_role,
+}
 
 
 def required_room_types_for_assignment(assignment):
@@ -722,21 +750,10 @@ def resolve_preferred_person_entry(center, preferred_key, associate_id, modality
     center_assignment = get_live_assignment_for_associate(
         center, associate_id, modality
     )
-    roles = assignment_active_roles(center_assignment)
-    if preferred_key == "doctor_id":
-        role = pick_doctor_role(roles)
-        if role is None:
-            raise ValidationError(
-                "doctor_id must hold a live role with doctor in the role name."
-            )
-    elif preferred_key == "specialty_id":
-        role = pick_specialty_role(roles)
-        if role is None:
-            raise ValidationError(
-                "specialty_id must hold a live non-doctor role."
-            )
-    else:
+    picker = PREFERRED_PERSON_ROLE_PICKERS.get(preferred_key)
+    if picker is None:
         raise ValidationError(f"Unknown preferred person key: {preferred_key}")
+    role = picker(assignment_active_roles(center_assignment))
     return {
         "role_id": str(role.pk),
         "associate_id": center_assignment.associate.pk,

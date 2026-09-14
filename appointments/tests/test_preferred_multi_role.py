@@ -12,7 +12,10 @@ from accounts.centers.models import Center
 from accounts.users.models import User
 from appointments.serializers.booking import normalize_preferred
 from appointments.utils.scheduling import (
+    AMBIGUOUS_DOCTOR_ROLE_MESSAGE,
+    AMBIGUOUS_SPECIALTY_ROLE_MESSAGE,
     HEALTH_COACH_ID_REJECT_MESSAGE,
+    resolve_preferred_person_entry,
     room_matches_assignment_types,
     validate_associate_assignments,
     validate_preferred_combo,
@@ -149,6 +152,59 @@ class MultiRoleAssociatePinTests(TestCase):
                 role_requirements=[],
                 modality=AppointmentModes.VIRTUAL,
             )
+
+
+class PreferredPersonRoleStampTests(TestCase):
+    def setUp(self):
+        self.center = create_center("PREF-ROLE")
+
+    def test_doctor_plus_specialty_stamps_unique_hats(self):
+        doctor_role = create_role(self.center, "Doctor")
+        coach_role = create_role(self.center, "Health Coach")
+        associate = create_assigned_associate(
+            self.center,
+            "doc-coach@example.com",
+            doctor_role,
+            coach_role,
+        )
+        doctor_entry = resolve_preferred_person_entry(
+            self.center, "doctor_id", associate.pk, AppointmentModes.VIRTUAL
+        )
+        specialty_entry = resolve_preferred_person_entry(
+            self.center, "specialty_id", associate.pk, AppointmentModes.VIRTUAL
+        )
+        self.assertEqual(doctor_entry["role"].pk, doctor_role.pk)
+        self.assertEqual(specialty_entry["role"].pk, coach_role.pk)
+
+    def test_ambiguous_specialty_roles_require_pin(self):
+        coach_role = create_role(self.center, "Health Coach")
+        nutrition_role = create_role(self.center, "Nutritionist")
+        associate = create_assigned_associate(
+            self.center,
+            "two-specialty@example.com",
+            coach_role,
+            nutrition_role,
+        )
+        with self.assertRaises(ValidationError) as raised:
+            resolve_preferred_person_entry(
+                self.center, "specialty_id", associate.pk, AppointmentModes.VIRTUAL
+            )
+        self.assertIn(AMBIGUOUS_SPECIALTY_ROLE_MESSAGE, raised.exception.messages)
+
+    def test_ambiguous_doctor_roles_require_pin(self):
+        doctor_role = create_role(self.center, "Doctor")
+        senior_doctor_role = create_role(self.center, "Senior Doctor")
+        associate = create_assigned_associate(
+            self.center,
+            "two-doctor@example.com",
+            doctor_role,
+            senior_doctor_role,
+        )
+        with self.assertRaises(ValidationError) as raised:
+            resolve_preferred_person_entry(
+                self.center, "doctor_id", associate.pk, AppointmentModes.VIRTUAL
+            )
+        self.assertIn(AMBIGUOUS_DOCTOR_ROLE_MESSAGE, raised.exception.messages)
 
 
 class MultiRoomTypeRequirementTests(TestCase):
