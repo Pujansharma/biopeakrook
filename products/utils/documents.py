@@ -2,7 +2,10 @@ from programs.services.utils.constants import ServiceDocumentType
 
 from .constants import ProductCallbackFunction, ProviderCallbackFunction
 
-BIOPEAK_ALLOWED_DOCUMENTS = {
+AllowedDocumentTypeMap = dict[str, list[ServiceDocumentType]]
+
+
+BIOPEAK_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.OLIGOSCAN: [ServiceDocumentType.OLIGOSCAN],
     ProductCallbackFunction.BLOOD: [ServiceDocumentType.BLOOD],
     ProductCallbackFunction.SOMFIT: [ServiceDocumentType.SOMFIT],
@@ -59,25 +62,25 @@ BIOPEAK_ALLOWED_DOCUMENTS = {
     ],
 }
 
-METFLUX_ALLOWED_DOCUMENTS = {
+METFLUX_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.METSIGHTS_PP: [ServiceDocumentType.METSIGHTS_PP],
 }
 
-HEALTHIANS_ALLOWED_DOCUMENTS = {
+HEALTHIANS_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.BLOOD: [ServiceDocumentType.BLOOD],
 }
 
-ORANGE_LABS_ALLOWED_DOCUMENTS = {
+ORANGE_LABS_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.BLOOD: [ServiceDocumentType.BLOOD],
 }
 
-BUGSPEAKS_ALLOWED_DOCUMENTS = {
+BUGSPEAKS_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.GUT_MICROBIOME: [
         ServiceDocumentType.BUGSPEAKS_REPORT,
     ],
 }
 
-FIVE_C_NETWORK_ALLOWED_DOCUMENTS = {
+FIVE_C_NETWORK_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.EVO_360: [ServiceDocumentType.EVO_360],
 }
 
@@ -89,7 +92,7 @@ STRAND_SHARED_DOCUMENTS = [
     ServiceDocumentType.GENETICS_INHERITED_CANCER,
 ]
 
-STRAND_ALLOWED_DOCUMENTS = {
+STRAND_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.GENOMICS_WES: STRAND_SHARED_DOCUMENTS,
     ProductCallbackFunction.GENOMICS_HLA_TYPING: STRAND_SHARED_DOCUMENTS,
     ProductCallbackFunction.GENOMICS_SINGLE_GENE_NGS: STRAND_SHARED_DOCUMENTS,
@@ -102,7 +105,7 @@ STRAND_ALLOWED_DOCUMENTS = {
     ],
 }
 
-META_OMICS_ALLOWED_DOCUMENTS = {
+META_OMICS_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.OMICS_NUTRI_TOXIC: [
         ServiceDocumentType.STEROID_HORMONE_NUTRITIONAL_TOXIC_ELEMENTS,
     ],
@@ -124,11 +127,11 @@ META_OMICS_ALLOWED_DOCUMENTS = {
     ],
 }
 
-NEUBERG_ANAND_ALLOWED_DOCUMENTS = {
+NEUBERG_ANAND_ALLOWED_DOCUMENTS: AllowedDocumentTypeMap = {
     ProductCallbackFunction.BLOOD: [ServiceDocumentType.BLOOD],
 }
 
-PRODUCT_DOCUMENTS_MAP = {
+PRODUCT_DOCUMENTS_MAP: dict[str, AllowedDocumentTypeMap] = {
     ProviderCallbackFunction.BIOPEAK: BIOPEAK_ALLOWED_DOCUMENTS,
     ProviderCallbackFunction.METFLUX: METFLUX_ALLOWED_DOCUMENTS,
     ProviderCallbackFunction.HEALTHIANS: HEALTHIANS_ALLOWED_DOCUMENTS,
@@ -149,6 +152,9 @@ def _serialize_document_type(document_type: ServiceDocumentType):
 
 
 def get_allowed_document_type_choices(provider_code: str, product_code: str):
+    if provider_code == ProviderCallbackFunction.OTHER:
+        return [*ServiceDocumentType]
+
     provider_documents = PRODUCT_DOCUMENTS_MAP.get(provider_code, {})
     document_types = provider_documents.get(product_code, [])
     return [*document_types]

@@ -2,6 +2,7 @@ import secrets
 import string
 from datetime import datetime
 
+import arrow
 from django.utils import timezone
 
 
@@ -40,3 +41,11 @@ def get_split_names(full_name: str) -> tuple[str | None, str | None]:
         last_name = None
         return first_name, last_name
     return first_name, last_name.title()
+
+
+def get_age_from_date_of_birth(date_of_birth):
+    if not date_of_birth:
+        return None
+    _date = arrow.get(date_of_birth).date()
+    diff = (timezone.localdate() - _date).days // 365
+    return diff

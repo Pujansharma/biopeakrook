@@ -15,23 +15,29 @@ from core.utils.views.main import (
     BaseRetrieveDestroyAPIView,
 )
 from products.models import Product, Provider
-from products.serializers import BaseProductSerializer, BaseProviderSerializer
+from products.serializers import (
+    AssessmentServiceProviderSerializer,
+    BaseProductSerializer,
+)
 from programs.models import ProgramService
 from programs.program_services.serializers import (
     AssessmentProgramServiceSerializer,
     AssessmentServiceDocumentSerializer,
+    AssessmentServiceResultRequestSerializer,
     AssessmentServiceResultSerializer,
     ProgramServiceCancelSerializer,
+    ResultRequestCancelSerializer,
+    ResultRequestRefetchSerializer,
     TherapyProgramServiceSerializer,
 )
 from programs.program_services.utils.db import (
     delete_service_document,
     delete_service_result,
 )
-from programs.services.models import ServiceDocument, ServiceResult
+from programs.services.models import ResultRequest, ServiceDocument, ServiceResult
 from programs.services.utils.constants import (
     ServiceCategory,
-    get_module_category_document_types,
+    get_module_category_document_types, ResultRequestStatus,
 )
 
 
@@ -135,7 +141,7 @@ class AssessmentProgramServiceProviders(
     BaseListAPIView,
     AssessmentProgramServiceViewMeta,
 ):
-    serializer_class = BaseProviderSerializer
+    serializer_class = AssessmentServiceProviderSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
 
     def get_queryset(self):
@@ -234,6 +240,95 @@ class TherapyProgramServiceCancelView(BaseProgramServiceCancelView):
 
 class ConsultationProgramServiceCancelView(BaseProgramServiceCancelView):
     service_category = ServiceCategory.CONSULTATION
+
+
+class AssessmentServiceResultRequestView(
+    BaseListCreateAPIView,
+    AssessmentProgramServiceViewMeta,
+):
+    serializer_class = AssessmentServiceResultRequestSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        filter_kwargs = {}
+        program_service = self.get_assessment_program_service()
+        status = self.request.query_params.get('status', None)
+
+        if status and status in ResultRequestStatus:
+            filter_kwargs['status'] = status
+        return (
+            ResultRequest.objects.filter(
+                program_service=program_service,
+                **filter_kwargs,
+            )
+            .select_related(
+                "product__provider",
+                "created_by",
+            )
+            .prefetch_related("results")
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(
+            program_service=self.get_active_assessment_program_service(),
+            created_by=self.request.user,
+        )
+
+
+class ResultRequestViewMeta(BaseGenericAPIView):
+    def get_result_request_queryset(self):
+        return (
+            ResultRequest.objects.filter(
+                program_service__service__service_category=(
+                    ServiceCategory.ASSESSMENT
+                ),
+            )
+            .select_related(
+                "program_service__program",
+                "program_service__service",
+                "product__provider__api",
+                "created_by",
+            )
+            .prefetch_related("results")
+        )
+
+    def get_result_request(self):
+        return get_object_or_404(
+            self.get_result_request_queryset(),
+            "Result request not found.",
+            pk=self.kwargs["pk"],
+        )
+
+
+class ResultRequestDetailView(
+    BaseRetrieveAPIView,
+    ResultRequestViewMeta,
+):
+    serializer_class = AssessmentServiceResultRequestSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_queryset(self):
+        return self.get_result_request_queryset()
+
+
+class ResultRequestRefetchView(
+    BaseCreateAPIView,
+    ResultRequestViewMeta,
+):
+    serializer_class = ResultRequestRefetchSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def perform_create(self, serializer):
+        serializer.save(result_request=self.get_result_request())
+
+
+class ResultRequestCancelView(BaseCreateAPIView, ResultRequestViewMeta):
+    serializer_class = ResultRequestCancelSerializer
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def perform_create(self, serializer) -> None:
+        result_request = self.get_result_request()
+        serializer.save(result_request=result_request)
 
 
 class AssessmentProgramServiceResultsView(

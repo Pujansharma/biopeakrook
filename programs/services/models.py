@@ -8,6 +8,7 @@ from programs.services.utils.constants import (
     ServiceCategory,
     ServiceDocumentCategory,
     ServiceDocumentType,
+    ResultRequestStatus,
     ServiceResultMode,
 )
 
@@ -144,7 +145,53 @@ class ServiceProductAssignment(BaseUUIDModel):
         return f"{self.pk}"
 
 
+class ResultRequest(BaseUUIDModel):
+    program_service = models.ForeignKey(
+        "programs.ProgramService",
+        on_delete=models.PROTECT,
+        related_name="result_requests",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="result_requests",
+    )
+    data = models.JSONField(default=dict, blank=True)
+    profile_data = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        choices=ResultRequestStatus,
+        default=ResultRequestStatus.QUEUED,
+        editable=False,
+        db_index=True,
+    )
+    attempts_count = models.PositiveIntegerField(default=0, editable=False)
+    failure_detail = models.TextField(default="", blank=True, editable=False)
+    started_at = models.DateTimeField(null=True, blank=True, editable=False)
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
+    created_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_result_requests",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
 class ServiceResult(BaseUUIDModel):
+    result_request = models.ForeignKey(
+        ResultRequest,
+        on_delete=models.PROTECT,
+        related_name="results",
+        null=True,
+        blank=True,
+        editable=False,
+    )
     program_service = models.ForeignKey(
         "programs.ProgramService",
         on_delete=models.PROTECT,
@@ -181,9 +228,17 @@ class ServiceResult(BaseUUIDModel):
         blank=True,
         related_name="created_service_results",
     )
+    data = models.JSONField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["result_request", "document_type"],
+                condition=models.Q(result_request__isnull=False),
+                name="unique_result_request_document_type",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"

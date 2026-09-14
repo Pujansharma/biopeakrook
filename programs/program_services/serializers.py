@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 
 from django.db import transaction
@@ -7,7 +8,7 @@ from rest_framework import serializers
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer
 from products.models import Product
-from products.serializers import BaseProductSerializer
+from products.serializers import BaseProductSerializer, BaseProviderSerializer
 from products.utils.documents import get_allowed_document_type_choices
 from programs.composites.utils.db import (
     update_composite_program_document_counts,
@@ -16,16 +17,22 @@ from programs.composites.utils.db import (
 from programs.models import ProgramService, TherapyProgramService
 from programs.program_services.utils.db import (
     update_program_service_document_counts,
+    update_program_service_fetch_counts,
     update_program_service_results_count,
     update_result_documents_count,
 )
-from programs.program_services.utils.helper import generate_uploaded_file_hash
-from programs.services.models import ServiceDocument, ServiceResult
+from programs.program_services.utils.helper import generate_file_hash
+from programs.program_services.utils.tasks import (
+    get_result_fetch_handler,
+    start_result_request_task,
+)
+from programs.services.models import ResultRequest, ServiceDocument, ServiceResult
 from programs.services.serializers import (
     BaseServiceDocumentModuleCategorySerializer,
     BaseServiceSerializer,
 )
 from programs.services.utils.constants import (
+    ResultRequestStatus,
     ServiceCategory,
     ServiceDocumentType,
     ServiceResultMode,
@@ -87,6 +94,263 @@ class BaseAssessmentServiceDocumentSerializer(
             "module_category",
             "module_category_code",
         ]
+
+
+def is_empty_configured_value(value):
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, dict)):
+        return not value
+    return False
+
+
+def validate_configured_payload(field_name, payload, configured_fields):
+    if not isinstance(payload, dict):
+        raise serializers.ValidationError(
+            {field_name: "This field must be an object."}
+        )
+
+    expected_keys = set(configured_fields or [])
+    submitted_keys = set(payload)
+    missing_keys = sorted(expected_keys - submitted_keys)
+    unexpected_keys = sorted(submitted_keys - expected_keys)
+    empty_keys = sorted(
+        key
+        for key in expected_keys & submitted_keys
+        if is_empty_configured_value(payload[key])
+    )
+    errors = {}
+    if missing_keys:
+        errors["missing"] = missing_keys
+    if unexpected_keys:
+        errors["unexpected"] = unexpected_keys
+    if empty_keys:
+        errors["empty"] = empty_keys
+    if errors:
+        raise serializers.ValidationError({field_name: errors})
+    return payload
+
+
+class AssessmentServiceResultRequestSerializer(BaseModelSerializer):
+    provider = BaseProviderSerializer(source="product.provider", read_only=True)
+    provider_id = serializers.UUIDField(write_only=True)
+    product = BaseProductSerializer(read_only=True)
+    product_id = serializers.UUIDField(write_only=True)
+    data = serializers.JSONField()
+    profile_data = serializers.JSONField(write_only=True)
+    status_code = serializers.CharField(source="status", read_only=True)
+    results = BaseServiceResultSerializer(many=True, read_only=True)
+    created_by = BaseUserSerializer(read_only=True)
+
+    class Meta:
+        model = ResultRequest
+        fields = [
+            "id",
+            "provider",
+            "provider_id",
+            "product",
+            "product_id",
+            "data",
+            "profile_data",
+            "status",
+            "status_code",
+            "attempts_count",
+            "failure_detail",
+            "started_at",
+            "completed_at",
+            "results",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "status",
+            "attempts_count",
+            "failure_detail",
+            "started_at",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def create(self, validated_data):
+        program_service = validated_data.pop("program_service")
+        created_by = validated_data.pop("created_by")
+        provider_identifier = validated_data.pop("provider_id")
+        product_identifier = validated_data.pop("product_id")
+        product = (
+            Product.objects.filter(
+                pk=product_identifier,
+                provider__pk=provider_identifier,
+                provider__is_active=True,
+                provider__is_api_enabled=True,
+                provider__api__is_active=True,
+                is_active=True,
+                service_assignments__service=program_service.service,
+                service_assignments__is_active=True,
+            )
+            .select_related("provider", "provider__api")
+            .first()
+        )
+        if not product:
+            raise serializers.ValidationError(
+                {"product_id": "This product is not available for result fetching."}
+            )
+
+        handler = get_result_fetch_handler(
+            product.provider.callback,
+            product.callback,
+        )
+        if not handler:
+            raise serializers.ValidationError(
+                {"product_id": "Result fetching is not supported for this product."}
+            )
+
+        validated_data["data"] = validate_configured_payload(
+            "data",
+            validated_data["data"],
+            product.provider.fetch_fields,
+        )
+        validated_data["profile_data"] = validate_configured_payload(
+            "profile_data",
+            validated_data["profile_data"],
+            product.provider.fetch_profile_fields,
+        )
+        validated_data["program_service"] = program_service
+        validated_data["product"] = product
+        validated_data["created_by"] = created_by
+
+        result_request = super().create(validated_data)
+        update_program_service_fetch_counts(program_service.pk)
+        start_result_request_task(result_request)
+        return result_request
+
+
+class ResultRequestRefetchSerializer(BaseModelSerializer):
+    provider = BaseProviderSerializer(source="product.provider", read_only=True)
+    product = BaseProductSerializer(read_only=True)
+    status_code = serializers.CharField(source="status", read_only=True)
+    results = BaseServiceResultSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ResultRequest
+        fields = [
+            "id",
+            "provider",
+            "product",
+            "data",
+            "status",
+            "status_code",
+            "attempts_count",
+            "failure_detail",
+            "started_at",
+            "completed_at",
+            "results",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def create(self, validated_data):
+        result_request = validated_data.pop("result_request")
+        is_fetch_in_progress = result_request.status in [
+            ResultRequestStatus.QUEUED,
+            ResultRequestStatus.RUNNING,
+        ]
+        refetch_available_at = result_request.updated_at + timedelta(seconds=1)
+        if is_fetch_in_progress and refetch_available_at >= timezone.now():
+            raise serializers.ValidationError(
+                "A result fetch is already queued or running."
+            )
+
+        provider = result_request.product.provider
+        provider_api = getattr(provider, "api", None)
+        handler = get_result_fetch_handler(
+            provider.callback,
+            result_request.product.callback,
+        )
+        if (
+            not result_request.program_service.is_active
+            or not result_request.product.is_active
+            or not provider.is_active
+            or not provider.is_api_enabled
+            or not provider_api
+            or not provider_api.is_active
+            or not handler
+        ):
+            raise serializers.ValidationError(
+                "This result request is not currently available for refetching."
+            )
+
+        program_service = result_request.program_service
+        with transaction.atomic():
+            ServiceResult.objects.filter(result_request=result_request).delete()
+            result_request.status = ResultRequestStatus.QUEUED
+            result_request.failure_detail = ""
+            result_request.started_at = None
+            result_request.completed_at = None
+            result_request.save(
+                update_fields=[
+                    "status",
+                    "failure_detail",
+                    "started_at",
+                    "completed_at",
+                    "updated_at",
+                ]
+            )
+            update_program_service_results_count(program_service.pk)
+            update_program_service_document_counts(program_service.pk)
+            update_program_service_fetch_counts(program_service.pk)
+            update_composite_program_results_count(program_service.program.pk)
+            update_composite_program_document_counts(program_service.program.pk)
+
+        start_result_request_task(result_request)
+        return result_request
+
+
+class ResultRequestCancelSerializer(BaseModelSerializer):
+    provider = BaseProviderSerializer(source="product.provider", read_only=True)
+    product = BaseProductSerializer(read_only=True)
+    status_code = serializers.CharField(source="status", read_only=True)
+    results = BaseServiceResultSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ResultRequest
+        fields = [
+            "id",
+            "provider",
+            "product",
+            "data",
+            "status",
+            "status_code",
+            "attempts_count",
+            "failure_detail",
+            "started_at",
+            "completed_at",
+            "results",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def create(self, validated_data):
+        result_request = validated_data.pop("result_request")
+        if result_request.status == ResultRequestStatus.CANCELLED:
+            raise serializers.ValidationError(
+                "Result request is already cancelled."
+            )
+        if result_request.status == ResultRequestStatus.COMPLETED:
+            raise serializers.ValidationError(
+                "A completed result request cannot be cancelled."
+            )
+
+        result_request.status = ResultRequestStatus.CANCELLED
+        result_request.save(update_fields=["status", "updated_at"])
+        update_program_service_fetch_counts(result_request.program_service.pk)
+        return result_request
 
 
 class AssessmentServiceResultSerializer(BaseModelSerializer):
@@ -294,10 +558,11 @@ class AssessmentServiceDocumentSerializer(
             validated_data["content_type"] = (
                     uploaded_file.content_type or "application/octet-stream"
             )
-            validated_data["file_hash"] = generate_uploaded_file_hash(uploaded_file)
+            validated_data["file_hash"] = generate_file_hash(uploaded_file)
             service_document = super().create(validated_data)
             update_result_documents_count(current_service_result.pk)
             update_program_service_document_counts(program_service.pk)
+            update_program_service_fetch_counts(program_service.pk)
             update_composite_program_document_counts(
                 program_service.program.pk
             )
@@ -387,6 +652,10 @@ class AssessmentProgramServiceSerializer(BaseModelSerializer):
             "documents_count",
             "reports_count",
             "raw_data_count",
+            "fetch_count",
+            "fetch_results_count",
+            "fetch_documents_count",
+            "fetch_pending_count",
             "created_date",
             "created_by",
             "is_active",
@@ -404,6 +673,10 @@ class AssessmentProgramServiceSerializer(BaseModelSerializer):
             "documents_count",
             "reports_count",
             "raw_data_count",
+            "fetch_count",
+            "fetch_results_count",
+            "fetch_documents_count",
+            "fetch_pending_count",
             "created_date",
             "is_active",
             "created_at",

@@ -10,10 +10,10 @@ METSIGHTS_API_KEY = getattr(settings, "METSIGHTS_API_KEY", None)
 
 
 class Session(requests.Session):
-    def __init__(self):
+    def __init__(self, api_key=METSIGHTS_API_KEY):
         super().__init__()
         self.headers.update({
-            'X-API-KEY': METSIGHTS_API_KEY or ""
+            'X-API-KEY': api_key or ""
         })
 
 
@@ -71,3 +71,12 @@ def create_metsights_profile(
         return None
     response_data = response.json()
     return response_data
+
+
+def get_trends_for_profile(profile_id, assessment_type, api_key=None):
+    url = METSIGHTS_BASE_URL + f"external/profiles/{profile_id}/trends/"
+    session_api_key = METSIGHTS_API_KEY
+    if api_key and api_key is not None:
+        session_api_key = api_key
+    session = Session(session_api_key)
+    _response = session.get(url, params={'assessment_type': assessment_type})

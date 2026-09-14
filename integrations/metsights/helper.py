@@ -21,4 +21,5 @@ def get_or_create_metsights_profile(
         return None
 
     profile_data = profile_response.get("data", {}) or {}
-    return profile_data.get("id")
+    profile_id =  profile_data.get("id")
+    return profile_id

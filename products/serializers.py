@@ -4,7 +4,7 @@ from rest_framework import serializers
 from accounts.users.serializers import BaseUserSerializer
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 from products.models import Product, Provider, ProviderAPI
-from products.utils.constants import PROVIDER_PRODUCT_CALLBACK_MAP
+from products.utils.constants import PROVIDER_PRODUCT_CALLBACK_MAP, FetchProfileFieldChoices
 from products.utils.db import update_provider_products_count
 from products.utils.helper import generate_product_code, generate_provider_code
 
@@ -110,6 +110,11 @@ class ProviderSerializer(BaseModelSerializer):
         allow_empty=True,
         allow_null=True,
     )
+    fetch_profile_fields = serializers.MultipleChoiceField(
+        choices=list(FetchProfileFieldChoices.values),
+        required=False,
+        allow_empty=True,
+    )
 
     class Meta:
         model = Provider
@@ -127,6 +132,7 @@ class ProviderSerializer(BaseModelSerializer):
             "contact_phone",
             "required_fields",
             "fetch_fields",
+            "fetch_profile_fields",
             "has_api",
             "is_active",
             "is_api_enabled",
@@ -253,3 +259,25 @@ class ServiceAvailableProductSerializer(BaseModelSerializer):
             "provider",
             "exists",
         ]
+
+
+class AssessmentServiceProviderSerializer(BaseModelSerializer):
+    fetch_fields = serializers.SerializerMethodField()
+    fetch_profile_fields = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Provider
+        fields = [
+            "id",
+            "name",
+            "code",
+            "is_api_enabled",
+            "fetch_fields",
+            "fetch_profile_fields",
+        ]
+
+    def get_fetch_fields(self, instance):
+        return instance.fetch_fields or []
+
+    def get_fetch_profile_fields(self, instance):
+        return instance.fetch_profile_fields or []

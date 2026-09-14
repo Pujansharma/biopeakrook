@@ -6,7 +6,7 @@ from django.utils.log import ServerFormatter
 
 BASIC_FORMAT = "[%(levelname)s] %(name)s:%(message)s"
 
-logging.basicConfig(format=BASIC_FORMAT)
+logging.basicConfig(format=BASIC_FORMAT, level=logging.INFO)
 
 
 class BaseFormatter(ServerFormatter):

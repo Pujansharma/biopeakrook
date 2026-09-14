@@ -1,17 +1,20 @@
 # Biopeak Nexus — Project Memory
 
-Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_RULES.md clones. Specs live in `docs/`.
+Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_RULES.md clones. Specs in `docs/`.
 
 ---
 
 ## User Preferences
 
-- Code explain → clickable `[file.py:42](path/to/file.py#L42)` every mention, not prose-only.
+- Code explain → clickable `[file.py:42](path/to/file.py#L42)` every mention.
 - Never revert/alter code user manually edited. User change-back = final.
 - Never `select_for_update()`. Ordinary ORM. No row locks.
 - Never write migration files. Never `makemigrations`. User owns migrations.
 - UUID detail URLs: `<uuid:pk>/`.
 - No fn return/output type annotations unless asked.
+- Prefer `timezone.localtime()` for persisted timestamps.
+- No `transaction.atomic()` inside helpers unless asked.
+- ePRDs: concrete request/response JSON + integration logic. No TypeScript / base-type / interface decls.
 - Prefer explicit `BaseModelSerializer` + `Meta.model` + declared fields. No `to_representation()` delegate.
 - Keep related-object fields nested. Don't flatten.
 - Don't repeat explicit `read_only=True` fields in `Meta.read_only_fields`.
@@ -49,7 +52,7 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 
 ## Non-obvious decisions
 
-Pointers: appointments+availability → [`docs/appointments-frontend-api.md`](appointments-frontend-api.md). Google Calendar → [`docs/google-calendar-integration.md`](google-calendar-integration.md).
+Pointers: appointments+availability → [`docs/appointments-frontend-api.md`](appointments-frontend-api.md). Google Calendar → [`docs/google-calendar-integration.md`](google-calendar-integration.md). Result fetch → [`docs/result-fetch-flow.md`](result-fetch-flow.md).
 
 **API / tenancy**
 
@@ -64,17 +67,26 @@ Pointers: appointments+availability → [`docs/appointments-frontend-api.md`](ap
 - `CompositeTemplate.code` = required unique user-entered SKU; no sequence UID.
 - `ProgramService` line shared: keep `sessions_count`/`sessions_used`/`sessions_cancelled`; `sessions_count=0` = unlimited. Therapy runtime + `RedemptionHistory` → `TherapyProgramService`. Cancel/redemption only if `Program.program_type` is `THERAPY`. `wellness_*` = API aliases.
 - Composite add-ons: keep repeated `add_services`; no pricing change; no inherit template prerequisites. Authoritative list: `profiles/<profile_uuid>/programs/composite-program-services/`.
+- Composite prerequisites: singleton `CompositeServicePrerequisite` on `CompositeTemplateService`; empty M2M OK; default `require_any`. Spec: [`docs/composite-service-prerequisites-frontend-prd.md`](composite-service-prerequisites-frontend-prd.md).
 - Program UID: `P`-prefix ≥4-digit sequence on active therapy+composite create; API `uid` read-only; nullable; no DB unique. `backfill_program_uids` **not run yet**.
 - `ServiceResult` belongs to `ProgramService`. Module-category on serializer, not model. Unmapped → `unknown`. Invalid `module_category` query → no rows.
 - Counters persist via ORM subquery (include inactive/cancelled); API reads never annotate. Repair: `recompute_service_document_counts`.
 - ProgramService cancel: active flag + audit only; result/doc rows unchanged. Therapy cancel needs `X-Center-ID`. Legacy last-service writes parent cancel metadata w/o deactivating parent/subtype.
+- Global service → empty `GET /services/<uuid>/centers/`. Spec: [`docs/service-centers-products-frontend-eprd.md`](service-centers-products-frontend-eprd.md).
+
+**Assessments / fetch (2026-09-08/10)**
+
+- `ResultRequest` parent of 1+ `ServiceResult`. Provider via `ResultRequest.product.provider`. Layout: `integrations/<provider>/{sdk,tasks,utils/results}.py`. BugSpeaks = reference. Unknown provider → `None`; unknown product → no-op. Fetch/refetch start `ResultRequestThread`. Refetch reuses request, deletes `ServiceResult`+docs, re-queues. Cancel: `status`+`updated_at` only. Reject completed/already-cancelled. FE does **not** poll.
+- Strand NutriDNA + Genomic Health Insights: persist any PDF/VCF/JSON. All present → `completed`; ≥1 missing → `partially_fetched` + `failure_detail`; never `failed` w/o `ServiceResult`. Partial may cancel (keep results) or destructive refetch.
+- EVO 360: `client_id`/`client_secret`/`center_id` + `profile_data.email`. One-way PDF only if provider status `found`; else `failed` (no poll). Store `found` in `ServiceResult.data`; don't persist temp PDF URL.
+- `ProgramService.fetch_count` = all result requests; `fetch_results_count`/`fetch_documents_count` via `result_mode=fetch`; `fetch_pending_count` excludes completed/failed/cancelled (partial still pending). Hooks refresh 4 together; `recompute_service_document_counts` repairs.
 
 **Leads / onboarding / inventory**
 
 - Onboarding completion only `CustomerProfile.is_onboarding_completed` (not Lead). Both `is_onboarding_sent` default `False`. `is_onboarding_completed` read-only on center home/detail. `is_invited` independent. Ready: lead `sent=True` and (no profile or profile incomplete).
 - Leads writes `/leads/v2/` (POST create+shell, PATCH update+shell sync). v1 GET/POST/PATCH → 400; v1 DELETE still `/leads/{id}/`. `/auth/login-phone-direct/` = User lookup only, no shell.
 - Emergency contact fields dropped from `CustomerProfile` + pre-consult baseline.
-- Test kit: app `test_kit_inventory` (legacy inventory/assignment tables dropped). Global APIs, no `X-Center-ID`. One active kit/`CustomerProfile`. Eligible = completed pre-consult + no active kit. POST `/assign` `assigned_to` = non-empty profile UUID array; one txn; any fail → none; response `detail` only. `Product.is_assignable` default `False`. QC acks `qc_ack_packaging` / `qc_ack_all_components` write-gate on `Item`.
+- Test kit: app `test_kit_inventory`. Global APIs, no `X-Center-ID`. One active kit/`CustomerProfile`. Eligible = completed pre-consult + no active kit. POST `/assign` `assigned_to` = non-empty profile UUID array; one txn; any fail → none; response `detail` only. `Product.is_assignable` default `False`. QC acks `qc_ack_packaging` / `qc_ack_all_components` write-gate on `Item`.
 - Room/equip codes globally unique: `{EQ|RM}-{center.code}-{seq}`. Old `EQ-0005` rows keep format. Seq names stay `equipments_{center_id}` / `rooms_{center_id}`.
 - `Service.name` unique catalog-wide, case-insensitive. `Room.name` unique per center, case-insensitive. Same row may keep name. Inactive rooms still occupy name. Existing dups block migrate.
 
@@ -134,7 +146,7 @@ Canonical: [`docs/google-calendar-integration.md`](google-calendar-integration.m
 ## Conventions (not in CODING_RULES.md)
 
 - ORM lookups in serializers/utils: `filter(...).first()`. No `.get()`; handle missing explicitly.
-- Serializer add/remove: write-only `{id}` lists; pop w/ `[]` fallback; one query + set diff; save → remove before add → refresh counts → return.
+- Serializer add/remove: write-only `{id}` lists; pop w/ `[]` fallback; one query + set diff; save → remove before add → refresh counts → return. Spec: [`docs/m2m-serializer-pattern.md`](m2m-serializer-pattern.md).
 - Views: `*ViewMeta` + `filter_kwargs = {}` on `BaseGenericAPIView`. No standalone queryset utils. No `http_method_names`. Serializers never import ViewMeta querysets. `utils/db.py` = mutations only. Representation uses prefetched `to_attr`.
 - Serializer `create()`/`update()` own persistence. Views pass context to `serializer.save(...)`; must not capture return, assign `serializer.instance`, or reload for write-response. Route getters take no id args; resolve `self.kwargs["pk"]` via `get_object_or_404`. Shared `*ViewMeta` only if `pk` same resource type. Create needing nested prefetch: reload via ViewMeta queryset → `serializer.instance`.
 
