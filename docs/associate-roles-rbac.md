@@ -117,11 +117,11 @@ Use for endpoints only center admins should access (e.g., managing other associa
 
 ### AssociateFeaturePermission
 
-Extends `BaseAssociateRBACPermission`. Checks that the role on the center assignment has ANY of `required_any_features`.
+Extends `BaseAssociateRBACPermission`. Checks that **any** of the associate's multi-roles on the center assignment has ANY of `required_any_features` (OR across roles).
 
 - If `required_any_features` is empty, allows access.
 - If role has `AssociateRoleFeature.ALL`, allows access.
-- Otherwise, checks `any(feature in role.features for feature in required_any_features)`.
+- Otherwise, for each linked active role: if `ALL` in features or any required feature matches → allow.
 
 Does NOT include an admin bypass. Use `|` composition with `AssociateAdminPermission` if admins should also have access.
 

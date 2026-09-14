@@ -3,13 +3,21 @@ meta {
 }
 
 auth {
-  mode: bearer
+  mode: inherit
 }
 
-auth:bearer {
-  token: {{customer_access_token}}
+script:pre-request {
+  const token =
+    bru.getEnvVar('customer_access_token') ||
+    bru.getCollectionVar('customer_access_token') ||
+    bru.getVar('customer_access_token') ||
+    '';
+  if (token) {
+    req.setHeader('Authorization', `Bearer ${token}`);
+  }
 }
 
 docs {
   Extreme scenario (Vikram Rao) with cluster probing. Subfolders: v1 (classic), v2 (remixed endpoints). Lifestyle PUT expects next_layer=patient_cluster_probe.
+  Auth: folder pre-request prefers customer_access_token (env/collection) over collection access_token. Skips empty runtime var.
 }

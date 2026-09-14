@@ -426,6 +426,11 @@ class Appointment(BaseUUIDModel):
         blank=True,
         related_name="booked_appointments",
     )
+    notes = models.TextField(null=True, blank=True)
+    google_event_id = models.CharField(
+        max_length=255, null=True, blank=True, unique=True
+    )
+    google_meet_link = models.URLField(null=True, blank=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -521,6 +526,10 @@ class AppointmentAssociate(BaseUUIDModel):
             models.UniqueConstraint(
                 fields=["appointment", "role"],
                 name="uniq_appointment_associate_role",
+            ),
+            models.UniqueConstraint(
+                fields=["appointment", "associate"],
+                name="uniq_appointment_associate",
             ),
             ExclusionConstraint(
                 name="appointment_associate_no_overlap",

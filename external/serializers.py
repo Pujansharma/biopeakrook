@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 from accounts.associates.serializers import (
-    BaseAssociateRoleSerializer,
     AssociateSourceMixinSerializer,
+    assignment_roles_representation,
 )
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import (
@@ -276,7 +276,8 @@ class ExternalCustomerAssociateSerializer(
 
     image = serializers.ImageField(source="associate.user.image", read_only=True)
 
-    role = BaseAssociateRoleSerializer(read_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomerAssociateAssignment
@@ -288,7 +289,8 @@ class ExternalCustomerAssociateSerializer(
             "last_name",
             "gender",
             "image",
-            "role",
+            "roles",
+            "role_ids",
             "title",
             "description",
             "tagline",
@@ -297,6 +299,14 @@ class ExternalCustomerAssociateSerializer(
             "professions",
             "has_verified_badge",
         ]
+
+    def get_roles(self, instance):
+        assignment = getattr(instance, "current_center_assignment", None)
+        return assignment_roles_representation(assignment)["roles"]
+
+    def get_role_ids(self, instance):
+        assignment = getattr(instance, "current_center_assignment", None)
+        return assignment_roles_representation(assignment)["role_ids"]
 
     def create(self, validated_data):
         pass

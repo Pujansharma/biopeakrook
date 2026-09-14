@@ -7,16 +7,12 @@ meta {
 post {
   url: {{baseURL}}/centers/{{center_id}}/availability/closures/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   X-Center-ID: {{center_id}}
   content-type: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 body:json {

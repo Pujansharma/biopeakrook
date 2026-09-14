@@ -29,22 +29,34 @@ def send_appointment_rescheduled(appointment, *, previous_start_datetime=None):
     )
 
 
+def load_appointment_for_outbox(appointment_id):
+    return (
+        Appointment.objects.select_related(
+            "customer_profile__customer__user",
+            "service",
+            "center",
+        )
+        .filter(pk=appointment_id)
+        .first()
+    )
+
+
 def queue_confirmed_by_appointment_id(appointment_id):
-    appointment = Appointment.objects.filter(pk=appointment_id).first()
+    appointment = load_appointment_for_outbox(appointment_id)
     if appointment is None:
         return None
     return send_appointment_confirmed(appointment)
 
 
 def queue_cancelled_by_appointment_id(appointment_id):
-    appointment = Appointment.objects.filter(pk=appointment_id).first()
+    appointment = load_appointment_for_outbox(appointment_id)
     if appointment is None:
         return None
     return send_appointment_cancelled(appointment)
 
 
 def queue_rescheduled_by_appointment_id(appointment_id, previous_start_datetime):
-    appointment = Appointment.objects.filter(pk=appointment_id).first()
+    appointment = load_appointment_for_outbox(appointment_id)
     if appointment is None:
         return None
     return send_appointment_rescheduled(

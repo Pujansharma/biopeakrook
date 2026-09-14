@@ -2,6 +2,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from accounts.associates.utils.constants import AssociateRoleFeature
 from accounts.associates.utils.db import get_associate_roles
+from accounts.associates.utils.roles import assignment_active_roles
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 
@@ -66,8 +67,8 @@ class AssociateAdminPermission(BaseAssociateRBACPermission):
 
 class AssociateFeaturePermission(BaseAssociateRBACPermission):
     """
-    Requires role to have ANY of required_any_features.
-    Having ALL feature allows
+    Requires ANY linked role to have ANY of required_any_features (OR).
+    Having ALL feature allows.
     """
 
     required_any_features = []
@@ -83,14 +84,16 @@ class AssociateFeaturePermission(BaseAssociateRBACPermission):
         if not self.required_any_features:
             return True
 
-        role = assignment.role
-        if not role:
+        roles = assignment_active_roles(assignment)
+        if not roles:
             return False
 
-        if AssociateRoleFeature.ALL in role.features:
-            return True
-
-        return any(f in role.features for f in self.required_any_features)
+        for role in roles:
+            if AssociateRoleFeature.ALL in role.features:
+                return True
+            if any(feature in role.features for feature in self.required_any_features):
+                return True
+        return False
 
 
 class AppointmentFeaturePermission(AssociateFeaturePermission):

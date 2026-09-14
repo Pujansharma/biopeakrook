@@ -6,6 +6,8 @@ __pycache__
 db.sqlite3
 media
 storage
+.superpowers/
+.ruff_cache/
 
 # Build files
 modules/utils/pdf_engine/build
@@ -112,6 +114,7 @@ celerybeat-schedule.*
 .env
 .env.*
 *.env.*
+!.env.example
 .venv
 env/
 venv/

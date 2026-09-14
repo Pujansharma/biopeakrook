@@ -7,15 +7,11 @@ meta {
 post {
   url: {{baseURL}}/centers/{{center_id}}/appointments/{{appointment_id}}/start/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   content-type: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 body:json {

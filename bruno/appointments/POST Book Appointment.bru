@@ -7,7 +7,7 @@ meta {
 post {
   url: {{baseURL}}/centers/{{center_id}}/appointments/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
@@ -15,28 +15,25 @@ headers {
   Idempotency-Key: {{idempotency_key}}
 }
 
-auth:bearer {
-  token: {{access_token}}
-}
-
 body:json {
   {
     "customer_profile_id": "{{customer_profile_id}}",
     "service_id": "{{service_id}}",
     "modality": "in_person",
-    "start": "2026-09-05T04:00:00Z",
-    "end": "2026-09-05T04:40:00Z",
+    "start": "2026-09-09T04:00:00Z",
+    "end": "2026-09-09T04:30:00Z",
     "preferred": {
       "room_id": "{{room_id}}"
     },
     "associates": [
       {
-        "role_id": "{{role_id}}",
-        "associate_id": "{{associate_id}}"
+        "associate_id": "{{associate_id}}",
+        "role_id": "{{role_id}}"
       }
     ],
     "room_id": "{{room_id}}",
-    "equipment_id": null
+    "equipment_id": "{{equipment_id}}",
+    "notes": "First visit"
   }
 }
 
@@ -56,14 +53,25 @@ docs {
   Prefer pin from POST Find Slots (associates + room_id + equipment_id) — server validates free, does not re-pick.
   Incomplete pin (associates without room_id for in_person) → 400 "Pin requires room_id for in-person appointments."
   If pin omitted, send preferred; server resolves combo then validates.
-  Staff: from service role requirements (auto) and/or preferred care_team_id / doctor_id / health_coach_id.
+  Staff+room: complete pin OR valid preferred (preference-only; no leftover auto-fill). preferred keys: care_team_id / doctor_id / specialty_id / room_id.
   Room-only preferred OK when roles exist. Zero roles + no preferred staff → 400
-  "At least one associate is required. Send a pin or preferred care_team_id / doctor_id / health_coach_id."
-  preferred.care_team_id XOR doctor_id/health_coach_id; room_id optional with either.
+  "At least one associate is required. Send a pin or preferred care_team_id / doctor_id / specialty_id."
+  preferred.care_team_id XOR doctor_id/specialty_id; room_id required for in_person preferred path. Pin does not require exactly one associate per service role.
   Pin + preferred.care_team_id stamps care_team only when every live team member is in the pin.
   Top-level care_team_id removed — use preferred.care_team_id.
   Booked appointment always has non-empty associates[].
   Adjust start/end to match a slot. Overlap → 400 "Slot no longer available."
   customer_profile_id / service_id must be active at this center.
   Invalid room_id / equipment_id → 400 "Invalid room/equipment for this center."
+  notes is optional free text, stored on the appointment as-is and also appended to a
+  formatted Google event description (patient name, service, date, time, then either
+  the clinic address for in_person/both or a "join via Google Meet" line for virtual —
+  no address shown for virtual).
+  Google Calendar: if the one fixed shared account (GOOGLE_CALENDAR_ID, see
+  google_calendar/Connect + Complete) is connected, the appointment is mirrored
+  there automatically as this organizer, right after the appointment is saved,
+  with assigned associates invited as attendees. Best-effort — booking always
+  succeeds even if this sync fails or nobody is connected; a Google failure is
+  logged, never surfaced as an error. Response's google_meet_link is populated
+  only when the sync succeeded and the appointment is virtual.
 }

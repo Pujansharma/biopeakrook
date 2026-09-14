@@ -6,7 +6,7 @@ from rest_framework import serializers
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.associates.serializers import (
     BaseAssociateSerializer,
-    BaseAssociateRoleSerializer,
+    assignment_roles_representation,
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer, BaseCenterSerializer
@@ -806,10 +806,8 @@ class CustomerAssociateSerializer(BaseModelSerializer):
     is_active = serializers.BooleanField(
         source="user.is_active", required=False, default=True
     )
-    role = BaseAssociateRoleSerializer(
-        source="current_center_assignment.role",
-        read_only=True,
-    )
+    roles = serializers.SerializerMethodField()
+    role_ids = serializers.SerializerMethodField()
     created_by = BaseUserSerializer(read_only=True)
 
     class Meta:
@@ -825,9 +823,18 @@ class CustomerAssociateSerializer(BaseModelSerializer):
             "image",
             "is_active",
             "created_at",
-            "role",
+            "roles",
+            "role_ids",
             "created_by",
         ]
+
+    def get_roles(self, instance):
+        assignment = instance.current_center_assignment
+        return assignment_roles_representation(assignment)["roles"]
+
+    def get_role_ids(self, instance):
+        assignment = instance.current_center_assignment
+        return assignment_roles_representation(assignment)["role_ids"]
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)

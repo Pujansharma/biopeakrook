@@ -4,7 +4,10 @@ from integrations.communications.outbox import process_pending_outbox
 
 
 class Command(BaseCommand):
-    help = "Process pending / retryable WhatsApp communication outbox rows."
+    help = (
+        "Process pending / retryable communication outbox rows "
+        "(WhatsApp + Google Calendar)."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(

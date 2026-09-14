@@ -7,7 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/associates/?page=1&limit=10&admin=0&role=
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
@@ -15,10 +15,6 @@ params:query {
   limit: 10
   admin: 0
   role: 
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

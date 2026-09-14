@@ -5,19 +5,17 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/centers/{{center_id}}/care-teams/?page=1&limit=10&search=
+  url: {{baseURL}}/centers/{{center_id}}/care-teams/?page=1&limit=10&search=&active=&members_live=
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
   page: 1
   limit: 10
   search: 
-}
-
-auth:bearer {
-  token: {{access_token}}
+  ~active: 
+  ~members_live: 
 }
 
 settings {
@@ -26,6 +24,6 @@ settings {
 }
 
 docs {
-  List center care teams. Nested members (associate + role). Query: search, optional active=0|1 (omit = active + inactive).
+  List center care teams. Nested members (associate + role). Query: search, optional active=0|1 (omit = active + inactive), optional members_live=0|1 (1 = every member live at center with mapped role active; 0 = any inactive member/role mapping; omit/junk = no filter). Independent of active=. Min 2 members always. Not the bookable-team picker — booking still expands leftover live members.
   Auth: bearer {{access_token}}. Set env center_id.
 }

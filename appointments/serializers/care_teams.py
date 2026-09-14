@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.associates.models import AssociateRole
+from accounts.associates.utils.roles import assignment_holds_role
 from appointments.models import (
     CareTeamAvailabilityBlock,
     CenterCareTeam,
@@ -108,7 +109,16 @@ class CenterCareTeamSerializer(BaseModelSerializer):
         }
         for entry in members:
             assignment = assignment_by_associate.get(entry["associate_id"])
-            if assignment is None or assignment.role.pk != entry["role_id"]:
+            member_role = roles.get(entry["role_id"])
+            if assignment is None or member_role is None:
+                raise serializers.ValidationError(
+                    {
+                        "members": [
+                            "Associate is not assigned to this center with the required role."
+                        ]
+                    }
+                )
+            if not assignment_holds_role(assignment, entry["role_id"]):
                 raise serializers.ValidationError(
                     {
                         "members": [
@@ -117,7 +127,7 @@ class CenterCareTeamSerializer(BaseModelSerializer):
                     }
                 )
             entry["associate"] = assignment.associate
-            entry["role"] = assignment.role
+            entry["role"] = member_role
         return members
 
     def validate(self, attrs):

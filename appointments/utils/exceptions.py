@@ -67,10 +67,12 @@ SOURCE_MODEL_MAP = {
 
 
 def recompute_appointment_exception_flag(appointment: Appointment) -> bool:
-    has_open = appointment.exceptions.filter(status=ExceptionStatus.OPEN).exists()
-    if appointment.has_open_exception != has_open:
-        appointment.has_open_exception = has_open
-        appointment.save(update_fields=["has_open_exception", "updated_at"])
+    has_open = AppointmentException.objects.filter(
+        appointment=appointment,
+        status=ExceptionStatus.OPEN,
+    ).exists()
+    appointment.has_open_exception = has_open
+    appointment.save(update_fields=["has_open_exception", "updated_at"])
     return has_open
 
 

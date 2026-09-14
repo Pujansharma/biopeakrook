@@ -24,7 +24,7 @@ body:json {
       "room_id": "{{room_id}}",
       "care_team_id": "{{care_team_id}}",
       "doctor_id": "{{doctor_id}}",
-      "health_coach_id": "{{health_coach_id}}"
+      "specialty_id": "{{specialty_id}}"
     }
   }
 }
@@ -62,7 +62,7 @@ script:pre-request {
 
   const preferred = body.preferred || {};
   const cleanedPreferred = {};
-  const preferredKeys = ['room_id', 'care_team_id', 'doctor_id', 'health_coach_id'];
+  const preferredKeys = ['room_id', 'care_team_id', 'doctor_id', 'specialty_id'];
   for (const key of preferredKeys) {
     const value = String(preferred[key] || '').trim();
     if (value) cleanedPreferred[key] = value;
@@ -89,33 +89,25 @@ docs {
   - service_id — UUID, active service assigned to this center
   - modality — virtual | in_person (not both)
   - date — YYYY-MM-DD (env slot_date)
+  - preferred — REQUIRED. Staff+room from preferred only (no leftover auto-fill from service roles/room pool).
 
-  Staff: derived from active CenterServiceRoleRequirement on the center assignment
-  (auto-pick free associate per role). Optional preferred care_team_id / doctor_id /
-  health_coach_id bias pools or add extras. Room-only preferred OK when roles exist.
-  Zero roles + no preferred staff → no slots (soft-skip).
+  preferred keys (omit empty UUIDs — pre-request strips blanks):
+  - care_team_id XOR doctor_id / specialty_id
+  - doctor_id + specialty_id OK together (not same associate)
+  - room_id required for in_person; forbidden for virtual
+  - doctor_id must hold live role with "doctor" in name; specialty_id must hold live non-doctor role
+  - health_coach_id → 400 "Use specialty_id instead of health_coach_id."
 
-  Optional preferred (omit empty UUIDs — pre-request strips blanks so they are not sent as ""):
-  - room_id — optional with either person or care-team pref; required for in_person if service has no room type
-  - care_team_id XOR doctor_id / health_coach_id
-  - doctor_id, health_coach_id — preferred people (may combine with each other and room_id)
+  Allowed combos:
+  1) care_team_id + room_id (in_person) / care_team_id (virtual)
+  2) doctor_id + room_id / doctor_id
+  3) specialty_id + room_id / specialty_id
+  4) doctor_id + specialty_id + room_id / both without room (virtual)
 
-  Alternate payloads (edit body; leave unused preferred keys empty in env):
-  1) in_person + room only (default Development) — needs service role requirements:
-     {customer_profile_id, service_id, modality: in_person, date, preferred: {room_id}}
-  2) care team (+ optional room):
-     preferred: {care_team_id, room_id?}
-  3) doctor / coach (+ optional room):
-     preferred: {doctor_id?, health_coach_id?, room_id?}
-  4) virtual (no room):
-     {modality: virtual, preferred: {care_team_id} or {doctor_id, health_coach_id}}
-     (or omit preferred staff if service has role requirements)
+  If assignment has room-type requirements, preferred room must be active at center and room_type_ref in that set (OR).
 
   Response data: {date, timezone, duration_minutes, buffer_before_minutes, buffer_after_minutes, slots[], truncated}.
-  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id} — one pinned combo per start/end; associates always non-empty. Cap 200/day.
-  Load-balance: fewest busy appts that day, then created_at/code/pk. Room equipment = first active on room.
-  in_person always needs a room (preferred or service room type). Else 400 "A room is required for in-person appointments."
-  Customer busy is global across centers.
-  customer_profile_id / service_id must be active at this center. Missing, inactive, or other-center → 400 "Invalid customer profile for this center." / "Invalid service for this center."
-  care_team_id + doctor_id/health_coach_id → 400 "care_team_id cannot be combined with doctor_id or health_coach_id."
+  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id} — one pinned combo per start/end.
+  Cap 200/day. Customer busy is global across centers.
+  care_team_id + doctor_id/specialty_id → 400.
 }

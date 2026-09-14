@@ -6,7 +6,7 @@ environments (development, staging, production).
 ## Overview
 
 The application uses environment variables for configuration across different environments. All configuration is managed
-through a `.env` file in the project root with environment-specific prefixes (DEV_, STG_, PRD_).
+through a `.env` file in the project root with environment-specific prefixes (DEV*, STG*, PRD\_).
 
 ## Core Settings
 
@@ -122,6 +122,57 @@ STG_PASSWORD_RESET_URL=https://staging.yourdomain.com/reset-password
 PRD_PASSWORD_RESET_URL=https://yourdomain.com/reset-password
 ```
 
+## Google Calendar Integration
+
+Credentials for `integrations/google_calendar/` (staff Google Calendar sync -
+see `docs/google-calendar-integration.md`). Same per-environment prefix
+pattern as everything else on this page:
+
+```env
+DEV_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+DEV_GOOGLE_CLIENT_SECRET=your-client-secret
+DEV_GOOGLE_REDIRECT_URI=http://127.0.0.1:8001/google-calendar/callback/
+DEV_GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
+DEV_GOOGLE_CALENDAR_ID=care@biopeak.health
+```
+
+Staging/production use the same names with `STG_`/`PRD_` prefixes.
+
+`GOOGLE_CALENDAR_ID` is the one shared Google account every appointment
+event gets created on/updated/deleted from — not tied to any individual
+associate's own connection. It must be connected via the normal
+`/google-calendar/connect/` + `/complete/` flow first — `/complete/` only
+accepts this exact account (400s on any other Google email) — so its tokens
+land on the `Associate` row whose login email matches this value. See
+"Event sync" in `docs/google-calendar-integration.md`.
+
+The callback (`GoogleCalendarCallbackView`) redirects the browser to
+`ADMIN_FRONTEND_URL` on both success and failure, so it must be set for this
+feature to work at all:
+
+```env
+DEV_ADMIN_FRONTEND_URL=http://localhost:5173
+STG_ADMIN_FRONTEND_URL=https://staging-admin.yourdomain.com
+PRD_ADMIN_FRONTEND_URL=https://admin.yourdomain.com
+```
+
+If unset, `_frontend_redirect()` (`integrations/google_calendar/views.py`)
+raises `ImproperlyConfigured` instead of redirecting, so a missing setting
+fails loudly rather than sending the browser to a malformed URL.
+
+`GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY` isn't a password you make up - generate
+one with:
+
+```bash
+uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+If it ever leaks, treat it like a leaked password: rotate it and have every
+connected staff member reconnect their calendar. If unset, `_get_fernet()`
+(`integrations/google_calendar/utils.py`) raises `ImproperlyConfigured` the
+first time a token is encrypted/decrypted, rather than crashing with a raw
+`AttributeError`.
+
 ## User Management
 
 ### Django Superuser (for automated deployment)
@@ -134,14 +185,14 @@ DJANGO_SUPERUSER_PASSWORD=secure_superuser_password
 ## Environment Variable Categories
 
 | Category     | Required | Description                                  |
-|--------------|----------|----------------------------------------------|
-| **Core**     | ✅        | Essential Django settings                    |
-| **Database** | ✅        | PostgreSQL connection settings               |
-| **Email**    | ✅        | SMTP configuration for notifications         |
+| ------------ | -------- | -------------------------------------------- |
+| **Core**     | ✅       | Essential Django settings                    |
+| **Database** | ✅       | PostgreSQL connection settings               |
+| **Email**    | ✅       | SMTP configuration for notifications         |
 | **Redis**    | ⚠️       | Required for production, optional for dev    |
 | **AWS S3**   | ⚠️       | Required for staging/production file storage |
-| **URLs**     | ❌        | Optional password reset frontend URLs        |
-| **Users**    | ❌        | Optional automated user creation             |
+| **URLs**     | ❌       | Optional password reset frontend URLs        |
+| **Users**    | ❌       | Optional automated user creation             |
 
 ## Environment Detection
 
@@ -150,7 +201,6 @@ The application automatically detects the environment based on the `DJANGO_SETTI
 - `core.settings.development` (for development, default)
 - `core.settings.staging` (for staging)
 - `core.settings.production` (for production)
-
 
 ## Complete Example Configurations
 
@@ -301,18 +351,32 @@ Templates use **named** body variables. Backend sends `parameter_name` + `text`.
 
 Retry pending/failed sends: `uv run manage.py process_communication_outbox`
 
-User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+Book / cancel / reschedule enqueue **WhatsApp + Google Calendar** outbox rows. Google is desired-state from the live appointment (insert / patch / delete). Max 2 attempts. Wake: optional SQS (`*_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL`) — one message per enqueue that has work; FIFO queue uses `MessageGroupId=communication-outbox` and 60s dedup. Unset URL = no-op (local: run the management command). User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+
+```env
+DEV_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL=
+AWS_REGION=
+```
+
+Staging / production: `STG_` / `PRD_` prefix on the queue URL. Set `AWS_REGION` in secrets/env to the SQS region (same value you use for AWS; no hardcoded default in code).
 
 ## Scheduled jobs (production)
 
-Wire these as EventBridge → ECS RunTask (or equivalent) on a ~1 min cadence. Not in `deploy-aws.yml` (image/service only).
+Not in `deploy-aws.yml` (image/service only).
 
-| Command | Purpose |
-|---|---|
-| `uv run manage.py process_communication_outbox` | Send WhatsApp outbox (`PENDING` / retryable `FAILED`) |
-| `uv run manage.py process_appointment_exception_scans` | Drain availability → appointment exception scan queue |
+| Trigger | Command | Purpose |
+|---|---|---|
+| SQS wake (on outbox insert) | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync |
+| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh` | Retry outbox (attempt 2) + drain exception scans |
 
-Without the outbox cron, WhatsApp rows stay `PENDING` even when secrets are set. Without the exception-scan cron, care-team / roster / block writes enqueue scans that never run.
+Cap concurrent ECS RunTasks at 1 for the wake consumer. Sweep script:
+
+```bash
+python manage.py process_communication_outbox
+python manage.py process_appointment_exception_scans
+```
+
+Without the outbox worker/sweep, WhatsApp and Google Calendar rows stay `PENDING`. Without the exception-scan drain, care-team / roster / block writes enqueue scans that never run.
 
 ## Security Best Practices
 
@@ -352,24 +416,24 @@ Without the outbox cron, WhatsApp rows stay `PENDING` even when secrets are set.
 ### Common Issues
 
 1. **Database Connection Failed**
-    - Verify database credentials and host accessibility
-    - Check if PostgreSQL service is running
-    - Ensure firewall allows connections on the specified port
+   - Verify database credentials and host accessibility
+   - Check if PostgreSQL service is running
+   - Ensure firewall allows connections on the specified port
 
 2. **Email Not Sending**
-    - Verify SMTP credentials and host settings
-    - Check if less secure app access is enabled (for Gmail)
-    - Ensure email host allows connections from your server IP
+   - Verify SMTP credentials and host settings
+   - Check if less secure app access is enabled (for Gmail)
+   - Ensure email host allows connections from your server IP
 
 3. **Redis Connection Failed**
-    - Verify Redis is running and accessible
-    - Check Redis configuration and authentication
-    - Ensure Redis host and port are correct
+   - Verify Redis is running and accessible
+   - Check Redis configuration and authentication
+   - Ensure Redis host and port are correct
 
 4. **AWS S3 Access Denied**
-    - Verify AWS credentials are correct
-    - Check S3 bucket permissions and policies
-    - Ensure the bucket exists in the specified region
+   - Verify AWS credentials are correct
+   - Check S3 bucket permissions and policies
+   - Ensure the bucket exists in the specified region
 
 ### Environment Variable Validation
 
@@ -385,7 +449,7 @@ This will check for common configuration issues and security problems.
 
 When moving from development to production:
 
-1. **Update Database Settings**: Change from DEV_ to PRD_ prefixed variables
+1. **Update Database Settings**: Change from DEV* to PRD* prefixed variables
 2. **Configure Production Email**: Set up production SMTP service
 3. **Setup AWS S3**: Configure S3 for media file storage
 4. **Enable Redis**: Configure Redis for production caching

@@ -7,15 +7,11 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/appointments/exceptions/?status=open
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
   status: open
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

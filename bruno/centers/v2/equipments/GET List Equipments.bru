@@ -7,7 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/v2/equipments/?page=1&limit=10&search&type_active=1&room_allotted=1&operational_status=operational&active=1
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
@@ -24,10 +24,6 @@ params:query {
 
 headers {
   X-Center-ID: {{center_id}}
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

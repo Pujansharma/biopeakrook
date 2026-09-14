@@ -150,6 +150,16 @@ biopeak-nexus/
 ├── sequences/                   # Alphanumeric ID/code generation
 ├── webhooks/                    # Webhook support (future)
 │
+├── integrations/
+│   └── google_calendar/         # Google Calendar sync (see docs/google-calendar-integration.md)
+│       ├── google_oauth.py      # Consent URL, code exchange, token refresh, revoke
+│       ├── calendar_api.py      # insert_event/patch_event/delete_event
+│       ├── tokens.py            # get_valid_access_token() — refresh-if-expired glue
+│       ├── db.py                # Persist tokens onto the Associate row
+│       ├── google_sync.py       # Desired-state Calendar sync, called from communication outbox worker
+│       ├── views.py             # status/connect/callback/complete/disconnect/refresh
+│       └── urls.py              # Routes under /google-calendar/
+│
 ├── assets/
 │   ├── static/                  # Source static files
 │   ├── templates/mails/         # Email templates
@@ -171,7 +181,7 @@ biopeak-nexus/
 
 **Identity & Access**
 - `User` (UUID PK, email-based auth) — custom `AUTH_USER_MODEL = 'users.User'`
-- `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField)
+- `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField) — also carries the Google Calendar connection columns (`google_email`, encrypted tokens, expiry)
 - `AssociateCenterAssignment` — links associate ↔ center with role, is_admin, mode
 - `Customer` (1:1 User) + `CustomerProfile` (family members) + `CustomerOnboarding` (health data)
 - `Center` + `CenterOperatingHour` + `CenterClosure`
@@ -179,7 +189,7 @@ biopeak-nexus/
 **Scheduling**
 - `Schedule` — recurring weekly availability (associate, day_of_week, start/end time, duration, buffer)
 - `BlockedPeriod` — one-off unavailability windows (UTC)
-- `Appointment` — booked sessions; book lands `confirmed` (no `pending`). Cancel/reschedule from `confirmed` or `checked_in`; `in_progress` is not reversible. No-show from `confirmed` only.
+- `Appointment` — booked sessions; book lands `confirmed` (no `pending`). Cancel/reschedule from `confirmed` or `checked_in`; `in_progress` is not reversible. No-show from `confirmed` only. Also carries `notes`, `google_event_id`, `google_meet_link` — see `docs/google-calendar-integration.md`.
 - `AppointmentHistory` — reschedule window snapshots; `AppointmentAuditLog` — appointment-scoped lifecycle trail
 
 **Services & Inventory**
@@ -318,6 +328,8 @@ uv run manage.py <command>
 | `docs/features.md` | Platform feature overview |
 | `docs/accounts-architecture.md` | Accounts segmentation — User, Associate, Customer models and rationale |
 | `docs/associate-roles-rbac.md` | RBAC design details |
+| `docs/scheduling.md` | Scheduling algorithm deep-dive |
+| `docs/google-calendar-integration.md` | Google Calendar sync — connect/disconnect flow, identity rules, event sync on book/reschedule/cancel |
 | `docs/appointments-frontend-api.md` | Appointments + availability FE API contract (slots, book, lifecycle, exceptions, ops, care teams, calendars, roster/blocks) |
 | `docs/scheduling.md` | Stub → `appointments-frontend-api.md` |
 | `docs/availability.md` | Stub → `appointments-frontend-api.md` |

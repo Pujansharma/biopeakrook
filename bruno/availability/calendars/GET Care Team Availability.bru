@@ -7,7 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/availability/care-teams/{{care_team_id}}/?start=2026-09-05&granularity=day
   body: none
-  auth: bearer
+  auth: inherit
 }
 
 params:query {
@@ -17,10 +17,6 @@ params:query {
 
 headers {
   X-Center-ID: {{center_id}}
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 settings {

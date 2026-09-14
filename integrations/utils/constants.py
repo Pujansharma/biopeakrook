@@ -3,6 +3,7 @@ from django.db import models
 
 class CommunicationChannel(models.TextChoices):
     WHATSAPP = "whatsapp", "WhatsApp"
+    GOOGLE_CALENDAR = "google_calendar", "Google Calendar"
 
 
 class CommunicationEventType(models.TextChoices):

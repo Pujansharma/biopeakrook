@@ -69,21 +69,24 @@ available = base − blocks − leaves/downtimes − closures − busy appointme
 | Associate | Center hours ∩ roster | Blocks, leaves, closures |
 | Room / equipment | Center hours | Blocks, downtimes, closures |
 
-Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated: true` if more).
+Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated: true` if more). Slots with `start` before request time are omitted (today’s past windows; past dates → empty `slots`).
 
 ### Pin vs preferred
 
 | Mode | Body | Server |
 |---|---|---|
 | **Pin** (from Find Slots) | `associates[]` + `room_id` (in_person) + optional `equipment_id` | Validates that combo is free — does **not** re-pick |
-| **Preferred** | `preferred.{room_id,care_team_id,doctor_id,health_coach_id}` | Resolves a combo then validates |
+| **Preferred** | `preferred.{room_id,care_team_id,doctor_id,specialty_id}` (**required** for Find Slots; required for book/reschedule unless complete pin) | Resolves staff+room from preferred only — no leftover auto-fill |
 
 - Incomplete pin (associates without `room_id` for in_person) → 400, never silent re-resolve.
-- `preferred.care_team_id` **XOR** `doctor_id` / `health_coach_id` (doctor+coach OK together).
-- `preferred.room_id` optional with either path.
-- **Staff source:** active `CenterServiceRoleRequirement` rows on the center assignment → eligible associates per role (auto-pick). Preferred `care_team_id` / `doctor_id` / `health_coach_id` bias or add extras. Room-only preferred is enough when roles exist.
-- Book/reschedule with role requirements and neither complete pin nor preferred → 400.
-- Every booked appointment has non-empty `associates[]` (`AppointmentAssociate` links). Guard: zero roles **and** no preferred staff → 400 / slots soft-skip (misconfigured service).
+- `preferred.care_team_id` **XOR** `doctor_id` / `specialty_id` (doctor + specialty OK together).
+- Allowed preferred combos: care_team±room · doctor±room · specialty±room · doctor+specialty±room (room required for in_person; forbidden for virtual).
+- **Staff+room source:** preferred only, or pin from Find Slots. No leftover fill from `CenterServiceRoleRequirement` / room-type pool.
+- FE always sends `preferred`. `specialty_id` = service-mapped person; `doctor_id` may be extra (not on the service). `doctor_id` must hold **exactly one** live role with `"doctor"` in the name; `specialty_id` must hold **exactly one** live non-doctor role. Zero matches → 400 missing-role. Two+ matching hats → 400 (ops data guard; not a pin/`role_id` path). Do **not** pick from service required roles. Same person both IDs → 400. Same associate cannot appear twice on an appointment.
+- Old `health_coach_id` → 400 `"Use specialty_id instead of health_coach_id."`
+- If assignment has room-type requirements, preferred/pin room must be active at center and `room_type_ref` in that set (OR).
+- Find Slots: preferred required. Book/reschedule: complete pin OR valid preferred.
+- Pin validates free; does **not** require exactly one associate per service role.
 - Pin + `preferred.care_team_id` stamps care team only when every live team member is in the pin.
 - Preferred / pin `care_team_id` with **zero live members** → 400 `"Care team has no live members at this center."`
 
@@ -161,7 +164,7 @@ Base: `/centers/<center_id>/appointments/`
 
 ### POST `…/slots/` — Find slots
 
-**Purpose:** One calendar day of bookable pinned combos for a customer + service.
+**Purpose:** One calendar day of bookable pinned combos for a customer + service. Past starts (`start` < now) are not returned.
 
 **Body (required)**
 
@@ -179,7 +182,7 @@ Base: `/centers/<center_id>/appointments/`
   "room_id": "uuid",
   "care_team_id": "uuid",
   "doctor_id": "uuid",
-  "health_coach_id": "uuid"
+  "specialty_id": "uuid"
 }
 ```
 
@@ -187,7 +190,7 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 
 **Staff on each slot**
 
-| Center assignment | Preferred staff (`care_team_id` / `doctor_id` / `health_coach_id`) | Result |
+| Center assignment | Preferred staff (`care_team_id` / `doctor_id` / `specialty_id`) | Result |
 |---|---|---|
 | ≥1 active role requirement | omit OK | Auto-pick free associate per role |
 | ≥1 active role requirement | set | Prefer fills / biases role pools (+ extras) |
@@ -224,7 +227,7 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
   "service_id": "…",
   "modality": "virtual",
   "date": "2026-09-05",
-  "preferred": { "doctor_id": "…", "health_coach_id": "…" }
+  "preferred": { "doctor_id": "…", "specialty_id": "…" }
 }
 ```
 
@@ -254,7 +257,7 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 
 Each slot = one pinned combo. Pass that pin into book.
 
-**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · care_team XOR people · service duration missing · no staff path (zero role requirements and no preferred `care_team_id` / `doctor_id` / `health_coach_id`).
+**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · care_team XOR people · service duration missing · no staff path (zero role requirements and no preferred `care_team_id` / `doctor_id` / `specialty_id`).
 
 ---
 
@@ -531,7 +534,7 @@ Base: `/centers/<center_id>/care-teams/`
 
 ### GET `…/care-teams/`
 
-**Query:** `search` (name), `active=0|1` (omit = both), `page`, `limit`.
+**Query:** `search` (name), `active=0|1` (omit = both), `members_live=0|1` (omit/junk = no filter; `1` = every member live at center with mapped role active; `0` = any member inactive or mapped role inactive/unmapped; not the bookable-team picker — booking still expands leftover live members), `page`, `limit`. Independent of `active`. Team always has ≥2 members.
 
 ### POST `…/care-teams/`
 
@@ -787,9 +790,9 @@ Same contracts as rooms:
 | `Invalid service for this center.` | Same for service |
 | `A room is required for in-person appointments.` | Slots without room path |
 | `Pin requires room_id for in-person appointments.` | Incomplete pin |
-| `care_team_id cannot be combined with doctor_id or health_coach_id.` | Preferred XOR |
+| `care_team_id cannot be combined with doctor_id or specialty_id.` | Preferred XOR |
 | `Send preferred resources or a pinned associates list.` | Roles required, neither path |
-| `At least one associate is required. Send a pin or preferred care_team_id / doctor_id / health_coach_id.` | Misconfig: zero service role requirements and no preferred staff (not the normal roles / pin path) |
+| `At least one associate is required. Send a pin or preferred care_team_id / doctor_id / specialty_id.` | Misconfig: zero service role requirements and no preferred staff (not the normal roles / pin path) |
 | `Slot no longer available.` | Overlap / race on book/reschedule |
 | `Invalid room/equipment for this center.` | Bad pin IDs |
 | `Idempotency key was already used with a different payload.` | 409 |

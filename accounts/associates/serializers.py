@@ -11,7 +11,12 @@ from accounts.associates.models import (
 from accounts.associates.utils.constants import AssociateTitle
 from accounts.associates.utils.db import (
     create_associate_user_account,
+    replace_assignment_roles,
     update_associate_centers_count,
+)
+from accounts.associates.utils.roles import (
+    assignment_active_roles,
+    resolve_center_roles,
 )
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer
@@ -40,6 +45,38 @@ from accounts.utils.db import (
 from accounts.verifications.utils.helper import send_registration_code
 from core.utils.fields import PhoneNumberSerializerField
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+
+
+
+
+def assignment_roles_representation(assignment):
+    if assignment is None:
+        return {"role_ids": [], "roles": []}
+    cached = getattr(assignment, "_assignment_roles_representation", None)
+    if cached is not None:
+        return cached
+    roles = assignment_active_roles(assignment)
+    payload = {
+        "role_ids": [role.pk for role in roles],
+        "roles": BaseAssociateRoleSerializer(roles, many=True).data,
+    }
+    assignment._assignment_roles_representation = payload
+    return payload
+
+
+class AssignmentRoleIdsField(serializers.ListField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("child", serializers.UUIDField())
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_empty", True)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        return assignment_roles_representation(instance)["role_ids"]
 
 
 class AssociateValidationMixin:
@@ -454,7 +491,8 @@ class CenterAssignmentAssociateProfileSerializer(
     )
     is_admin = serializers.BooleanField(read_only=True)
     is_care_staff = serializers.BooleanField(read_only=True)
-    role = BaseAssociateRoleSerializer(read_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Associate
@@ -473,7 +511,8 @@ class CenterAssignmentAssociateProfileSerializer(
             "date_joined",
             "last_login",
             "updated_at",
-            "role",
+            "roles",
+            "role_ids",
             "title",
             "description",
             "tagline",
@@ -482,6 +521,12 @@ class CenterAssignmentAssociateProfileSerializer(
             "professions",
             "has_verified_badge",
         ]
+
+    def get_roles(self, instance):
+        return assignment_roles_representation(instance)["roles"]
+
+    def get_role_ids(self, instance):
+        return assignment_roles_representation(instance)["role_ids"]
 
     def create(self, validated_data):
         """Admins will create Associates"""
@@ -725,7 +770,8 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
     exists = serializers.BooleanField(read_only=True)
 
     # Nested objects
-    role = BaseAssociateRoleSerializer(read_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = serializers.SerializerMethodField()
     created_by = BaseUserSerializer(read_only=True)
 
     class Meta:
@@ -743,9 +789,16 @@ class BaseCenterAssociateSerializer(BaseModelSerializer):
             "is_care_staff",
             "exists",
             "date_joined",
-            "role",
+            "roles",
+            "role_ids",
             "created_by",
         ]
+
+    def get_roles(self, instance):
+        return assignment_roles_representation(instance)["roles"]
+
+    def get_role_ids(self, instance):
+        return assignment_roles_representation(instance)["role_ids"]
 
     def to_representation(self, instance: AssociateCenterAssignment):
         rep = super().to_representation(instance)
@@ -789,9 +842,8 @@ class CenterAssociateSerializer(
     date_joined = serializers.DateField(
         source="associate.date_joined", required=False, allow_null=True
     )
-    # Keep role as nested object
-    role = BaseAssociateRoleSerializer(read_only=True)
-    role_id = serializers.UUIDField(required=False, write_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = AssignmentRoleIdsField()
 
     created_by = BaseUserSerializer(read_only=True)
 
@@ -813,13 +865,13 @@ class CenterAssociateSerializer(
             "is_active",
             "date_joined",
             # Write only fields
-            "role_id",
+            "role_ids",
             "password1",
             "password2",
             "send_password_link",
             "created_at",
             "updated_at",
-            "role",
+            "roles",
             "title",
             "description",
             "tagline",
@@ -848,14 +900,16 @@ class CenterAssociateSerializer(
 
         associate_data = validated_data.pop("associate", {})
         user_data = associate_data.pop("user", {})
-        role_id = validated_data.pop("role_id", None)
+        role_ids = validated_data.pop("role_ids", serializers.empty)
+        if role_ids is serializers.empty:
+            role_ids = None
 
         is_admin = validated_data.pop("is_admin", False)
         is_care_staff = validated_data.pop("is_care_staff", False)
 
         email = user_data.get("email")
         password1 = None
-        role = None
+        roles = []
 
         errors = {}
         if email and User.objects.filter(email__iexact=email).exists():
@@ -863,17 +917,13 @@ class CenterAssociateSerializer(
         if errors:
             raise serializers.ValidationError(errors)
 
-        if is_admin and role_id:
+        if is_admin and role_ids:
             raise serializers.ValidationError(
-                {"role_id": "System users cannot have associate roles"}
+                {"role_ids": "System users cannot have associate roles"}
             )
 
-        if not is_admin and role_id:
-            role = AssociateRole.objects.filter(pk=role_id, center=center).first()
-            if not role:
-                raise serializers.ValidationError(
-                    {"role_id": "Invalid role for this center."}
-                )
+        if not is_admin and role_ids is not None:
+            roles = resolve_center_roles(center, role_ids or [])
         if not send_password_link:
             password1 = self.get_validated_password(validated_data)
 
@@ -888,9 +938,10 @@ class CenterAssociateSerializer(
             assignment = AssociateCenterAssignment.objects.create(
                 associate=associate,
                 center=center,
-                role=role,
                 **validated_data,
             )
+            if role_ids is not None:
+                replace_assignment_roles(assignment, roles)
 
             increment_staff_count(assignment.center.pk)
             update_associate_centers_count(associate.pk)
@@ -898,6 +949,9 @@ class CenterAssociateSerializer(
             if send_password_link:
                 send_registration_code(user)
         return assignment
+
+    def get_roles(self, instance):
+        return assignment_roles_representation(instance)["roles"]
 
     def update(self, instance: AssociateCenterAssignment, validated_data):
         """Update not allowed in this serializer"""
@@ -937,9 +991,8 @@ class CenterAssociateDetailSerializer(
         source="associate.user.image", required=False, allow_null=True
     )
 
-    # Keep role as nested object
-    role = BaseAssociateRoleSerializer(read_only=True)
-    role_id = serializers.UUIDField(required=True, write_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = AssignmentRoleIdsField()
 
     # Assignment fields already at root
     # is_admin, mode, is_primary come from the model directly
@@ -963,9 +1016,9 @@ class CenterAssociateDetailSerializer(
             "gender",
             "image",
             # Associate fields (flattened)
-            # Role (nested)
-            "role",
-            "role_id",
+            # Roles (nested + ids)
+            "roles",
+            "role_ids",
             # Assignment fields (native)
             "is_admin",
             "is_care_staff",
@@ -984,12 +1037,15 @@ class CenterAssociateDetailSerializer(
             "has_verified_badge",
         ]
 
+    def get_roles(self, instance):
+        return assignment_roles_representation(instance)["roles"]
+
     def update(self, instance: AssociateCenterAssignment, validated_data):
-        """Update user fields, associate fields, and role on the assignment."""
+        """Update user fields, associate fields, and roles on the assignment."""
         associate_data = validated_data.pop("associate", {})
         user_data = associate_data.pop("user", {})
         user_data.pop("phone", None)
-        role_id = validated_data.get("role_id", None)
+        role_ids = validated_data.pop("role_ids", serializers.empty)
 
         user = instance.associate.user
         is_active = user_data.get("is_active", user.is_active)
@@ -1007,40 +1063,44 @@ class CenterAssociateDetailSerializer(
         if errors:
             raise serializers.ValidationError(errors)
 
-        if role_id:
-            if instance.is_admin:
-                raise serializers.ValidationError(
-                    {"role_id": "Roles cannot be assigned to admin associates."}
-                )
-            if not AssociateRole.objects.filter(
-                    pk=role_id, center=instance.center
-            ).exists():
-                raise serializers.ValidationError(
-                    {"role_id": "Invalid role for this center."}
-                )
+        will_be_admin = validated_data.get("is_admin", instance.is_admin)
+        if will_be_admin and role_ids is not serializers.empty and role_ids:
+            raise serializers.ValidationError(
+                {"role_ids": "Roles cannot be assigned to admin associates."}
+            )
+
+        roles = []
+        replace_roles = will_be_admin
+        if not will_be_admin and role_ids is not serializers.empty:
+            roles = resolve_center_roles(instance.center, role_ids or [])
+            replace_roles = True
 
         was_active = user.is_active
 
-        if user_data:
-            for key, value in user_data.items():
-                setattr(user, key, value)
-            user.save(update_fields=[*user_data.keys(), "updated_at"])
+        with transaction.atomic():
+            if user_data:
+                for key, value in user_data.items():
+                    setattr(user, key, value)
+                user.save(update_fields=[*user_data.keys(), "updated_at"])
 
-        if associate_data:
-            associate = instance.associate
-            for key, value in associate_data.items():
-                setattr(associate, key, value)
-            associate.save(update_fields=[*associate_data.keys(), "updated_at"])
+            if associate_data:
+                associate = instance.associate
+                for key, value in associate_data.items():
+                    setattr(associate, key, value)
+                associate.save(update_fields=[*associate_data.keys(), "updated_at"])
 
-        if "is_active" in user_data:
-            is_now_active = user_data["is_active"]
-            if not is_now_active and was_active:
-                increment_inactive_staff_count(instance.center.pk)
-            if is_now_active and not was_active:
-                decrement_inactive_staff_count(instance.center.pk)
-            if is_now_active != was_active:
-                update_organization_staff_count()
-        return super().update(instance, validated_data)
+            if "is_active" in user_data:
+                is_now_active = user_data["is_active"]
+                if not is_now_active and was_active:
+                    increment_inactive_staff_count(instance.center.pk)
+                if is_now_active and not was_active:
+                    decrement_inactive_staff_count(instance.center.pk)
+                if is_now_active != was_active:
+                    update_organization_staff_count()
+            instance = super().update(instance, validated_data)
+            if replace_roles:
+                replace_assignment_roles(instance, roles)
+        return instance
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
@@ -1050,12 +1110,14 @@ class CenterAssociateDetailSerializer(
 
 
 class AssociateCenterPermissionSerializer(BaseModelSerializer):
-    role = AssociateRoleSerializer(read_only=True)
+    roles = serializers.SerializerMethodField()
+    role_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = AssociateCenterAssignment
         fields = [
-            "role",
+            "roles",
+            "role_ids",
             "is_admin",
             "is_care_staff",
             "mode",
@@ -1064,6 +1126,12 @@ class AssociateCenterPermissionSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_roles(self, instance):
+        return assignment_roles_representation(instance)["roles"]
+
+    def get_role_ids(self, instance):
+        return assignment_roles_representation(instance)["role_ids"]
 
 
 class AssociateLinkedProfileSerializer(BaseModelSerializer):

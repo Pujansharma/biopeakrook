@@ -1,8 +1,21 @@
 from django.db import transaction
-from django.db.models import F, Prefetch, Q, ProtectedError, RestrictedError, Value
+from django.db.models import (
+    Exists,
+    F,
+    OuterRef,
+    Prefetch,
+    ProtectedError,
+    Q,
+    RestrictedError,
+    Value,
+)
 from django.db.models.functions import Concat
 
-from accounts.associates.models import AssociateCenterAssignment, AssociateRole
+from accounts.associates.models import (
+    AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
+    AssociateRole,
+)
 from accounts.associates.serializers import (
     CenterAssociateSerializer,
     AssociateRoleSerializer,
@@ -144,9 +157,16 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
             filter_kwargs["is_care_staff"] = bool(int(is_care_staff))
 
         role_query = self.request.query_params.get("role")
+        has_active_role = Exists(
+            AssociateCenterAssignmentRole.objects.filter(
+                assignment_id=OuterRef("pk"),
+                is_active=True,
+                role__is_active=True,
+            )
+        )
         role_filters = {
-            "1": Q(role__isnull=False, role__is_active=True),
-            "0": Q(role__isnull=True) | Q(role__is_active=False),
+            "1": has_active_role,
+            "0": ~has_active_role,
         }
         role_filter = role_filters.get(role_query, Q())
 
@@ -168,10 +188,8 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
                 **filter_kwargs,
             )
             .prefetch_related("created_by")
-            .select_related(
-                "associate__user",
-                "role",
-            )
+            .select_related("associate__user")
+            .prefetch_related("role_links__role")
         )
 
     def perform_create(self, serializer):

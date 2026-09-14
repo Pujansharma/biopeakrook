@@ -3,7 +3,12 @@ from uuid import UUID
 from django.db.models import Count, OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 
-from accounts.associates.models import Associate, AssociateCenterAssignment
+from accounts.associates.models import (
+    Associate,
+    AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
+)
+from accounts.associates.utils.roles import active_role_links_prefetch
 from accounts.models import UserAccount
 from accounts.utils.constants import UserType
 
@@ -44,6 +49,21 @@ def update_center_associate_centers_count(center_id: UUID):
     ).update(centers_count=Coalesce(centers_count_subquery, Value(0)))
 
 
+def replace_assignment_roles(assignment, roles):
+    AssociateCenterAssignmentRole.objects.filter(assignment=assignment).delete()
+    if not roles:
+        return
+    AssociateCenterAssignmentRole.objects.bulk_create(
+        [
+            AssociateCenterAssignmentRole(
+                assignment=assignment,
+                role_id=role.pk,
+            )
+            for role in roles
+        ]
+    )
+
+
 def get_associate_roles(associate, center_id, request=None):
     cache_key = "_center_assignment"
 
@@ -54,7 +74,7 @@ def get_associate_roles(associate, center_id, request=None):
         AssociateCenterAssignment.objects.filter(
             associate=associate, center_id=center_id, is_active=True
         )
-        .select_related("role")
+        .prefetch_related(active_role_links_prefetch())
         .first()
     )
 
@@ -74,7 +94,7 @@ def get_center_assignment_for_user(user, center_id, request=None):
         AssociateCenterAssignment.objects.filter(
             associate__user=user, center_id=center_id, is_active=True
         )
-        .select_related("role")
+        .prefetch_related(active_role_links_prefetch())
         .first()
     )
 

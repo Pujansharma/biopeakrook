@@ -7,15 +7,11 @@ meta {
 patch {
   url: {{baseURL}}/centers/{{center_id}}/care-teams/{{care_team_id}}/
   body: json
-  auth: bearer
+  auth: inherit
 }
 
 headers {
   content-type: application/json
-}
-
-auth:bearer {
-  token: {{access_token}}
 }
 
 body:json {

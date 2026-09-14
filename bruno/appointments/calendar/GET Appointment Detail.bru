@@ -7,11 +7,7 @@ meta {
 get {
   url: {{baseURL}}/centers/{{center_id}}/appointments/{{appointment_id}}/
   body: none
-  auth: bearer
-}
-
-auth:bearer {
-  token: {{access_token}}
+  auth: inherit
 }
 
 settings {
@@ -21,4 +17,7 @@ settings {
 
 docs {
   Full appointment detail including exclusive bounds and buffers.
+  notes: free-text notes set at booking/reschedule time, or null.
+  google_meet_link: the mirrored Google Calendar event's Meet link, or null/blank if
+  the appointment isn't synced (no connected associate, or not virtual modality).
 }

@@ -48,10 +48,14 @@ class CommunicationOutbox(BaseUUIDModel):
         indexes = [
             models.Index(fields=["status", "created_at"]),
             models.Index(fields=["appointment", "event_type"]),
+            models.Index(
+                fields=["appointment", "channel", "status"],
+                name="integration_appt_chan_stat_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["appointment", "event_type"],
+                fields=["appointment", "channel", "event_type"],
                 condition=Q(
                     event_type__in=[
                         CommunicationEventType.APPOINTMENT_CONFIRMED,
@@ -66,7 +70,7 @@ class CommunicationOutbox(BaseUUIDModel):
                         CommunicationOutboxStatus.READ,
                     ],
                 ),
-                name="uniq_comm_outbox_appointment_terminal_event",
+                name="uniq_comm_outbox_appointment_channel_terminal_event",
             ),
         ]
 

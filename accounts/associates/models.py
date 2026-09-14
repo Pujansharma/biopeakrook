@@ -1,5 +1,6 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
 from accounts.associates.utils.constants import (
@@ -132,6 +133,11 @@ class Associate(BaseModel):
     has_verified_badge = models.BooleanField(default=False)
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
 
+    google_email = models.EmailField(null=True, blank=True)
+    google_access_token = models.TextField(null=True, blank=True)
+    google_refresh_token = models.TextField(null=True, blank=True)
+    google_access_token_expires_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [
@@ -144,6 +150,11 @@ class Associate(BaseModel):
                 fields=["contact_phone"],
                 name="assoc_phone_search_idx",
                 condition=models.Q(contact_phone__isnull=False),
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("google_email"), name="uniq_associate_google_email"
             ),
         ]
 
@@ -159,14 +170,6 @@ class AssociateCenterAssignment(BaseUUIDModel):
     )
     center = models.ForeignKey(
         "centers.Center", on_delete=models.CASCADE, related_name="associate_assignments"
-    )
-
-    role = models.ForeignKey(
-        AssociateRole,
-        related_name="role_assignments",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
     )
 
     # Center-specific configuration
@@ -201,6 +204,33 @@ class AssociateCenterAssignment(BaseUUIDModel):
             # )
         ]
         verbose_name = "Associate-Center Assignment"
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AssociateCenterAssignmentRole(BaseUUIDModel):
+    """Through table: many care roles per associate×center assignment."""
+
+    assignment = models.ForeignKey(
+        AssociateCenterAssignment,
+        on_delete=models.CASCADE,
+        related_name="role_links",
+    )
+    role = models.ForeignKey(
+        AssociateRole,
+        on_delete=models.PROTECT,
+        related_name="assignment_role_links",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "role"],
+                name="uniq_assignment_role_link",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"

@@ -5,7 +5,10 @@ from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.associates.models import AssociateCenterAssignment
+from accounts.associates.models import (
+    AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
+)
 from accounts.associates.serializers import BaseCenterAssociateSerializer
 from accounts.centers.models import Center
 from accounts.centers.serializers import CustomerAvailableCenterSerializer
@@ -264,8 +267,16 @@ class CustomerAvailableAssociateView(BaseListAPIView):
         if center_id:
             filter_kwargs["center_id"] = center_id
             subquery_filter_kwargs["center_id"] = center_id
+        role_filter = Q()
         if role_id:
-            filter_kwargs["role_id"] = role_id
+            role_filter = Exists(
+                AssociateCenterAssignmentRole.objects.filter(
+                    assignment_id=OuterRef("pk"),
+                    is_active=True,
+                    role__is_active=True,
+                    role_id=role_id,
+                )
+            )
         account = get_user_account_type(user)
 
         if account == UserType.ASSOCIATE:
@@ -280,7 +291,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
 
         return (
             AssociateCenterAssignment.objects.select_related("associate__user")
-            .prefetch_related("created_by", "center")
+            .prefetch_related("created_by", "center", "role_links__role")
             .annotate(
                 exists=Exists(exists_subquery),
                 full_name=Concat(
@@ -289,7 +300,7 @@ class CustomerAvailableAssociateView(BaseListAPIView):
                     F("associate__user__last_name"),
                 ),
             )
-            .filter(search, **filter_kwargs, is_admin=False)
+            .filter(search, role_filter, **filter_kwargs, is_admin=False)
             .order_by("-exists", "-created_at")
         )
 
@@ -326,8 +337,18 @@ class CustomerAssociateListView(BaseListAPIView):
         if header_center_id:
             center_ids = {header_center_id}
 
+        role_filter = Q()
         if role_id:
-            filter_kwargs["current_center_assignment__role"] = role_id
+            role_filter = Exists(
+                AssociateCenterAssignmentRole.objects.filter(
+                    assignment__associate_id=OuterRef("associate_id"),
+                    assignment__center_id=OuterRef("center_id"),
+                    assignment__is_active=True,
+                    is_active=True,
+                    role__is_active=True,
+                    role_id=role_id,
+                )
+            )
 
         search_param = self.request.query_params.get("search", "").strip()
         if search_param:
@@ -356,12 +377,21 @@ class CustomerAssociateListView(BaseListAPIView):
                     ),
                 ),
             )
-            .filter(search, customer_profile_id=self.kwargs["pk"], **filter_kwargs)
+            .filter(
+                search,
+                role_filter,
+                customer_profile_id=self.kwargs["pk"],
+                **filter_kwargs,
+            )
             .select_related(
                 "associate__user",
-                "current_center_assignment__role",
+                "current_center_assignment",
             )
-            .prefetch_related("center", "created_by")
+            .prefetch_related(
+                "center",
+                "created_by",
+                "current_center_assignment__role_links__role",
+            )
             .order_by("-created_at")
             .distinct()
         )
