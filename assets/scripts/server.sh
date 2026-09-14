@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 python manage.py collectstatic --noinput --clear
 python manage.py migrate

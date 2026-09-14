@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('customers', '0020_customerprofiletrend'),
+        ('customers', '0019_remove_customerprofile_emergency_contact_name_and_more'),
     ]
 
     operations = [
