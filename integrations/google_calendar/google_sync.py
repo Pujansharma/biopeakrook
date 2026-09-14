@@ -132,9 +132,6 @@ def persist_google_event(appointment, event_id, meet_link):
             f"Failed to persist google_event_id for appointment "
             f"{appointment.pk} after Google Calendar sync: {error}"
         )
-        raise ValueError(
-            f"Failed to persist google_event_id for appointment {appointment.pk}"
-        ) from error
 
 
 def is_stale_google_event_error(error):

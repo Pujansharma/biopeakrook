@@ -279,17 +279,13 @@ def room_matches_assignment_types(assignment, room):
     return room.room_type_ref.pk in required_ids
 
 
-def validate_room_for_assignment(assignment, room, center):
+def validate_room_for_assignment(room, center):
     if room is None:
         return
     if room.center.pk != center.pk:
         raise ValidationError("Room does not belong to this center.")
     if not room.is_active:
         raise ValidationError("Preferred room is invalid or inactive.")
-    if not room_matches_assignment_types(assignment, room):
-        raise ValidationError(
-            "Room type is not allowed for this service assignment."
-        )
 
 
 def reject_health_coach_id(preferred):
@@ -816,7 +812,7 @@ def build_resolve_resource_pools(center, assignment, modality, preferred):
         )
         if preferred_room is None:
             raise ValidationError("Preferred room is invalid or inactive.")
-        validate_room_for_assignment(assignment, preferred_room, center)
+        validate_room_for_assignment(preferred_room, center)
         resource_pools["rooms"] = [preferred_room]
 
     equipment_by_room_id = first_active_equipment_by_room_ids(
@@ -1215,7 +1211,7 @@ def validate_appointment_allocation(
             raise ValidationError(
                 "A room is required for in-person appointments."
             )
-        validate_room_for_assignment(assignment, room, center)
+        validate_room_for_assignment(room, center)
         if equipment is not None and equipment.center.pk != center.pk:
             raise ValidationError("Equipment does not belong to this center.")
         expected_equipment = first_active_equipment_for_room(room)

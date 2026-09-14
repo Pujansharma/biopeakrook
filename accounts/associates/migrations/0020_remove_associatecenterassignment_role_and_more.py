@@ -5,6 +5,27 @@ import uuid
 from django.db import migrations, models
 
 
+def copy_assignment_roles(apps, schema_editor):
+    Assignment = apps.get_model("associates", "AssociateCenterAssignment")
+    AssignmentRole = apps.get_model("associates", "AssociateCenterAssignmentRole")
+    rows = Assignment.objects.exclude(role_id=None).values_list("pk", "role_id")
+    AssignmentRole.objects.bulk_create(
+        [
+            AssignmentRole(assignment_id=assignment_id, role_id=role_id)
+            for assignment_id, role_id in rows
+        ]
+    )
+
+
+def restore_assignment_roles(apps, schema_editor):
+    Assignment = apps.get_model("associates", "AssociateCenterAssignment")
+    AssignmentRole = apps.get_model("associates", "AssociateCenterAssignmentRole")
+    for assignment_id, role_id in AssignmentRole.objects.values_list(
+        "assignment_id", "role_id"
+    ):
+        Assignment.objects.filter(pk=assignment_id).update(role_id=role_id)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -12,10 +33,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='associatecenterassignment',
-            name='role',
-        ),
         migrations.CreateModel(
             name='AssociateCenterAssignmentRole',
             fields=[
@@ -30,5 +47,10 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
                 'constraints': [models.UniqueConstraint(fields=('assignment', 'role'), name='uniq_assignment_role_link')],
             },
+        ),
+        migrations.RunPython(copy_assignment_roles, restore_assignment_roles),
+        migrations.RemoveField(
+            model_name='associatecenterassignment',
+            name='role',
         ),
     ]

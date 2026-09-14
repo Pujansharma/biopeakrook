@@ -16,6 +16,7 @@ from appointments.utils.scheduling import (
     room_matches_assignment_types,
     validate_associate_assignments,
     validate_preferred_combo,
+    validate_room_for_assignment,
 )
 from core.utils.constants import AppointmentModes
 from inventory.models import Room, RoomType
@@ -193,3 +194,17 @@ class MultiRoomTypeRequirementTests(TestCase):
         )
         room.save()
         self.assertTrue(room_matches_assignment_types(self.assignment, room))
+
+    def test_preferred_room_ignores_assignment_types(self):
+        other_type = RoomType.objects.create(
+            center=self.center, name="Other Type", is_active=True
+        )
+        room = Room(
+            center=self.center,
+            name="Override Room",
+            code="RB-OVERRIDE",
+            room_type_ref=other_type,
+            is_active=True,
+        )
+        room.save()
+        validate_room_for_assignment(room, self.center)

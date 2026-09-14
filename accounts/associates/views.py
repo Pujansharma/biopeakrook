@@ -242,7 +242,10 @@ class AssociateProfileView(BaseRetrieveUpdateAPIView):
         ).prefetch_related("role_links__role").filter(associate__user=self.request.user, center=center)
 
     def get_object(self):
-        return self.get_queryset().get()
+        return get_object_or_404(
+            self.get_queryset(),
+            "Associate assignment not found for this center.",
+        )
 
 
 class AssociatePermissionView(BaseRetrieveAPIView):

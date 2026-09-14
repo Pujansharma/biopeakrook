@@ -49,6 +49,58 @@ class AssociateRoleNestedSerializer(BaseModelSerializer):
         fields = ["id", "name", "is_active"]
 
 
+def live_required_roles(assignment):
+    roles = []
+    for requirement in assignment.role_requirements.all():
+        if not requirement.is_active:
+            continue
+        if not requirement.role.is_active:
+            continue
+        roles.append(requirement.role)
+    return roles
+
+
+def live_required_room_types(assignment):
+    room_types = []
+    for requirement in assignment.room_type_requirements.all():
+        if not requirement.is_active:
+            continue
+        if not requirement.room_type.is_active:
+            continue
+        room_types.append(requirement.room_type)
+    return room_types
+
+
+class RequiredRoleIdsField(serializers.ListField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("child", serializers.UUIDField())
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_empty", True)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        return [role.pk for role in live_required_roles(instance)]
+
+
+class RequiredRoomTypeIdsField(serializers.ListField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("child", serializers.UUIDField())
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_empty", True)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        return [room_type.pk for room_type in live_required_room_types(instance)]
+
+
 class RoomTypeV2Serializer(BaseModelSerializer):
     created_by = BaseUserSerializer(read_only=True)
     is_active = serializers.BooleanField(required=False, default=True)
@@ -394,22 +446,10 @@ class EquipmentV2Serializer(BaseModelSerializer):
 
 
 class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
-    required_roles = AssociateRoleNestedSerializer(many=True, read_only=True)
-    required_role_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        write_only=True,
-        required=False,
-        allow_empty=True,
-        allow_null=True,
-    )
-    required_room_types = RoomTypeNestedSerializer(many=True, read_only=True)
-    required_room_type_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        write_only=True,
-        required=False,
-        allow_empty=True,
-        allow_null=True,
-    )
+    required_roles = serializers.SerializerMethodField()
+    required_role_ids = RequiredRoleIdsField()
+    required_room_types = serializers.SerializerMethodField()
+    required_room_type_ids = RequiredRoomTypeIdsField()
     modality = serializers.ChoiceField(
         choices=AppointmentModes.choices, required=False, default=AppointmentModes.BOTH
     )
@@ -439,35 +479,15 @@ class CenterServiceAssignmentV2Serializer(BaseModelSerializer):
             "updated_at",
         ]
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        representation["modality"] = instance.modality
-        roles = []
-        for requirement in instance.role_requirements.all():
-            if not requirement.is_active:
-                continue
-            if not requirement.role.is_active:
-                continue
-            roles.append(requirement.role)
-        representation["required_role_ids"] = [role.pk for role in roles]
-        representation["required_roles"] = AssociateRoleNestedSerializer(
-            roles, many=True
+    def get_required_roles(self, instance):
+        return AssociateRoleNestedSerializer(
+            live_required_roles(instance), many=True
         ).data
-        room_types = []
-        for requirement in instance.room_type_requirements.all():
-            if not requirement.is_active:
-                continue
-            if not requirement.room_type.is_active:
-                continue
-            room_types.append(requirement.room_type)
-        representation["required_room_type_ids"] = [
-            room_type.pk for room_type in room_types
-        ]
-        representation["required_room_types"] = RoomTypeNestedSerializer(
-            room_types,
-            many=True,
+
+    def get_required_room_types(self, instance):
+        return RoomTypeNestedSerializer(
+            live_required_room_types(instance), many=True
         ).data
-        return representation
 
     def validate(self, attrs):
         if "required_role_ids" in attrs:

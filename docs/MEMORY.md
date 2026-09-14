@@ -30,7 +30,7 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 
 ## 2026-09-11 — Multi-role associates, multi room types, preference-only booking
 
-- Migrations: `associates.0020` drop `AssociateCenterAssignment.role`, add `AssociateCenterAssignmentRole`; `services.0008` drop `CenterServiceAssignment.required_room_type`, add `CenterServiceRoomTypeRequirement`; `appointments.0019` `AppointmentAssociate` UniqueConstraint `(appointment, associate)`. Schema bootstrap removed from tests.
+- Migrations: `associates.0020` add `AssociateCenterAssignmentRole`, copy `role_id` rows, then drop `AssociateCenterAssignment.role`; `services.0008` add `CenterServiceRoomTypeRequirement`, copy `required_room_type_id` rows, then drop `CenterServiceAssignment.required_room_type`; `appointments.0019` `AppointmentAssociate` UniqueConstraint `(appointment, associate)`. Schema bootstrap removed from tests. If 0020/0008 already applied without copy, rollback those apps then remigrate.
 - Associate API hard-break: write `role_ids[]` only; response `role_ids` + `roles[]`; no singular `role`/`role_id`. Admin still cannot get care roles. RBAC `AssociateFeaturePermission` = OR across multi-roles.
 - `CustomerAssociateSerializer` exposes `roles`/`role_ids` from `current_center_assignment` through-links.
 - Care team member still one `role_id` per row; role must be ∈ associate's live roles at center.

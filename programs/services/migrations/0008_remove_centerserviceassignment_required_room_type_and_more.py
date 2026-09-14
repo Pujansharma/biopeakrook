@@ -5,6 +5,35 @@ import uuid
 from django.db import migrations, models
 
 
+def copy_assignment_room_types(apps, schema_editor):
+    Assignment = apps.get_model("services", "CenterServiceAssignment")
+    RoomTypeRequirement = apps.get_model(
+        "services", "CenterServiceRoomTypeRequirement"
+    )
+    rows = Assignment.objects.exclude(required_room_type_id=None).values_list(
+        "pk", "required_room_type_id"
+    )
+    RoomTypeRequirement.objects.bulk_create(
+        [
+            RoomTypeRequirement(assignment_id=assignment_id, room_type_id=room_type_id)
+            for assignment_id, room_type_id in rows
+        ]
+    )
+
+
+def restore_assignment_room_types(apps, schema_editor):
+    Assignment = apps.get_model("services", "CenterServiceAssignment")
+    RoomTypeRequirement = apps.get_model(
+        "services", "CenterServiceRoomTypeRequirement"
+    )
+    for assignment_id, room_type_id in RoomTypeRequirement.objects.values_list(
+        "assignment_id", "room_type_id"
+    ):
+        Assignment.objects.filter(pk=assignment_id).update(
+            required_room_type_id=room_type_id
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -13,10 +42,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='centerserviceassignment',
-            name='required_room_type',
-        ),
         migrations.CreateModel(
             name='CenterServiceRoomTypeRequirement',
             fields=[
@@ -31,5 +56,10 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
                 'constraints': [models.UniqueConstraint(fields=('assignment', 'room_type'), name='uniq_assignment_room_type_requirement')],
             },
+        ),
+        migrations.RunPython(copy_assignment_room_types, restore_assignment_room_types),
+        migrations.RemoveField(
+            model_name='centerserviceassignment',
+            name='required_room_type',
         ),
     ]

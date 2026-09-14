@@ -58,6 +58,21 @@ def assignment_roles_representation(assignment):
     }
 
 
+class AssignmentRoleIdsField(serializers.ListField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("child", serializers.UUIDField())
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_empty", True)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        return assignment_roles_representation(instance)["role_ids"]
+
+
 class AssociateValidationMixin:
     @classmethod
     def validate_experience(cls, value: float) -> float | None:
@@ -822,13 +837,7 @@ class CenterAssociateSerializer(
         source="associate.date_joined", required=False, allow_null=True
     )
     roles = serializers.SerializerMethodField()
-    role_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        required=False,
-        allow_empty=True,
-        allow_null=True,
-        write_only=True,
-    )
+    role_ids = AssignmentRoleIdsField()
 
     created_by = BaseUserSerializer(read_only=True)
 
@@ -944,9 +953,6 @@ class CenterAssociateSerializer(
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        roles_payload = assignment_roles_representation(instance)
-        rep["roles"] = roles_payload["roles"]
-        rep["role_ids"] = roles_payload["role_ids"]
         if "gender" in self.get_fields():
             rep["gender"] = instance.associate.user.get_gender_display()
         return rep
@@ -980,13 +986,7 @@ class CenterAssociateDetailSerializer(
     )
 
     roles = serializers.SerializerMethodField()
-    role_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        required=False,
-        allow_empty=True,
-        allow_null=True,
-        write_only=True,
-    )
+    role_ids = AssignmentRoleIdsField()
 
     # Assignment fields already at root
     # is_admin, mode, is_primary come from the model directly
@@ -1094,9 +1094,6 @@ class CenterAssociateDetailSerializer(
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        roles_payload = assignment_roles_representation(instance)
-        rep["roles"] = roles_payload["roles"]
-        rep["role_ids"] = roles_payload["role_ids"]
         if "gender" in self.get_fields():
             rep["gender"] = instance.associate.user.get_gender_display()
         return rep
