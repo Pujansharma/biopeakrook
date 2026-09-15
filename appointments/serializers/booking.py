@@ -244,6 +244,16 @@ def preferred_from_booking_attrs(attrs):
     return preferred
 
 
+def preferred_combo_error_payload(error, nest_under=None):
+    if hasattr(error, "error_dict"):
+        payload = error.message_dict
+    else:
+        payload = error.messages
+    if nest_under is not None:
+        return {nest_under: payload}
+    return payload
+
+
 def normalize_preferred(preferred, modality=None, required=False):
     if preferred is None:
         if required:
@@ -269,7 +279,9 @@ def normalize_preferred(preferred, modality=None, required=False):
         try:
             validate_preferred_combo(normalized_preferred, modality)
         except DjangoValidationError as error:
-            raise serializers.ValidationError({"preferred": error.messages})
+            raise serializers.ValidationError(
+                preferred_combo_error_payload(error, nest_under="preferred")
+            )
     return normalized_preferred
 
 
@@ -311,7 +323,7 @@ class AppointmentBookSerializer(BaseSerializer):
         try:
             validate_preferred_combo(preferred, attrs["modality"])
         except DjangoValidationError as error:
-            raise serializers.ValidationError(error.messages)
+            raise serializers.ValidationError(preferred_combo_error_payload(error))
         attrs["preferred"] = preferred
         assignment = get_center_service_assignment(center, service)
         if assignment is None:

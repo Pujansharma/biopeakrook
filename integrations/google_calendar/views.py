@@ -26,6 +26,7 @@ from integrations.google_calendar.db import (
     clear_google_calendar_tokens,
     evict_google_calendar_email,
     get_or_create_google_calendar_connection,
+    revoke_stale_google_calendar_grants,
     update_google_calendar_tokens,
 )
 from integrations.google_calendar.utils import decrypt, encrypt, ensure_encryption_configured
@@ -133,6 +134,9 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
             )
 
         stale_holder_count = 0
+        # Revoke outside the txn so Google HTTP cannot hold a DB connection.
+        # InvalidToken / HTTP fail still proceeds to the local evict below.
+        revoke_stale_google_calendar_grants(google_email, user.pk)
         try:
             with transaction.atomic():
                 # google_email is unique (case-insensitively). Evict whoever

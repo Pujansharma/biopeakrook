@@ -44,6 +44,7 @@ from appointments.utils.scheduling import (
     HEALTH_COACH_ID_REJECT_MESSAGE,
     MISSING_DOCTOR_ROLE_MESSAGE,
     MISSING_SPECIALTY_ROLE_MESSAGE,
+    ROOM_REQUIRED_IN_PERSON_MESSAGE,
     find_appointment_slots,
     resolve_booking_combo,
 )
@@ -607,7 +608,7 @@ class BookingValidationTests(BookingWorldTests):
             )
 
     def test_rejects_in_person_without_room(self):
-        with self.assertRaises(DRFValidationError):
+        with self.assertRaises(DRFValidationError) as raised:
             find_slots(
                 self.center,
                 {
@@ -618,6 +619,33 @@ class BookingValidationTests(BookingWorldTests):
                     "preferred": {"specialty_id": str(self.coach.pk)},
                 },
             )
+        self.assertIn("room_id", raised.exception.detail["preferred"])
+        self.assertIn(
+            ROOM_REQUIRED_IN_PERSON_MESSAGE,
+            drf_error_text(raised.exception),
+        )
+
+    def test_book_in_person_without_room_errors_on_room_id(self):
+        start = datetime(2026, 9, 21, 10, 0, tzinfo=KOLKATA)
+        serializer = AppointmentBookSerializer(
+            data={
+                "customer_profile_id": str(self.customer_profile.pk),
+                "service_id": str(self.service.pk),
+                "modality": AppointmentModes.IN_PERSON,
+                "start": start.isoformat(),
+                "end": (start + timedelta(minutes=30)).isoformat(),
+                "specialty_id": str(self.coach.pk),
+            },
+            context={"center": self.center},
+        )
+        with self.assertRaises(DRFValidationError) as raised:
+            serializer.is_valid(raise_exception=True)
+        self.assertIn("room_id", raised.exception.detail)
+        self.assertNotIn("non_field_errors", raised.exception.detail)
+        self.assertIn(
+            ROOM_REQUIRED_IN_PERSON_MESSAGE,
+            drf_error_text(raised.exception),
+        )
 
     def test_rejects_virtual_with_room(self):
         with self.assertRaises(DRFValidationError):

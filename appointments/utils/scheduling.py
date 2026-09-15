@@ -56,6 +56,12 @@ PREFERRED_REQUIRED_MESSAGE = "preferred is required."
 STAFF_REQUIRED_MESSAGE = (
     "care_team_id and/or doctor_id/specialty_id is required."
 )
+CARE_TEAM_XOR_MESSAGE = (
+    "care_team_id cannot be combined with doctor_id or specialty_id."
+)
+SAME_DOCTOR_AND_SPECIALTY_MESSAGE = (
+    "doctor_id and specialty_id cannot refer to the same associate."
+)
 ROOM_REQUIRED_IN_PERSON_MESSAGE = (
     "room_id is required for in-person appointments."
 )
@@ -132,10 +138,6 @@ def get_customer_profile_display_name(customer_profile):
     parts = [customer_profile.first_name or "", customer_profile.last_name or ""]
     name = " ".join(part for part in parts if part).strip()
     return name or str(customer_profile.pk)
-
-
-def busy_load_count(busy_map, resource_id):
-    return len(busy_map.get(str(resource_id), []))
 
 
 def load_busy_interval_maps(center, range_start, range_end):
@@ -316,7 +318,7 @@ def validate_room_for_assignment(room, center, assignment=None):
 
 def reject_health_coach_id(preferred):
     if preferred and "health_coach_id" in preferred:
-        raise ValidationError(HEALTH_COACH_ID_REJECT_MESSAGE)
+        raise ValidationError({"health_coach_id": HEALTH_COACH_ID_REJECT_MESSAGE})
 
 
 def validate_preferred_combo(preferred, modality):
@@ -328,23 +330,32 @@ def validate_preferred_combo(preferred, modality):
     room_id = preferred.get("room_id")
     has_person = bool(care_team_id or doctor_id or specialty_id)
     if not has_person:
-        raise ValidationError(STAFF_REQUIRED_MESSAGE)
-    if care_team_id and (doctor_id or specialty_id):
         raise ValidationError(
-            "care_team_id cannot be combined with doctor_id or specialty_id."
+            {
+                "care_team_id": STAFF_REQUIRED_MESSAGE,
+                "doctor_id": STAFF_REQUIRED_MESSAGE,
+                "specialty_id": STAFF_REQUIRED_MESSAGE,
+            }
         )
+    if care_team_id and (doctor_id or specialty_id):
+        raise ValidationError({"care_team_id": CARE_TEAM_XOR_MESSAGE})
     equipment_id = preferred.get("equipment_id")
     if modality == AppointmentModes.IN_PERSON:
         if not room_id:
-            raise ValidationError(ROOM_REQUIRED_IN_PERSON_MESSAGE)
+            raise ValidationError({"room_id": ROOM_REQUIRED_IN_PERSON_MESSAGE})
     else:
         if room_id:
-            raise ValidationError(ROOM_NOT_ALLOWED_VIRTUAL_MESSAGE)
+            raise ValidationError({"room_id": ROOM_NOT_ALLOWED_VIRTUAL_MESSAGE})
         if equipment_id:
-            raise ValidationError(EQUIPMENT_NOT_ALLOWED_VIRTUAL_MESSAGE)
+            raise ValidationError(
+                {"equipment_id": EQUIPMENT_NOT_ALLOWED_VIRTUAL_MESSAGE}
+            )
     if doctor_id and specialty_id and str(doctor_id) == str(specialty_id):
         raise ValidationError(
-            "doctor_id and specialty_id cannot refer to the same associate."
+            {
+                "doctor_id": SAME_DOCTOR_AND_SPECIALTY_MESSAGE,
+                "specialty_id": SAME_DOCTOR_AND_SPECIALTY_MESSAGE,
+            }
         )
 
 
@@ -554,47 +565,27 @@ def build_resource_free_window_cache(
     }
 
 
-def preferred_associate_id_for_role(role, preferred):
-    if not preferred:
-        return None
-    role_key = str(role.pk)
-    if role_key in preferred:
-        return preferred[role_key]
-    role_slug = f"{role.name.lower().replace(' ', '_')}_id"
-    if role_slug in preferred:
-        return preferred[role_slug]
-    role_name_lower = role.name.lower()
-    if "doctor" in role_name_lower and preferred.get("doctor_id"):
-        return preferred["doctor_id"]
-    if preferred.get("specialty_id") and not role_is_doctor(role):
-        return preferred["specialty_id"]
-    return None
-
-
 def preferred_room_id(preferred):
     if not preferred:
         return None
     return preferred.get("room_id")
 
 
-def bookable_equipment_for_room(room):
+def room_has_bookable_equipment(room):
     if room is None:
-        return []
-    return list(
-        Equipment.objects.filter(
-            room=room,
-            is_active=True,
-            center=room.center,
-            equipment_type__isnull=False,
-            equipment_type__is_active=True,
-        ).order_by("created_at", "pk")
-    )
+        return False
+    return Equipment.objects.filter(
+        room=room,
+        is_active=True,
+        center=room.center,
+        equipment_type__isnull=False,
+        equipment_type__is_active=True,
+    ).exists()
 
 
 def resolve_preferred_equipment(room, preferred):
     preferred_equipment_id = (preferred or {}).get("equipment_id")
-    bookable = bookable_equipment_for_room(room)
-    if not bookable:
+    if not room_has_bookable_equipment(room):
         if preferred_equipment_id:
             raise ValidationError(EQUIPMENT_NOT_ALLOWED_EMPTY_ROOM_MESSAGE)
         return None
@@ -630,28 +621,6 @@ def resource_is_free(resource_type, resource_id, exclusive_start, exclusive_end,
     windows = free_window_cache[resource_type].get(str(resource_id), [])
     return is_interval_contained_in_windows(
         exclusive_start, exclusive_end, windows
-    )
-
-
-def pick_associate_by_load(associates, associate_busy_map):
-    return min(
-        associates,
-        key=lambda associate: (
-            busy_load_count(associate_busy_map, associate.pk),
-            associate.created_at,
-            str(associate.pk),
-        ),
-    )
-
-
-def pick_room_by_load(rooms, room_busy_map):
-    return min(
-        rooms,
-        key=lambda room: (
-            busy_load_count(room_busy_map, room.pk),
-            room.code or "",
-            str(room.pk),
-        ),
     )
 
 

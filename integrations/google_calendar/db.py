@@ -60,16 +60,25 @@ def revoke_stored_google_refresh_token(encrypted_refresh_token):
         )
 
 
-def evict_google_calendar_email(google_email, exclude_pk):
-    stale_connections = list(
+def stale_google_calendar_connections(google_email, exclude_pk):
+    return list(
         GoogleCalendarConnection.objects.filter(google_email__iexact=google_email)
         .exclude(pk=exclude_pk)
     )
-    for connection in stale_connections:
+
+
+def revoke_stale_google_calendar_grants(google_email, exclude_pk):
+    for connection in stale_google_calendar_connections(google_email, exclude_pk):
         revoke_stored_google_refresh_token(connection.google_refresh_token)
-    if not stale_connections:
+
+
+def evict_google_calendar_email(google_email, exclude_pk):
+    stale_pks = [
+        connection.pk
+        for connection in stale_google_calendar_connections(google_email, exclude_pk)
+    ]
+    if not stale_pks:
         return 0
-    stale_pks = [connection.pk for connection in stale_connections]
     return GoogleCalendarConnection.objects.filter(pk__in=stale_pks).update(
         google_email=None,
         google_access_token=None,

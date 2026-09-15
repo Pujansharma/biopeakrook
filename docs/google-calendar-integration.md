@@ -66,14 +66,15 @@ not organizers - see "Picking which calendar hosts the event" below).
    that already refreshed and saved a live token wins instead of triggering
    a second, redundant refresh (Google can rotate/invalidate the refresh
    token on refresh, so two concurrent refreshes for the same connection is
-   unsafe). If Google rejects the refresh token outright (HTTP 400,
-   `invalid_grant` - revoked, expired, or rotated away), the stored tokens
-   are cleared via `db.clear_google_calendar_tokens()` (same helper
-   `/refresh/` and `/disconnect/` use) before the error is re-raised and
-   swallowed by the calling sync flow like any other `GOOGLE_SYNC_ERRORS`
-   failure - so `get_fixed_calendar_organizer()` stops treating that
-   connection as connected instead of every sync silently soft-failing until
-   someone hits `/refresh/` or `/disconnect/` by hand.
+   unsafe). If Google rejects the refresh token with HTTP 400 `invalid_grant`,
+   `get_valid_access_token()` re-reads the row: if another worker already
+   rotated `google_refresh_token`, it retries once instead of wiping. It
+   only calls `db.clear_google_calendar_tokens()` when the token we sent is
+   still the one stored (revoked/expired for real). The error is then
+   re-raised and swallowed by the calling sync flow like any other
+   `GOOGLE_SYNC_ERRORS` failure - so `get_fixed_calendar_organizer()` stops
+   treating that connection as connected instead of every sync silently
+   soft-failing until someone hits `/refresh/` or `/disconnect/` by hand.
 
 ## The files
 
@@ -220,10 +221,11 @@ self-disconnect, this eviction **does** clear the evicted row's
 be saved with that same `google_email` value and the old row must give it
 up first. Evict revokes the stale row's Google refresh grant first
 (`InvalidToken` or Google HTTP failure still clears local columns so
-`/complete/` can save). The evict-then-save runs inside one
-`transaction.atomic()` block, and the final `connection.save()` is still
-wrapped in `try/except IntegrityError` (400) to cover a race between two
-concurrent `/complete/` calls resolving to the same account.
+`/complete/` can save). Revoke runs **outside** `transaction.atomic()` so
+Google HTTP cannot hold a DB transaction. The ORM evict +
+`connection.save()` stay inside one `atomic()` block, still wrapped in
+`try/except IntegrityError` (400) to cover a race between two concurrent
+`/complete/` calls resolving to the same account.
 
 ### `Appointment` (`appointments/models.py`)
 

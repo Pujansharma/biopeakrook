@@ -19,7 +19,32 @@ def is_expired(expires_at: datetime | None):
     return timezone.now() >= expires_at - REFRESH_BUFFER
 
 
-def get_valid_access_token(connection):
+def retry_or_clear_invalid_google_grant(
+    connection,
+    encrypted_refresh_token,
+    error,
+    retry_rotated_grant,
+):
+    connection.refresh_from_db(
+        fields=[
+            "google_refresh_token",
+            "google_access_token",
+            "google_access_token_expires_at",
+        ]
+    )
+    stored_refresh_token = connection.google_refresh_token
+    if (
+        retry_rotated_grant
+        and stored_refresh_token
+        and stored_refresh_token != encrypted_refresh_token
+    ):
+        return get_valid_access_token(connection, retry_rotated_grant=False)
+    if stored_refresh_token == encrypted_refresh_token:
+        clear_google_calendar_tokens(connection)
+    raise error
+
+
+def get_valid_access_token(connection, retry_rotated_grant=True):
     if not connection.google_refresh_token:
         raise ValueError(
             f"User {connection.pk} has no connected Google Calendar account."
@@ -42,13 +67,19 @@ def get_valid_access_token(connection):
     if not is_expired(connection.google_access_token_expires_at):
         return decrypt(connection.google_access_token)
 
+    encrypted_refresh_token = connection.google_refresh_token
     try:
         tokens = google_oauth.refresh_access_token(
-            decrypt(connection.google_refresh_token)
+            decrypt(encrypted_refresh_token)
         )
     except requests.HTTPError as error:
         if google_oauth.is_invalid_grant_error(error):
-            clear_google_calendar_tokens(connection)
+            return retry_or_clear_invalid_google_grant(
+                connection,
+                encrypted_refresh_token,
+                error,
+                retry_rotated_grant,
+            )
         raise
 
     access_token = tokens.get("access_token")
