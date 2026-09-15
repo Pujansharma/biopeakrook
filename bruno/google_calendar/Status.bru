@@ -19,16 +19,16 @@ settings {
 }
 
 docs {
-  Returns the signed-in associate's own Google Calendar connection state so
+  Returns the signed-in user's Google Calendar connection state so
   the frontend can show the right UI after a page reload without ever
-  reading token fields off Associate.
+  reading token fields off GoogleCalendarConnection.
 
   is_connected reflects google_refresh_token, not google_email -
-  Associate.google_email is left populated after disconnect as a
+  google_email is left populated after disconnect as a
   "connected as ___" record.
 
   Method: GET
   Path: /google-calendar/
   Source: integrations.google_calendar.views.GoogleCalendarStatusView
-  Auth: Associate (JWT).
+  Auth: Admin or Associate (JWT).
 }

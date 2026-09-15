@@ -155,7 +155,8 @@ biopeak-nexus/
 │       ├── google_oauth.py      # Consent URL, code exchange, token refresh, revoke
 │       ├── calendar_api.py      # insert_event/patch_event/delete_event
 │       ├── tokens.py            # get_valid_access_token() — refresh-if-expired glue
-│       ├── db.py                # Persist tokens onto the Associate row
+│       ├── db.py                # Persist tokens onto GoogleCalendarConnection
+│       ├── connections.py       # Owner lookup + get_fixed_calendar_organizer()
 │       ├── google_sync.py       # Desired-state Calendar sync, called from communication outbox worker
 │       ├── views.py             # status/connect/callback/complete/disconnect/refresh
 │       └── urls.py              # Routes under /google-calendar/
@@ -181,7 +182,8 @@ biopeak-nexus/
 
 **Identity & Access**
 - `User` (UUID PK, email-based auth) — custom `AUTH_USER_MODEL = 'users.User'`
-- `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField) — also carries the Google Calendar connection columns (`google_email`, encrypted tokens, expiry)
+- `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField)
+- `GoogleCalendarConnection` (1:1 User) — `google_email`, encrypted tokens, expiry; admin or associate may own the shared calendar. See `docs/google-calendar-integration.md`.
 - `AssociateCenterAssignment` — links associate ↔ center with role, is_admin, mode
 - `Customer` (1:1 User) + `CustomerProfile` (family members) + `CustomerOnboarding` (health data)
 - `Center` + `CenterOperatingHour` + `CenterClosure`

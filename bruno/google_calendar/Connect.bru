@@ -25,14 +25,14 @@ docs {
   No body needed — this no longer names which associate is connecting, and
   there's no `state` param either; identity is worked out later in
   /complete/ from the connected Google account's own email (matched against
-  Associate.user.email). Whichever Google account the staff member actually
-  signs into on the consent screen decides who gets connected — not
-  whoever called /connect/.
+  User.email for an active Admin or Associate). Whichever Google account
+  the staff member actually signs into on the consent screen decides who
+  gets connected — not whoever called /connect/.
 
   Method: POST
   Path: /google-calendar/connect/
   Source: integrations.google_calendar.views.GoogleCalendarConnectView
-  Auth: None — authentication_classes = [] (this view never reads request.user; identity is resolved in /complete/ instead, see above, so IsAssociateUser can't come back here without also removing authentication_classes = []).
+  Auth: None — authentication_classes = [] (this view never reads request.user; identity is resolved in /complete/ instead, see above).
 
   Manual end-to-end flow (no real frontend running locally):
   1. Run this request. Copy data.auth_url from the response.

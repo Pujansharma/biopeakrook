@@ -29,11 +29,12 @@ docs {
   connected account's own email, and requires it to exactly match
   settings.GOOGLE_CALENDAR_ID (the one fixed shared organizer account) - 400
   "This is not the shared Google Calendar account..." otherwise. Only then
-  does it save the tokens onto whichever Associate's login email
-  (Associate.user.email) matches that address - not necessarily the
-  signed-in caller. 400 "No active Biopeak Staff account uses this Google
-  account's email..." if no active associate's login email matches - the
-  shared account's own login email must equal GOOGLE_CALENDAR_ID.
+  does it save the tokens onto whichever User's login email
+  (User.email) matches that address and who has an active Admin or
+  Associate profile - not necessarily the signed-in caller. 400 "No
+  active Biopeak admin or staff account uses this Google account's
+  email..." if no matching active login - the shared account's own
+  login email must equal GOOGLE_CALENDAR_ID.
 
   Set env var google_oauth_code to the `code` value from the URL fragment
   (after the `#`) your browser lands on after approving consent (see
@@ -48,5 +49,5 @@ docs {
   request.user; the email match is what decides whose tokens actually get
   saved). Collection may attach Bearer if logged in; view ignores it.
 
-  Success: {"detail": "Google Calendar connected.", "data": {"google_email": "...", "associate_id": "..."}}
+  Success: {"detail": "Google Calendar connected.", "data": {"google_email": "...", "user_id": "..."}}
 }

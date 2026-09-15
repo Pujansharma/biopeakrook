@@ -48,6 +48,11 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 - `specialty_id` hat = live non-doctor role ∩ active service role requirements (many hats OK). No unique-hat 400. No `role_id` in body. Service with 0 role reqs + `specialty_id` → 400. `doctor_id` still unique `"doctor"`-in-name hat, not service-mapped.
 - Find Slots each slot: nested `care_team` / `doctor` / `specialty` (`role` on specialty) / `room` / `equipment` `{id, name}` — omit key if not in preferred. No `associates[]`. No bare `*_id`. Book still flattened IDs from those `id`s.
 
+## 2026-09-15 — GoogleCalendarConnection
+
+- Tokens off `Associate` onto `GoogleCalendarConnection` (1:1 `User` PK). Admin or associate may own shared calendar. `/complete/` match `User.email` + active Admin/Associate. Status/disconnect/refresh = `IsAdminUser | IsAssociateUser`. Success `user_id` not `associate_id`.
+- User writes migration: create table, copy live Associate google cols, drop Associate google cols + `uniq_associate_google_email`. No `makemigrations` from agent.
+
 ---
 
 ## 2026-09-12 — Center associate list role filter
@@ -144,11 +149,11 @@ Canonical: [`docs/google-calendar-integration.md`](google-calendar-integration.m
 - Outbox `CommunicationOutbox` (`channel=whatsapp|google_calendar`). Worker `process_communication_outbox` (SQS wake + 10 min sweep). Claim via conditional `update` (no `select_for_update`). Stale WhatsApp `SENDING` → **SKIPPED**; stale Google `SENDING` → **FAILED** (retry). HTTP WhatsApp success w/o parsable `wamid` still ACCEPTED; max 2 attempts then SKIPPED.
 - Unique `(appointment, channel, event_type)` for terminal events. Google coalesces one open row per appointment. Webhook `get_or_create` on `event_key`; `IntegrityError` → dup. Webhook `GET|POST /webhooks/whatsapp/`.
 - Ops: SQS wake + EventBridge `rate(10 minutes)` `assets/scripts/sweep_jobs.sh`. Env `*_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL`. **Not** in `deploy-aws.yml`.
-- Google: one fixed shared organizer (`GOOGLE_CALENDAR_ID`). Resolve via `Associate.google_email__iexact` + `is_active` + live `google_refresh_token` (not email alone — disconnect keeps `google_email`).
+- Google: one fixed shared organizer (`GOOGLE_CALENDAR_ID`). Tokens on `GoogleCalendarConnection` (1:1 `User`, admin or associate). Resolve via `google_email__iexact` + connection/user active + live admin/associate profile + live `google_refresh_token` (not email alone — disconnect keeps `google_email`).
 - Sync best-effort async. Never Google HTTP on request path. `GOOGLE_SYNC_ERRORS` = `(requests.RequestException, ValueError, InvalidToken, ImproperlyConfigured)` — exclude `KeyError`/`TypeError` (our bugs must crash).
 - Event id = appointment UUID hex. Book title `"Appointment Confirmed"`; reschedule `"Appointment Rescheduled"`. Cancel does **not** clear `google_event_id`/`google_meet_link`. Leave virtual → clear Meet (`clear_meet_link=True`). Insert/patch success then `appointment.save` `DatabaseError` → log+swallow; do **not** delete Google event.
-- `/connect/` + `/complete/` public (`AllowAny`); never read `request.user`. `/complete/` rejects unless Google email equals `GOOGLE_CALENDAR_ID`; then match `Associate.user.email` (both active). `google_email` uniqueness case-insensitive (`Lower`). Stale email on other associate → evict first; `IntegrityError` → 400.
-- Disconnect: clear tokens, **keep** `google_email`. "Connected" = `google_refresh_token`, not `google_email`. Disconnecting the shared organizer requires `is_active` + `is_admin` on ≥1 active center assignment (403 else). `InvalidToken` on decrypt → clear tokens, no 500.
+- `/connect/` + `/complete/` public (`AllowAny`); never read `request.user`. `/complete/` rejects unless Google email equals `GOOGLE_CALENDAR_ID`; then match `User.email` + active `Admin` or `Associate` (user active). Tokens on `GoogleCalendarConnection`. `google_email` uniqueness case-insensitive (`Lower`). Stale email on other connection → evict first; `IntegrityError` → 400. Success `user_id` (not `associate_id`).
+- Disconnect/status/refresh: `IsAdminUser | IsAssociateUser`. Clear tokens, **keep** `google_email`. "Connected" = `google_refresh_token`. Shared-organizer disconnect: platform `Admin` OK; associate needs `is_active` + `is_admin` on ≥1 active center assignment (403 else). `InvalidToken` on decrypt → clear tokens, no 500.
 - Clear tokens only on Google `invalid_grant` (`google_oauth.is_invalid_grant_error`). Other 400 (`invalid_client`/`invalid_request`) must not wipe tokens. `/complete/` fail-fast if client secret or encryption key missing **before** `exchange_code` (code is one-time). `revoke_token()` no-op only on 400; other non-OK raise. Disconnect lets revoke `RequestException` → 503 (don't mark disconnected while Google grant live).
 - Virtual Google description = Meet-join line, no clinic address. Other modality = `Center.full_address` (computed, not a column). Dead HTML email path deleted; Google invite = only customer-facing notify.
 
