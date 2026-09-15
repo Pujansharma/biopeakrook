@@ -29,7 +29,7 @@ docs {
   as Disconnect.
 
   400 "No Google Calendar connection to refresh." if the user never
-  connected (no google_refresh_token).
+  connected (no google_refresh_token) or the connection is_active=false.
 
   Method: POST
   Path: /google-calendar/refresh/

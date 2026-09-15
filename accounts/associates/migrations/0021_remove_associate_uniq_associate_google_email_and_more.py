@@ -7,6 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('associates', '0020_remove_associatecenterassignment_role_and_more'),
+        ('integrations', '0003_googlecalendarconnection'),
     ]
 
     operations = [

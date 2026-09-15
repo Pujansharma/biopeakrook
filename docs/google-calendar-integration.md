@@ -102,10 +102,10 @@ below.
 | ------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /google-calendar/connect/`      | None (public)   | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). No body needed - see "Identity" below for why. The frontend navigates the browser there itself.                                                                                                                                                                                                                                                                                                                                                                            |
 | `GET /google-calendar/callback/`      | None (public)   | Google redirects the browser here after consent. Forwards `code` unchanged to `ADMIN_FRONTEND_URL` as `#code=...`, or `#connected=0&error=...` on a missing param. Raises a config error (`ImproperlyConfigured`) instead of redirecting if `ADMIN_FRONTEND_URL` isn't set. Does not touch the database.                                                                                                                                                                                                                                                  |
-| `POST /google-calendar/complete/`     | None (public)   | Frontend calls this with the `code` it got from `/callback/`. Exchanges the code with Google and fetches the connected account's email - 400s immediately (`"This is not the shared Google Calendar account used for appointment sync..."`) unless that email case-insensitively equals `settings.GOOGLE_CALENDAR_ID`. Only then does it look up the active `User` whose login email matches **and** who has an active platform `Admin` or `Associate` profile, and saves the tokens onto that user's `GoogleCalendarConnection` (evicting any other connection that stale-held the same `google_email` first). Returns `{"data": {"google_email": "...", "user_id": "..."}}` on success. |
+| `POST /google-calendar/complete/`     | None (public)   | Frontend calls this with the `code` it got from `/callback/`. Exchanges the code with Google and fetches the connected account's email - 400s immediately (`"This is not the shared Google Calendar account used for appointment sync..."`) unless that email case-insensitively equals `settings.GOOGLE_CALENDAR_ID`. Only then does it look up the active `User` whose login email matches **and** who has an active platform `Admin` or `Associate` profile, and saves the tokens onto that user's `GoogleCalendarConnection` (evicting any other connection that stale-held the same `google_email` first — revoke that row's Google grant, then clear local tokens/email). Returns `{"data": {"google_email": "...", "user_id": "..."}}` on success. |
 | `DELETE /google-calendar/disconnect/` | Admin or Associate (JWT) | Revokes the token with Google and clears the signed-in user's own `google_access_token`/`google_refresh_token`/`google_access_token_expires_at`. `google_email` is deliberately kept as a "last connected as \_\_\_" record - check `google_refresh_token` to know if actually still connected. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), disconnecting kills sync for every center - platform `Admin` may disconnect; an associate must be `is_active` **and** hold `is_admin=True` on at least one active center assignment - 403 otherwise. |
-| `POST /google-calendar/refresh/`      | Admin or Associate (JWT) | Forces a refresh of the signed-in user's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_google_calendar_tokens()`. |
-| `GET /google-calendar/`               | Admin or Associate (JWT) | Returns `{"data": {"google_email": "...", "is_connected": true/false}}` for the signed-in user's `GoogleCalendarConnection` - `is_connected` is `bool(connection.google_refresh_token)`, not just whether `google_email` is set (see the "last connected as \_\_\_" note above). Never exposes the token columns themselves. |
+| `POST /google-calendar/refresh/`      | Admin or Associate (JWT) | Forces a refresh of the signed-in user's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Requires `is_active` and a live `google_refresh_token` (same connected test as status). Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_google_calendar_tokens()`. |
+| `GET /google-calendar/`               | Admin or Associate (JWT) | Returns `{"data": {"google_email": "...", "is_connected": true/false}}` for the signed-in user's `GoogleCalendarConnection` - `is_connected` is `connection.is_active` **and** `bool(connection.google_refresh_token)`, not just whether `google_email` is set (see the "last connected as \_\_\_" note above). Soft-off (`is_active=False`) matches `get_fixed_calendar_organizer()` skipping that row. Never exposes the token columns themselves. |
 
 **Why `/connect/` doesn't redirect directly:** the callback (`/callback/`) is a
 plain browser navigation triggered by Google - it can't carry our
@@ -204,7 +204,7 @@ All four google columns are optional (nullable). Disconnecting only clears
 the three token columns back to null - `google_email` is deliberately left
 in place as a record of the last-connected account (see "Why `/disconnect/`
 ..." above for why anything checking "is this user connected" must test
-`google_refresh_token`, not `google_email`).
+`connection.is_active` **and** `google_refresh_token`, not `google_email`).
 
 **Uniqueness:** `google_email` must be unique, case-insensitively -
 `models.UniqueConstraint(Lower("google_email"), ...)`
@@ -218,10 +218,12 @@ whichever other connection currently holds that `google_email` - unlike a
 self-disconnect, this eviction **does** clear the evicted row's
 `google_email` too (all four columns), since the new connection is about to
 be saved with that same `google_email` value and the old row must give it
-up first. The evict-then-save runs inside one `transaction.atomic()` block,
-and the final `connection.save()` is still wrapped in `try/except
-IntegrityError` (400) to cover a race between two concurrent `/complete/`
-calls resolving to the same account.
+up first. Evict revokes the stale row's Google refresh grant first
+(`InvalidToken` or Google HTTP failure still clears local columns so
+`/complete/` can save). The evict-then-save runs inside one
+`transaction.atomic()` block, and the final `connection.save()` is still
+wrapped in `try/except IntegrityError` (400) to cover a race between two
+concurrent `/complete/` calls resolving to the same account.
 
 ### `Appointment` (`appointments/models.py`)
 

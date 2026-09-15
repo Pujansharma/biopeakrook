@@ -4,9 +4,7 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.associates.utils.roles import (
-    active_role_links_prefetch,
     assignment_active_roles,
     assignment_holds_role,
 )
@@ -222,41 +220,6 @@ def validate_customer_profile_for_center(customer_profile, center):
         )
 
 
-def get_eligible_associates_by_roles(center, roles, modality):
-    by_role = {str(role.pk): [] for role in roles}
-    if not roles:
-        return by_role
-    role_ids = [role.pk for role in roles]
-    assignments = (
-        AssociateCenterAssignment.objects.filter(
-            center=center,
-            is_active=True,
-            associate__user__is_active=True,
-            role_links__role__pk__in=role_ids,
-            role_links__is_active=True,
-            role_links__role__is_active=True,
-        )
-        .select_related("associate", "associate__user")
-        .prefetch_related(active_role_links_prefetch())
-        .order_by("associate__created_at", "associate__pk")
-        .distinct()
-    )
-    seen_by_role = {str(role.pk): set() for role in roles}
-    role_id_set = {str(role.pk) for role in roles}
-    for assignment in assignments:
-        if not associate_modality_compatible(assignment.mode, modality):
-            continue
-        for role in assignment_active_roles(assignment):
-            role_key = str(role.pk)
-            if role_key not in role_id_set:
-                continue
-            if assignment.associate.pk in seen_by_role[role_key]:
-                continue
-            seen_by_role[role_key].add(assignment.associate.pk)
-            by_role[role_key].append(assignment.associate)
-    return by_role
-
-
 def role_is_doctor(role):
     return "doctor" in (role.name or "").lower()
 
@@ -383,59 +346,6 @@ def validate_preferred_combo(preferred, modality):
         raise ValidationError(
             "doctor_id and specialty_id cannot refer to the same associate."
         )
-
-
-def rooms_for_assignment_types(center, assignment):
-    required = required_room_types_for_assignment(assignment)
-    if not required:
-        return []
-    return list(
-        Room.objects.filter_active(
-            center=center,
-            room_type_ref__in=required,
-        ).order_by("code", "pk")
-    )
-
-
-def build_service_resource_pools(center, assignment, modality):
-    role_requirements = list(
-        assignment.role_requirements.filter(is_active=True).select_related("role")
-    )
-    roles = [requirement.role for requirement in role_requirements]
-    associates_by_role = get_eligible_associates_by_roles(center, roles, modality)
-    role_pools = []
-    for requirement in role_requirements:
-        role = requirement.role
-        role_pools.append(
-            {
-                "role_id": str(role.pk),
-                "role": role,
-                "associates": associates_by_role.get(str(role.pk), []),
-            }
-        )
-    rooms = []
-    if modality == AppointmentModes.IN_PERSON:
-        rooms = rooms_for_assignment_types(center, assignment)
-    return {
-        "roles": role_pools,
-        "rooms": rooms,
-        "equipment": [],
-        "equipment_by_room_id": {},
-    }
-
-
-def validate_service_bookable(assignment, modality, resource_pools):
-    """
-    Config-level bookability. Virtual and in-person stay open here:
-    preferred staff/room (or pin) supply resources; find/resolve enforce them.
-    """
-    if modality in (AppointmentModes.VIRTUAL, AppointmentModes.IN_PERSON):
-        return
-    role_pools = resource_pools["roles"]
-    has_roles = len(role_pools) > 0
-    has_room_type = len(required_room_types_for_assignment(assignment)) > 0
-    if not has_roles and not has_room_type:
-        raise ValidationError("Service is not bookable at this center.")
 
 
 def compute_associate_free_windows(
@@ -1284,6 +1194,7 @@ def validate_appointment_allocation(
     customer_profile=None,
     exclude_appointment=None,
 ):
+    """Duration, staff roles, customer overlap. Free windows already checked."""
     if customer_profile is not None:
         validate_customer_profile_for_center(customer_profile, center)
     if not modality_compatible(assignment.modality, modality):
@@ -1297,115 +1208,45 @@ def validate_appointment_allocation(
             "Appointment end time does not match configured duration."
         )
 
-    role_requirements = list(
-        assignment.role_requirements.filter(is_active=True).select_related("role")
-    )
     if associates:
+        role_requirements = list(
+            assignment.role_requirements.filter(is_active=True).select_related("role")
+        )
         validate_associate_assignments(
             center, associates, role_requirements, modality
         )
-
-    resource_pools = build_service_resource_pools(center, assignment, modality)
-    validate_service_bookable(assignment, modality, resource_pools)
 
     if modality == AppointmentModes.IN_PERSON:
         if room is None:
             raise ValidationError(
                 "A room is required for in-person appointments."
             )
-        validate_room_for_assignment(room, center, assignment)
-        resolve_preferred_equipment(
-            room,
-            {"equipment_id": equipment.pk if equipment is not None else None},
+    elif room is not None or equipment is not None:
+        raise ValidationError(
+            "Room and equipment must not be set for virtual appointments."
         )
-        if equipment is not None and equipment.center.pk != center.pk:
-            raise ValidationError("Equipment does not belong to this center.")
-    else:
-        if room is not None or equipment is not None:
-            raise ValidationError(
-                "Room and equipment must not be set for virtual appointments."
-            )
 
-    if associates:
-        resource_pools["extra_associates"] = []
-        for entry in associates:
-            associate = Associate.objects.filter(pk=entry["associate_id"]).first()
-            if associate is not None:
-                resource_pools["extra_associates"].append(associate)
-    if room is not None and room not in resource_pools["rooms"]:
-        resource_pools["rooms"] = list(resource_pools["rooms"]) + [room]
-    if equipment is not None:
-        resource_pools["equipment"] = [equipment]
-        if room is not None:
-            by_room = dict(resource_pools.get("equipment_by_room_id") or {})
-            by_room[str(room.pk)] = equipment
-            resource_pools["equipment_by_room_id"] = by_room
+    if customer_profile is None:
+        return
 
-    buffer_before = assignment.buffer_before
-    buffer_after = assignment.buffer_after
     exclusive_start, exclusive_end = compute_exclusive_bounds(
-        start, end, buffer_before, buffer_after
+        start, end, assignment.buffer_before, assignment.buffer_after
     )
-
-    timezone_name = get_center_timezone_name(center)
-    slot_date = start.astimezone(ZoneInfo(timezone_name)).date()
-    query_start = slot_date
-    query_end = slot_date
-    busy_maps = load_busy_interval_maps(center, exclusive_start, exclusive_end)
+    customer_busy = load_customer_busy_intervals(
+        customer_profile, exclusive_start, exclusive_end
+    )
     if exclude_appointment is not None:
-        busy_maps = _subtract_appointment_from_busy_maps(
-            busy_maps, exclude_appointment
+        exclusive_interval = (
+            exclude_appointment.exclusive_start_datetime,
+            exclude_appointment.exclusive_end_datetime,
         )
-
-    free_window_cache = build_resource_free_window_cache(
-        center,
-        resource_pools,
-        query_start,
-        query_end,
-        timezone_name,
-        busy_maps,
-    )
-
-    if customer_profile is not None:
-        customer_busy = load_customer_busy_intervals(
-            customer_profile, exclusive_start, exclusive_end
+        customer_busy = [
+            item for item in customer_busy if item != exclusive_interval
+        ]
+    if interval_overlaps_any(exclusive_start, exclusive_end, customer_busy):
+        raise ValidationError(
+            "Customer already has an appointment during this time."
         )
-        if exclude_appointment is not None:
-            exclusive_interval = (
-                exclude_appointment.exclusive_start_datetime,
-                exclude_appointment.exclusive_end_datetime,
-            )
-            customer_busy = [
-                item for item in customer_busy if item != exclusive_interval
-            ]
-        if interval_overlaps_any(exclusive_start, exclusive_end, customer_busy):
-            raise ValidationError(
-                "Customer already has an appointment during this time."
-            )
-
-    for entry in associates or []:
-        associate_key = str(entry["associate_id"])
-        windows = free_window_cache["associate"].get(associate_key, [])
-        if not is_interval_contained_in_windows(
-            exclusive_start, exclusive_end, windows
-        ):
-            raise ValidationError("Selected associate is not available.")
-
-    if room is not None:
-        room_windows = free_window_cache["room"].get(str(room.pk), [])
-        if not is_interval_contained_in_windows(
-            exclusive_start, exclusive_end, room_windows
-        ):
-            raise ValidationError("Selected room is not available.")
-
-    if equipment is not None:
-        equipment_windows = free_window_cache["equipment"].get(
-            str(equipment.pk), []
-        )
-        if not is_interval_contained_in_windows(
-            exclusive_start, exclusive_end, equipment_windows
-        ):
-            raise ValidationError("Selected equipment is not available.")
 
 
 def resolve_booking_combo(

@@ -1,13 +1,17 @@
 from datetime import datetime
 
+import requests
+from cryptography.fernet import InvalidToken
+
+from core.utils.log import logger
+from integrations.google_calendar import google_oauth
+from integrations.google_calendar.utils import decrypt
 from integrations.models import GoogleCalendarConnection
 
 
 def get_or_create_google_calendar_connection(user):
-    connection = GoogleCalendarConnection.objects.filter(user=user).first()
-    if connection is not None:
-        return connection
-    return GoogleCalendarConnection.objects.create(user=user)
+    connection, _created = GoogleCalendarConnection.objects.get_or_create(user=user)
+    return connection
 
 
 def update_google_calendar_tokens(
@@ -43,14 +47,32 @@ def clear_google_calendar_tokens(connection):
     )
 
 
+def revoke_stored_google_refresh_token(encrypted_refresh_token):
+    if not encrypted_refresh_token:
+        return
+    try:
+        google_oauth.revoke_token(decrypt(encrypted_refresh_token))
+    except InvalidToken:
+        return
+    except requests.RequestException as error:
+        logger.warning(
+            f"Google Calendar evict: failed to revoke a stale grant: {error}"
+        )
+
+
 def evict_google_calendar_email(google_email, exclude_pk):
-    return (
+    stale_connections = list(
         GoogleCalendarConnection.objects.filter(google_email__iexact=google_email)
         .exclude(pk=exclude_pk)
-        .update(
-            google_email=None,
-            google_access_token=None,
-            google_refresh_token=None,
-            google_access_token_expires_at=None,
-        )
+    )
+    for connection in stale_connections:
+        revoke_stored_google_refresh_token(connection.google_refresh_token)
+    if not stale_connections:
+        return 0
+    stale_pks = [connection.pk for connection in stale_connections]
+    return GoogleCalendarConnection.objects.filter(pk__in=stale_pks).update(
+        google_email=None,
+        google_access_token=None,
+        google_refresh_token=None,
+        google_access_token_expires_at=None,
     )

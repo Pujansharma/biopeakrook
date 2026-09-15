@@ -16,6 +16,14 @@ def get_google_calendar_connection_for_user(user):
     return GoogleCalendarConnection.objects.filter(user=user).first()
 
 
+def google_calendar_connection_is_connected(connection):
+    return bool(
+        connection is not None
+        and connection.is_active
+        and connection.google_refresh_token
+    )
+
+
 def user_can_disconnect_shared_organizer(user):
     if Admin.objects.filter(pk=user.pk, is_active=True).exists():
         return True
@@ -31,9 +39,9 @@ def get_fixed_calendar_organizer():
     calendar_id = getattr(settings, "GOOGLE_CALENDAR_ID", None)
     if not calendar_id:
         return None
-    admin_exists = Admin.objects.filter(pk=OuterRef("user_id"), is_active=True)
+    admin_exists = Admin.objects.filter(pk=OuterRef("user"), is_active=True)
     associate_exists = Associate.objects.filter(
-        pk=OuterRef("user_id"), is_active=True
+        pk=OuterRef("user"), is_active=True
     )
     connection = (
         GoogleCalendarConnection.objects.filter(

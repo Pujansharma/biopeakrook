@@ -22,7 +22,7 @@ def is_expired(expires_at: datetime | None):
 def get_valid_access_token(connection):
     if not connection.google_refresh_token:
         raise ValueError(
-            f"User {connection.user_id} has no connected Google Calendar account."
+            f"User {connection.pk} has no connected Google Calendar account."
         )
 
     if not is_expired(connection.google_access_token_expires_at):
@@ -37,7 +37,7 @@ def get_valid_access_token(connection):
     )
     if not connection.google_refresh_token:
         raise ValueError(
-            f"User {connection.user_id} has no connected Google Calendar account."
+            f"User {connection.pk} has no connected Google Calendar account."
         )
     if not is_expired(connection.google_access_token_expires_at):
         return decrypt(connection.google_access_token)

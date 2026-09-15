@@ -18,6 +18,7 @@ from core.utils.views.main import BaseGenericAPIView
 from integrations.google_calendar import google_oauth
 from integrations.google_calendar.connections import (
     get_google_calendar_connection_for_user,
+    google_calendar_connection_is_connected,
     user_can_disconnect_shared_organizer,
     user_has_active_google_calendar_owner_profile,
 )
@@ -226,7 +227,7 @@ class GoogleCalendarRefreshTokenView(BaseGenericAPIView):
 
     def post(self, request, *args, **kwargs):
         connection = get_google_calendar_connection_for_user(request.user)
-        if connection is None or not connection.google_refresh_token:
+        if not google_calendar_connection_is_connected(connection):
             self.raise_bad_request("No Google Calendar connection to refresh.")
 
         try:
@@ -272,9 +273,7 @@ class GoogleCalendarStatusView(BaseGenericAPIView):
     def get(self, request, *args, **kwargs):
         connection = get_google_calendar_connection_for_user(request.user)
         google_email = connection.google_email if connection is not None else None
-        is_connected = bool(
-            connection is not None and connection.google_refresh_token
-        )
+        is_connected = google_calendar_connection_is_connected(connection)
         return self.send_response(
             "Google Calendar connection status.",
             data={

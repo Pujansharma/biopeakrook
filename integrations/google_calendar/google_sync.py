@@ -59,9 +59,9 @@ def build_attendee_emails(
     emails = []
     if contact_email:
         emails.append(contact_email)
-    organizer_user_id = organizer.user_id if organizer is not None else None
+    organizer_pk = organizer.pk if organizer is not None else None
     for associate in associates:
-        if organizer_user_id and associate.user_id == organizer_user_id:
+        if organizer_pk and associate.pk == organizer_pk:
             continue
         if associate.user.email:
             emails.append(associate.user.email)

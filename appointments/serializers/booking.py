@@ -235,25 +235,6 @@ class AppointmentSlotFindSerializer(BaseSerializer):
         return attrs
 
 
-class AppointmentSlotNamedResourceSerializer(BaseSerializer):
-    id = serializers.UUIDField()
-    name = serializers.CharField()
-
-
-class AppointmentSlotSpecialtySerializer(AppointmentSlotNamedResourceSerializer):
-    role = AppointmentSlotNamedResourceSerializer()
-
-
-class AppointmentSlotSerializer(BaseSerializer):
-    start = serializers.CharField()
-    end = serializers.CharField()
-    care_team = AppointmentSlotNamedResourceSerializer(required=False)
-    doctor = AppointmentSlotNamedResourceSerializer(required=False)
-    specialty = AppointmentSlotSpecialtySerializer(required=False)
-    room = AppointmentSlotNamedResourceSerializer(required=False)
-    equipment = AppointmentSlotNamedResourceSerializer(required=False)
-
-
 def preferred_from_booking_attrs(attrs):
     preferred = {}
     for key in BOOKING_RESOURCE_KEYS:
