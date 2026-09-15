@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from accounts.associates.models import (
@@ -37,20 +38,18 @@ from appointments.utils.exceptions import (
     detect_exceptions_for_appointment,
 )
 from appointments.utils.scheduling import (
-    AMBIGUOUS_SPECIALTY_ROLE_MESSAGE,
+    EQUIPMENT_NOT_ALLOWED_EMPTY_ROOM_MESSAGE,
+    EQUIPMENT_NOT_ALLOWED_VIRTUAL_MESSAGE,
+    EQUIPMENT_REQUIRED_FOR_ROOM_MESSAGE,
     HEALTH_COACH_ID_REJECT_MESSAGE,
     MISSING_DOCTOR_ROLE_MESSAGE,
+    MISSING_SPECIALTY_ROLE_MESSAGE,
     find_appointment_slots,
     resolve_booking_combo,
 )
 from appointments.utils.transitions import validate_transition
-from appointments.views.booking import (
-    build_associate_payload,
-    resolve_equipment,
-    resolve_room,
-)
 from core.utils.constants import AppointmentModes
-from inventory.models import Room, RoomType
+from inventory.models import Equipment, EquipmentType, Room, RoomType
 from programs.services.models import (
     CenterServiceAssignment,
     CenterServiceRoleRequirement,
@@ -173,6 +172,19 @@ def parse_slot_datetimes(slot):
     return datetime.fromisoformat(slot["start"]), datetime.fromisoformat(slot["end"])
 
 
+def assert_slot_has_no_pin_keys(test_case, slot):
+    pin_keys = (
+        "associates",
+        "room_id",
+        "equipment_id",
+        "doctor_id",
+        "specialty_id",
+        "care_team_id",
+    )
+    for pin_key in pin_keys:
+        test_case.assertNotIn(pin_key, slot)
+
+
 def find_slots(center, payload):
     serializer = AppointmentSlotFindSerializer(
         data=payload,
@@ -204,9 +216,6 @@ def book_appointment(center, actor, payload):
         preferred=validated.get("preferred"),
         start=validated["start"],
         end=validated["end"],
-        associates=build_associate_payload(validated.get("associates") or []),
-        room=resolve_room(center, validated.get("room_id")),
-        equipment=resolve_equipment(center, validated.get("equipment_id")),
         customer_profile=validated["customer_profile"],
     )
     serializer.save(
@@ -268,9 +277,6 @@ def reschedule_appointment(center, appointment, actor, payload):
         preferred=validated.get("preferred"),
         start=validated["start"],
         end=validated["end"],
-        associates=build_associate_payload(validated.get("associates") or []),
-        room=resolve_room(center, validated.get("room_id")),
-        equipment=resolve_equipment(center, validated.get("equipment_id")),
         customer_profile=validated["customer_profile"],
         exclude_appointment=appointment,
     )
@@ -364,17 +370,44 @@ class BookingWorldTests(TestCase):
 
     def book_virtual_payload(self, slot, preferred=None):
         start, end = parse_slot_datetimes(slot)
-        return {
+        payload = {
             "customer_profile_id": str(self.customer_profile.pk),
             "service_id": str(self.service.pk),
             "modality": AppointmentModes.VIRTUAL,
             "start": start.isoformat(),
             "end": end.isoformat(),
-            "preferred": preferred or self.virtual_preferred,
         }
+        payload.update(preferred or self.virtual_preferred)
+        return payload
 
 
 class BookingHappyPathTests(BookingWorldTests):
+    def test_find_slots_echoes_nested_specialty(self):
+        slots_payload = find_slots(self.center, self.virtual_slot_payload())
+        slot = first_slot(slots_payload)
+        assert_slot_has_no_pin_keys(self, slot)
+        self.assertEqual(slot["specialty"]["id"], str(self.coach.pk))
+        self.assertEqual(slot["specialty"]["role"]["id"], str(self.coach_role.pk))
+        self.assertEqual(slot["specialty"]["role"]["name"], self.coach_role.name)
+        self.assertNotIn("doctor", slot)
+        self.assertNotIn("care_team", slot)
+        self.assertNotIn("room", slot)
+        self.assertNotIn("equipment", slot)
+
+    def test_find_slots_echoes_nested_doctor_and_specialty(self):
+        preferred = {
+            "doctor_id": str(self.doctor.pk),
+            "specialty_id": str(self.coach.pk),
+        }
+        slots_payload = find_slots(self.center, self.virtual_slot_payload(preferred))
+        slot = first_slot(slots_payload)
+        assert_slot_has_no_pin_keys(self, slot)
+        self.assertEqual(slot["doctor"]["id"], str(self.doctor.pk))
+        self.assertNotIn("role", slot["doctor"])
+        self.assertEqual(slot["specialty"]["id"], str(self.coach.pk))
+        self.assertEqual(slot["specialty"]["role"]["id"], str(self.coach_role.pk))
+        self.assertNotIn("care_team", slot)
+
     def test_find_slots_and_book_virtual_specialty(self):
         slots_payload = find_slots(self.center, self.virtual_slot_payload())
         slot = first_slot(slots_payload)
@@ -424,27 +457,33 @@ class BookingHappyPathTests(BookingWorldTests):
                 "modality": AppointmentModes.IN_PERSON,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
-                "preferred": self.in_person_preferred,
+                **self.in_person_preferred,
             },
         )
         self.assertEqual(appointment.room.pk, self.room.pk)
         self.assertIsNone(appointment.equipment)
 
-    def test_book_from_slot_pin(self):
+    def test_find_slots_echoes_nested_room_without_equipment(self):
+        payload = {
+            "customer_profile_id": str(self.customer_profile.pk),
+            "service_id": str(self.service.pk),
+            "modality": AppointmentModes.IN_PERSON,
+            "date": SLOT_DATE.isoformat(),
+            "preferred": self.in_person_preferred,
+        }
+        slots_payload = find_slots(self.center, payload)
+        slot = first_slot(slots_payload)
+        assert_slot_has_no_pin_keys(self, slot)
+        self.assertEqual(slot["room"]["id"], str(self.room.pk))
+        self.assertEqual(slot["room"]["name"], self.room.name)
+        self.assertNotIn("equipment", slot)
+        self.assertEqual(slot["specialty"]["id"], str(self.coach.pk))
+
+    def test_book_from_slot_staff_ids(self):
         slots_payload = find_slots(self.center, self.virtual_slot_payload())
         slot = first_slot(slots_payload)
-        start, end = parse_slot_datetimes(slot)
         appointment = book_appointment(
-            self.center,
-            self.actor,
-            {
-                "customer_profile_id": str(self.customer_profile.pk),
-                "service_id": str(self.service.pk),
-                "modality": AppointmentModes.VIRTUAL,
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "associates": slot["associates"],
-            },
+            self.center, self.actor, self.book_virtual_payload(slot)
         )
         self.assertEqual(appointment.status, AppointmentStatus.CONFIRMED)
 
@@ -478,8 +517,48 @@ class BookingHappyPathTests(BookingWorldTests):
         self.assertEqual(appointment.care_team.pk, care_team.pk)
         self.assertEqual(appointment.associate_links.count(), 2)
 
+    def test_find_slots_echoes_nested_care_team(self):
+        serializer = CenterCareTeamSerializer(
+            data={
+                "name": "Slot Team",
+                "members": [
+                    {
+                        "associate_id": self.doctor.pk,
+                        "role_id": self.doctor_role.pk,
+                    },
+                    {
+                        "associate_id": self.coach.pk,
+                        "role_id": self.coach_role.pk,
+                    },
+                ],
+            },
+            context={"center": self.center},
+        )
+        serializer.is_valid(raise_exception=True)
+        care_team = serializer.save(center=self.center)
+        preferred = {"care_team_id": str(care_team.pk)}
+        slots_payload = find_slots(self.center, self.virtual_slot_payload(preferred))
+        slot = first_slot(slots_payload)
+        assert_slot_has_no_pin_keys(self, slot)
+        self.assertEqual(slot["care_team"]["id"], str(care_team.pk))
+        self.assertEqual(slot["care_team"]["name"], "Slot Team")
+        self.assertNotIn("doctor", slot)
+        self.assertNotIn("specialty", slot)
+
 
 class BookingValidationTests(BookingWorldTests):
+    def test_find_slots_rejects_past_date(self):
+        past_date = timezone.localdate() - timedelta(days=1)
+        with self.assertRaises(DRFValidationError) as raised:
+            find_slots(
+                self.center,
+                {
+                    **self.virtual_slot_payload(),
+                    "date": past_date.isoformat(),
+                },
+            )
+        self.assertIn("Date cannot be in the past.", drf_error_text(raised.exception))
+
     def test_find_slots_requires_preferred(self):
         with self.assertRaises(DRFValidationError) as raised:
             find_slots(
@@ -552,6 +631,146 @@ class BookingValidationTests(BookingWorldTests):
                 ),
             )
 
+    def test_rejects_virtual_with_equipment(self):
+        with self.assertRaises(DRFValidationError) as raised:
+            find_slots(
+                self.center,
+                self.virtual_slot_payload(
+                    {
+                        "specialty_id": str(self.coach.pk),
+                        "equipment_id": "11111111-1111-1111-1111-111111111111",
+                    }
+                ),
+            )
+        self.assertIn(
+            EQUIPMENT_NOT_ALLOWED_VIRTUAL_MESSAGE,
+            drf_error_text(raised.exception),
+        )
+
+    def test_in_person_room_with_equipment_requires_equipment_id(self):
+        equipment_type = EquipmentType.objects.create(
+            center=self.center, name="Consult Device", is_active=True
+        )
+        equipment = Equipment.objects.create(
+            center=self.center,
+            room=self.room,
+            equipment_type=equipment_type,
+            name="Consult EQ 1",
+            code="BK-LIFE-EQ-1",
+            serial_number="SN-LIFE-1",
+            is_active=True,
+        )
+        payload = {
+            "customer_profile_id": str(self.customer_profile.pk),
+            "service_id": str(self.service.pk),
+            "modality": AppointmentModes.IN_PERSON,
+            "date": SLOT_DATE.isoformat(),
+            "preferred": self.in_person_preferred,
+        }
+        with self.assertRaises(DjangoValidationError) as raised:
+            find_slots(self.center, payload)
+        self.assertIn(
+            EQUIPMENT_REQUIRED_FOR_ROOM_MESSAGE, raised.exception.messages
+        )
+        payload["preferred"] = {
+            **self.in_person_preferred,
+            "equipment_id": str(equipment.pk),
+        }
+        slots_payload = find_slots(self.center, payload)
+        slot = first_slot(slots_payload)
+        self.assertEqual(slot["equipment"]["id"], str(equipment.pk))
+        self.assertEqual(slot["equipment"]["name"], equipment.name)
+        self.assertEqual(slot["room"]["id"], str(self.room.pk))
+        assert_slot_has_no_pin_keys(self, slot)
+        start, end = parse_slot_datetimes(slot)
+        appointment = book_appointment(
+            self.center,
+            self.actor,
+            {
+                "customer_profile_id": str(self.customer_profile.pk),
+                "service_id": str(self.service.pk),
+                "modality": AppointmentModes.IN_PERSON,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                **self.in_person_preferred,
+                "equipment_id": str(equipment.pk),
+            },
+        )
+        self.assertEqual(appointment.equipment.pk, equipment.pk)
+
+    def test_second_equipment_on_room_is_bookable(self):
+        equipment_type = EquipmentType.objects.create(
+            center=self.center, name="Consult Device", is_active=True
+        )
+        Equipment.objects.create(
+            center=self.center,
+            room=self.room,
+            equipment_type=equipment_type,
+            name="Consult EQ First",
+            code="BK-LIFE-EQ-A",
+            serial_number="SN-LIFE-A",
+            is_active=True,
+        )
+        second = Equipment.objects.create(
+            center=self.center,
+            room=self.room,
+            equipment_type=equipment_type,
+            name="Consult EQ Second",
+            code="BK-LIFE-EQ-B",
+            serial_number="SN-LIFE-B",
+            is_active=True,
+        )
+        payload = {
+            "customer_profile_id": str(self.customer_profile.pk),
+            "service_id": str(self.service.pk),
+            "modality": AppointmentModes.IN_PERSON,
+            "date": SLOT_DATE.isoformat(),
+            "preferred": {
+                **self.in_person_preferred,
+                "equipment_id": str(second.pk),
+            },
+        }
+        slots_payload = find_slots(self.center, payload)
+        slot = first_slot(slots_payload)
+        self.assertEqual(slot["equipment"]["id"], str(second.pk))
+        self.assertEqual(slot["equipment"]["name"], second.name)
+        assert_slot_has_no_pin_keys(self, slot)
+        start, end = parse_slot_datetimes(slot)
+        appointment = book_appointment(
+            self.center,
+            self.actor,
+            {
+                "customer_profile_id": str(self.customer_profile.pk),
+                "service_id": str(self.service.pk),
+                "modality": AppointmentModes.IN_PERSON,
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                **self.in_person_preferred,
+                "equipment_id": str(second.pk),
+            },
+        )
+        self.assertEqual(appointment.equipment.pk, second.pk)
+
+    def test_rejects_equipment_when_room_has_none(self):
+        with self.assertRaises(DjangoValidationError) as raised:
+            find_slots(
+                self.center,
+                {
+                    "customer_profile_id": str(self.customer_profile.pk),
+                    "service_id": str(self.service.pk),
+                    "modality": AppointmentModes.IN_PERSON,
+                    "date": SLOT_DATE.isoformat(),
+                    "preferred": {
+                        **self.in_person_preferred,
+                        "equipment_id": "11111111-1111-1111-1111-111111111111",
+                    },
+                },
+            )
+        self.assertIn(
+            EQUIPMENT_NOT_ALLOWED_EMPTY_ROOM_MESSAGE,
+            raised.exception.messages,
+        )
+
     def test_rejects_both_modality(self):
         with self.assertRaises(DRFValidationError):
             find_slots(
@@ -601,15 +820,45 @@ class BookingValidationTests(BookingWorldTests):
             )
         self.assertIn(MISSING_DOCTOR_ROLE_MESSAGE, raised.exception.messages)
 
-    def test_ambiguous_specialty_hats_raise(self):
+    def test_dual_specialty_hats_stamp_mapped_service_role(self):
+        preferred = {"specialty_id": str(self.dual_specialty.pk)}
+        slots_payload = find_slots(
+            self.center, self.virtual_slot_payload(preferred)
+        )
+        slot = first_slot(slots_payload)
+        appointment = book_appointment(
+            self.center, self.actor, self.book_virtual_payload(slot, preferred)
+        )
+        link = appointment.associate_links.get()
+        self.assertEqual(link.associate.pk, self.dual_specialty.pk)
+        self.assertEqual(link.role.pk, self.coach_role.pk)
+
+    def test_specialty_without_service_role_requirement_raises(self):
+        service = Service.objects.create(
+            name="No Role Requirement Service",
+            service_category=ServiceCategory.CONSULTATION,
+        )
+        CenterServiceAssignment.objects.create(
+            center=self.center,
+            service=service,
+            duration=30,
+            buffer_before=0,
+            buffer_after=0,
+            modality=AppointmentModes.VIRTUAL,
+            is_active=True,
+        )
         with self.assertRaises(DjangoValidationError) as raised:
             find_slots(
                 self.center,
-                self.virtual_slot_payload(
-                    {"specialty_id": str(self.dual_specialty.pk)}
-                ),
+                {
+                    "customer_profile_id": str(self.customer_profile.pk),
+                    "service_id": str(service.pk),
+                    "modality": AppointmentModes.VIRTUAL,
+                    "date": SLOT_DATE.isoformat(),
+                    "preferred": {"specialty_id": str(self.coach.pk)},
+                },
             )
-        self.assertIn(AMBIGUOUS_SPECIALTY_ROLE_MESSAGE, raised.exception.messages)
+        self.assertIn(MISSING_SPECIALTY_ROLE_MESSAGE, raised.exception.messages)
 
     def test_second_book_same_slot_blocked(self):
         slots_payload = find_slots(self.center, self.virtual_slot_payload())
@@ -684,7 +933,7 @@ class LifecycleTests(BookingWorldTests):
                 "modality": AppointmentModes.VIRTUAL,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
-                "preferred": self.virtual_preferred,
+                **self.virtual_preferred,
             },
         )
         self.assertEqual(appointment.status, AppointmentStatus.CONFIRMED)
@@ -708,7 +957,7 @@ class LifecycleTests(BookingWorldTests):
                     "modality": AppointmentModes.VIRTUAL,
                     "start": start.isoformat(),
                     "end": end.isoformat(),
-                    "preferred": self.virtual_preferred,
+                    **self.virtual_preferred,
                 },
             )
         self.assertIn("Cannot change the customer", drf_error_text(raised.exception))

@@ -13,8 +13,9 @@ from accounts.users.models import User
 from appointments.serializers.booking import normalize_preferred
 from appointments.utils.scheduling import (
     AMBIGUOUS_DOCTOR_ROLE_MESSAGE,
-    AMBIGUOUS_SPECIALTY_ROLE_MESSAGE,
     HEALTH_COACH_ID_REJECT_MESSAGE,
+    MISSING_SPECIALTY_ROLE_MESSAGE,
+    ROOM_TYPE_NOT_MAPPED_MESSAGE,
     resolve_preferred_person_entry,
     room_matches_assignment_types,
     validate_associate_assignments,
@@ -25,6 +26,7 @@ from core.utils.constants import AppointmentModes
 from inventory.models import Room, RoomType
 from programs.services.models import (
     CenterServiceAssignment,
+    CenterServiceRoleRequirement,
     CenterServiceRoomTypeRequirement,
     Service,
 )
@@ -61,6 +63,26 @@ def create_assigned_associate(center, email, *roles):
     )
     assign_roles(assignment, *roles)
     return associate
+
+
+def create_service_assignment(center, *roles, name="Pref Service"):
+    service = Service.objects.create(
+        name=name,
+        service_category=ServiceCategory.CONSULTATION,
+    )
+    assignment = CenterServiceAssignment.objects.create(
+        center=center,
+        service=service,
+        duration=30,
+        modality=AppointmentModes.VIRTUAL,
+        is_active=True,
+    )
+    for role in roles:
+        CenterServiceRoleRequirement.objects.create(
+            assignment=assignment,
+            role=role,
+        )
+    return assignment
 
 
 class PreferredComboValidationTests(TestCase):
@@ -167,16 +189,23 @@ class PreferredPersonRoleStampTests(TestCase):
             doctor_role,
             coach_role,
         )
+        assignment = create_service_assignment(
+            self.center, coach_role, name="Doc Coach Service"
+        )
         doctor_entry = resolve_preferred_person_entry(
             self.center, "doctor_id", associate.pk, AppointmentModes.VIRTUAL
         )
         specialty_entry = resolve_preferred_person_entry(
-            self.center, "specialty_id", associate.pk, AppointmentModes.VIRTUAL
+            self.center,
+            "specialty_id",
+            associate.pk,
+            AppointmentModes.VIRTUAL,
+            service_assignment=assignment,
         )
         self.assertEqual(doctor_entry["role"].pk, doctor_role.pk)
         self.assertEqual(specialty_entry["role"].pk, coach_role.pk)
 
-    def test_ambiguous_specialty_roles_require_pin(self):
+    def test_specialty_stamps_mapped_role_when_associate_has_two_hats(self):
         coach_role = create_role(self.center, "Health Coach")
         nutrition_role = create_role(self.center, "Nutritionist")
         associate = create_assigned_associate(
@@ -185,11 +214,80 @@ class PreferredPersonRoleStampTests(TestCase):
             coach_role,
             nutrition_role,
         )
+        assignment = create_service_assignment(
+            self.center, coach_role, name="Coach Only Service"
+        )
+        specialty_entry = resolve_preferred_person_entry(
+            self.center,
+            "specialty_id",
+            associate.pk,
+            AppointmentModes.VIRTUAL,
+            service_assignment=assignment,
+        )
+        self.assertEqual(specialty_entry["role"].pk, coach_role.pk)
+
+    def test_specialty_stamps_stable_hat_when_two_roles_mapped(self):
+        coach_role = create_role(self.center, "Health Coach")
+        nutrition_role = create_role(self.center, "Nutritionist")
+        associate = create_assigned_associate(
+            self.center,
+            "two-mapped@example.com",
+            coach_role,
+            nutrition_role,
+        )
+        assignment = create_service_assignment(
+            self.center,
+            coach_role,
+            nutrition_role,
+            name="Both Specialty Service",
+        )
+        specialty_entry = resolve_preferred_person_entry(
+            self.center,
+            "specialty_id",
+            associate.pk,
+            AppointmentModes.VIRTUAL,
+            service_assignment=assignment,
+        )
+        expected_role = min(
+            [coach_role, nutrition_role], key=lambda role: str(role.pk)
+        )
+        self.assertEqual(specialty_entry["role"].pk, expected_role.pk)
+
+    def test_specialty_rejects_when_no_service_role_mapped(self):
+        coach_role = create_role(self.center, "Health Coach")
+        associate = create_assigned_associate(
+            self.center, "unmapped@example.com", coach_role
+        )
+        assignment = create_service_assignment(
+            self.center, name="No Role Service"
+        )
         with self.assertRaises(ValidationError) as raised:
             resolve_preferred_person_entry(
-                self.center, "specialty_id", associate.pk, AppointmentModes.VIRTUAL
+                self.center,
+                "specialty_id",
+                associate.pk,
+                AppointmentModes.VIRTUAL,
+                service_assignment=assignment,
             )
-        self.assertIn(AMBIGUOUS_SPECIALTY_ROLE_MESSAGE, raised.exception.messages)
+        self.assertIn(MISSING_SPECIALTY_ROLE_MESSAGE, raised.exception.messages)
+
+    def test_specialty_ignores_doctor_hat_even_if_service_mapped(self):
+        doctor_role = create_role(self.center, "Doctor")
+        associate = create_assigned_associate(
+            self.center, "doctor-only@example.com", doctor_role
+        )
+        assignment = create_service_assignment(
+            self.center, doctor_role, name="Doctor Service"
+        )
+        with self.assertRaises(ValidationError) as raised:
+            resolve_preferred_person_entry(
+                self.center,
+                "specialty_id",
+                associate.pk,
+                AppointmentModes.VIRTUAL,
+                service_assignment=assignment,
+            )
+        self.assertIn(MISSING_SPECIALTY_ROLE_MESSAGE, raised.exception.messages)
 
     def test_ambiguous_doctor_roles_require_pin(self):
         doctor_role = create_role(self.center, "Doctor")
@@ -251,7 +349,7 @@ class MultiRoomTypeRequirementTests(TestCase):
         room.save()
         self.assertTrue(room_matches_assignment_types(self.assignment, room))
 
-    def test_preferred_room_ignores_assignment_types(self):
+    def test_preferred_room_must_match_assignment_types(self):
         other_type = RoomType.objects.create(
             center=self.center, name="Other Type", is_active=True
         )
@@ -263,4 +361,7 @@ class MultiRoomTypeRequirementTests(TestCase):
             is_active=True,
         )
         room.save()
-        validate_room_for_assignment(room, self.center)
+        self.assertFalse(room_matches_assignment_types(self.assignment, room))
+        with self.assertRaises(ValidationError) as raised:
+            validate_room_for_assignment(room, self.center, self.assignment)
+        self.assertIn(ROOM_TYPE_NOT_MAPPED_MESSAGE, raised.exception.messages)

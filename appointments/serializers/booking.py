@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -26,9 +27,9 @@ from appointments.utils.exceptions import (
 from appointments.utils.scheduling import (
     HEALTH_COACH_ID_REJECT_MESSAGE,
     PREFERRED_REQUIRED_MESSAGE,
-    booking_has_complete_pin,
     compute_exclusive_bounds,
     get_center_service_assignment,
+    validate_preferred_combo,
 )
 from appointments.utils.transitions import (
     apply_status_change,
@@ -45,6 +46,13 @@ from integrations.communications import (
 from programs.services.models import Service
 
 IDEMPOTENCY_TTL_HOURS = 24
+BOOKING_RESOURCE_KEYS = (
+    "doctor_id",
+    "specialty_id",
+    "care_team_id",
+    "room_id",
+    "equipment_id",
+)
 
 LIFECYCLE_AUDIT_MAP = {
     "check-in": AppointmentAuditAction.CHECK_IN,
@@ -181,6 +189,7 @@ class AppointmentPreferredSerializer(BaseSerializer):
     doctor_id = serializers.UUIDField(required=False)
     specialty_id = serializers.UUIDField(required=False)
     room_id = serializers.UUIDField(required=False)
+    equipment_id = serializers.UUIDField(required=False)
     care_team_id = serializers.UUIDField(required=False)
 
     def to_internal_value(self, data):
@@ -203,6 +212,11 @@ class AppointmentSlotFindSerializer(BaseSerializer):
             )
         return value
 
+    def validate_date(self, value):
+        if value < timezone.localdate():
+            raise serializers.ValidationError("Date cannot be in the past.")
+        return value
+
     def validate(self, attrs):
         center = self.context["center"]
         customer_profile = resolve_center_customer_profile(
@@ -221,17 +235,32 @@ class AppointmentSlotFindSerializer(BaseSerializer):
         return attrs
 
 
-class AppointmentAssociateInputSerializer(BaseSerializer):
-    role_id = serializers.UUIDField()
-    associate_id = serializers.UUIDField()
+class AppointmentSlotNamedResourceSerializer(BaseSerializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class AppointmentSlotSpecialtySerializer(AppointmentSlotNamedResourceSerializer):
+    role = AppointmentSlotNamedResourceSerializer()
 
 
 class AppointmentSlotSerializer(BaseSerializer):
     start = serializers.CharField()
     end = serializers.CharField()
-    associates = AppointmentAssociateInputSerializer(many=True)
-    room_id = serializers.UUIDField(allow_null=True)
-    equipment_id = serializers.UUIDField(allow_null=True)
+    care_team = AppointmentSlotNamedResourceSerializer(required=False)
+    doctor = AppointmentSlotNamedResourceSerializer(required=False)
+    specialty = AppointmentSlotSpecialtySerializer(required=False)
+    room = AppointmentSlotNamedResourceSerializer(required=False)
+    equipment = AppointmentSlotNamedResourceSerializer(required=False)
+
+
+def preferred_from_booking_attrs(attrs):
+    preferred = {}
+    for key in BOOKING_RESOURCE_KEYS:
+        value = attrs.get(key)
+        if value is not None:
+            preferred[key] = str(value)
+    return preferred
 
 
 def normalize_preferred(preferred, modality=None, required=False):
@@ -256,50 +285,10 @@ def normalize_preferred(preferred, modality=None, required=False):
             )
         return None
     if modality is not None:
-        care_team_id = normalized_preferred.get("care_team_id")
-        doctor_id = normalized_preferred.get("doctor_id")
-        specialty_id = normalized_preferred.get("specialty_id")
-        room_id = normalized_preferred.get("room_id")
-        if not (care_team_id or doctor_id or specialty_id):
-            raise serializers.ValidationError(
-                {
-                    "preferred": [
-                        "preferred requires care_team_id and/or doctor_id/specialty_id."
-                    ]
-                }
-            )
-        if care_team_id and (doctor_id or specialty_id):
-            raise serializers.ValidationError(
-                {
-                    "preferred": [
-                        "care_team_id cannot be combined with doctor_id or specialty_id."
-                    ]
-                }
-            )
-        if modality == AppointmentModes.IN_PERSON and not room_id:
-            raise serializers.ValidationError(
-                {
-                    "preferred": [
-                        "preferred.room_id is required for in-person appointments."
-                    ]
-                }
-            )
-        if modality == AppointmentModes.VIRTUAL and room_id:
-            raise serializers.ValidationError(
-                {
-                    "preferred": [
-                        "preferred.room_id is not allowed for virtual appointments."
-                    ]
-                }
-            )
-        if doctor_id and specialty_id and str(doctor_id) == str(specialty_id):
-            raise serializers.ValidationError(
-                {
-                    "preferred": [
-                        "doctor_id and specialty_id cannot refer to the same associate."
-                    ]
-                }
-            )
+        try:
+            validate_preferred_combo(normalized_preferred, modality)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({"preferred": error.messages})
     return normalized_preferred
 
 
@@ -309,11 +298,17 @@ class AppointmentBookSerializer(BaseSerializer):
     modality = serializers.ChoiceField(choices=AppointmentModes.choices)
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()
-    preferred = AppointmentPreferredSerializer(required=False)
-    associates = AppointmentAssociateInputSerializer(many=True, required=False)
+    doctor_id = serializers.UUIDField(required=False, allow_null=True)
+    specialty_id = serializers.UUIDField(required=False, allow_null=True)
+    care_team_id = serializers.UUIDField(required=False, allow_null=True)
     room_id = serializers.UUIDField(required=False, allow_null=True)
     equipment_id = serializers.UUIDField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict) and "health_coach_id" in data:
+            raise serializers.ValidationError(HEALTH_COACH_ID_REJECT_MESSAGE)
+        return super().to_internal_value(data)
 
     def validate_modality(self, value):
         if value == AppointmentModes.BOTH:
@@ -331,33 +326,16 @@ class AppointmentBookSerializer(BaseSerializer):
         attrs["customer_profile"] = customer_profile
         attrs["service"] = service
         attrs["center"] = center
-        attrs["associates"] = attrs.get("associates") or []
-        associates = attrs["associates"]
-        room_id = attrs.get("room_id")
-        modality = attrs["modality"]
-        if (
-            associates
-            and modality == AppointmentModes.IN_PERSON
-            and room_id is None
-        ):
-            raise serializers.ValidationError(
-                "Pin requires room_id for in-person appointments."
-            )
-        has_pin = booking_has_complete_pin(modality, associates, room_id)
-        preferred = normalize_preferred(
-            attrs.get("preferred"),
-            modality=modality if not has_pin else None,
-            required=not has_pin,
-        )
+        preferred = preferred_from_booking_attrs(attrs)
+        try:
+            validate_preferred_combo(preferred, attrs["modality"])
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(error.messages)
         attrs["preferred"] = preferred
         assignment = get_center_service_assignment(center, service)
         if assignment is None:
             raise serializers.ValidationError(
                 "Service is not available at this center."
-            )
-        if not has_pin and not preferred:
-            raise serializers.ValidationError(
-                "Send preferred resources or a pinned associates list."
             )
         attrs["assignment"] = assignment
         return attrs
@@ -371,12 +349,13 @@ class AppointmentBookSerializer(BaseSerializer):
         actor = validated_data.pop("actor")
         idempotency_key = validated_data.pop("idempotency_key", None)
         payload_hash = validated_data.pop("payload_hash", None)
-        validated_data.pop("preferred", None)
-        validated_data.pop("associates", None)
-        validated_data.pop("room_id", None)
-        validated_data.pop("equipment_id", None)
-        validated_data.pop("customer_profile_id", None)
-        validated_data.pop("service_id", None)
+        for key in (
+            "preferred",
+            "customer_profile_id",
+            "service_id",
+            *BOOKING_RESOURCE_KEYS,
+        ):
+            validated_data.pop(key, None)
         center = self.context["center"]
         with transaction.atomic():
             appointment = create_appointment_record(
@@ -576,11 +555,8 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         care_team = validated_data.pop("care_team")
         actor = validated_data.pop("actor")
         validated_data.pop("preferred", None)
-        validated_data.pop("associates", None)
-        validated_data.pop("room_id", None)
-        validated_data.pop("equipment_id", None)
-        validated_data.pop("customer_profile_id", None)
-        validated_data.pop("service_id", None)
+        for key in ("customer_profile_id", "service_id", *BOOKING_RESOURCE_KEYS):
+            validated_data.pop(key, None)
         notes = validated_data.pop("notes", None)
         if notes is None:
             notes = instance.notes

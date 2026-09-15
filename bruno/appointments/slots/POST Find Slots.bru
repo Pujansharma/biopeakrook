@@ -7,7 +7,7 @@ meta {
 post {
   url: {{baseURL}}/centers/{{center_id}}/appointments/slots/
   body: json
-  auth: none
+  auth: inherit
 }
 
 headers {
@@ -22,31 +22,15 @@ body:json {
     "date": "{{slot_date}}",
     "preferred": {
       "room_id": "{{room_id}}",
-      "care_team_id": "{{care_team_id}}",
+      "equipment_id": "{{equipment_id}}",
       "doctor_id": "{{doctor_id}}",
-      "specialty_id": "{{specialty_id}}"
+      "specialty_id": "{{specialty_id}}",
+      "care_team_id": "{{care_team_id}}"
     }
   }
 }
 
 script:pre-request {
-  const token =
-    bru.getEnvVar('access_token') ||
-    bru.getCollectionVar('access_token') ||
-    bru.getVar('access_token') ||
-    '';
-  if (!token) {
-    throw new Error('access_token missing — run Auth → Login Phone Direct (Development env)');
-  }
-  req.setHeader('Authorization', `Bearer ${token}`);
-
-  const centerId = (bru.getEnvVar('center_id') || '').trim();
-  const baseURL = (bru.getEnvVar('baseURL') || 'http://localhost:8000').replace(/\/$/, '');
-  if (!centerId) {
-    throw new Error('center_id missing — set Development env center_id');
-  }
-  req.setUrl(`${baseURL}/centers/${centerId}/appointments/slots/`);
-
   let body = req.getBody();
   if (typeof body === 'string') {
     body = JSON.parse(body);
@@ -62,10 +46,17 @@ script:pre-request {
 
   const preferred = body.preferred || {};
   const cleanedPreferred = {};
-  const preferredKeys = ['room_id', 'care_team_id', 'doctor_id', 'specialty_id'];
+  const preferredKeys = ['room_id', 'equipment_id', 'care_team_id', 'doctor_id', 'specialty_id'];
   for (const key of preferredKeys) {
+    if (!Object.prototype.hasOwnProperty.call(preferred, key)) {
+      continue;
+    }
     const value = String(preferred[key] || '').trim();
     if (value) cleanedPreferred[key] = value;
+  }
+  if (cleanedPreferred.care_team_id) {
+    delete cleanedPreferred.doctor_id;
+    delete cleanedPreferred.specialty_id;
   }
   if (Object.keys(cleanedPreferred).length) {
     body.preferred = cleanedPreferred;
@@ -82,32 +73,43 @@ settings {
 
 docs {
   POST /centers/{{center_id}}/appointments/slots/
-  Auth: pre-request sets Authorization from env/collection access_token (auth none — avoids empty Bearer). Run Login Phone Direct first.
+  Auth: inherit (collection pre-request sets Bearer). Run Login Phone Direct first.
 
   Required body:
   - customer_profile_id — UUID, active profile assigned to this center
   - service_id — UUID, active service assigned to this center
   - modality — virtual | in_person (not both)
-  - date — YYYY-MM-DD (env slot_date)
-  - preferred — REQUIRED. Staff+room from preferred only (no leftover auto-fill from service roles/room pool).
+  - date — YYYY-MM-DD today or future (env slot_date). Past date → 400 "Date cannot be in the past."
+  - preferred — REQUIRED. Staff+room+equipment from preferred only (no leftover auto-fill).
 
-  preferred keys (omit empty UUIDs — pre-request strips blanks):
+  preferred keys (omit empty UUIDs — pre-request strips blanks; only keys present in body):
   - care_team_id XOR doctor_id / specialty_id
   - doctor_id + specialty_id OK together (not same associate)
   - room_id required for in_person; forbidden for virtual
-  - doctor_id must hold live role with "doctor" in name; specialty_id must hold live non-doctor role
+  - equipment_id required when that room has ≥1 bookable unit; omit when room has none;
+    forbidden for virtual. Must belong to preferred.room_id. No auto-pick.
+  - doctor_id must hold live role with "doctor" in name (exactly one).
+    specialty_id must hold a live non-doctor role mapped to this service
+    (many hats OK; no role_id in body). Service with 0 role reqs → omit specialty_id.
   - health_coach_id → 400 "Use specialty_id instead of health_coach_id."
 
+  preferred lists every allowed key. Empty UUIDs stripped in pre-request.
+  If care_team_id is set, pre-request drops doctor_id/specialty_id (XOR).
+  People path: blank care_team_id in env.
+
   Allowed combos:
-  1) care_team_id + room_id (in_person) / care_team_id (virtual)
+  1) care_team_id + room_id (+ equipment_id if room has units) / care_team_id (virtual)
   2) doctor_id + room_id / doctor_id
   3) specialty_id + room_id / specialty_id
   4) doctor_id + specialty_id + room_id / both without room (virtual)
 
-  If assignment has room-type requirements, preferred room must be active at center and room_type_ref in that set (OR).
+  If assignment has room-type requirements, preferred room must be active at center,
+  have an active room type, and room_type_ref in that set (OR).
 
   Response data: {date, timezone, duration_minutes, buffer_before_minutes, buffer_after_minutes, slots[], truncated}.
-  Each slot: {start, end, associates[{role_id, associate_id}], room_id, equipment_id} — one pinned combo per start/end.
+  Each slot: {start, end} + nested care_team / doctor / specialty / room / equipment
+  ({id, name}; specialty also role {id, name}). Omit key if not in preferred.
+  No associates[]. No bare *_id. Book: slot.doctor.id → doctor_id, etc.
   Cap 200/day. Customer busy is global across centers.
   care_team_id + doctor_id/specialty_id → 400.
 }
