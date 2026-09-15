@@ -1,12 +1,42 @@
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Lower
 
-from core.utils.models import BaseUUIDModel
+from accounts.utils import get_user_model
+from core.utils.models import BaseModel, BaseUUIDModel
 from integrations.utils.constants import (
     CommunicationChannel,
     CommunicationEventType,
     CommunicationOutboxStatus,
 )
+
+User = get_user_model()
+
+
+class GoogleCalendarConnection(BaseModel):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="google_calendar_connection",
+        primary_key=True,
+        db_index=True,
+    )
+    google_email = models.EmailField(null=True, blank=True)
+    google_access_token = models.TextField(null=True, blank=True)
+    google_refresh_token = models.TextField(null=True, blank=True)
+    google_access_token_expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("google_email"),
+                name="uniq_google_calendar_connection_email",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pk}"
 
 
 class CommunicationOutbox(BaseUUIDModel):

@@ -14,6 +14,7 @@ from appointments.utils.emails import (
 from core.utils.constants import AppointmentModes
 from core.utils.log import logger
 from integrations.google_calendar import calendar_api
+from integrations.google_calendar.connections import get_fixed_calendar_organizer
 from integrations.google_calendar.tokens import get_valid_access_token
 
 GOOGLE_SYNC_ERRORS = (
@@ -29,18 +30,6 @@ def is_google_calendar_configured():
 
 def google_calendar_event_id(appointment):
     return appointment.pk.hex
-
-
-def get_fixed_calendar_organizer():
-    calendar_id = getattr(settings, "GOOGLE_CALENDAR_ID", None)
-    if not calendar_id:
-        return None
-    organizer = Associate.objects.filter(
-        google_email__iexact=calendar_id, is_active=True, user__is_active=True
-    ).first()
-    if organizer is None or not organizer.google_refresh_token:
-        return None
-    return organizer
 
 
 def describe_google_error(error: Exception):
@@ -65,13 +54,14 @@ def describe_google_error(error: Exception):
 
 
 def build_attendee_emails(
-    contact_email: str | None, associates: list[Associate], organizer: Associate | None
+    contact_email: str | None, associates: list[Associate], organizer=None
 ):
     emails = []
     if contact_email:
         emails.append(contact_email)
+    organizer_pk = organizer.pk if organizer is not None else None
     for associate in associates:
-        if organizer and associate.pk == organizer.pk:
+        if organizer_pk and associate.pk == organizer_pk:
             continue
         if associate.user.email:
             emails.append(associate.user.email)

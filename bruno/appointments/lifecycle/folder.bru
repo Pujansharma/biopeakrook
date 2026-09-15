@@ -12,4 +12,6 @@ docs {
   Flow: check-in → start → complete (optional mark-late while in_progress).
   Cancel from confirmed or checked_in. No-show from confirmed only.
   Reschedule from confirmed or checked_in; lands confirmed. Not from in_progress.
+  Reschedule body = same flattened book payload (full replace, not PATCH).
+  Frozen: customer_profile_id, service_id.
 }

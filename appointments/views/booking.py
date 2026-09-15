@@ -40,7 +40,6 @@ from appointments.utils.scheduling import (
 from core.utils.db.functions import ExtractPartText
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import BaseGenericAPIView, BaseListAPIView, BaseRetrieveAPIView
-from inventory.models import Equipment, Room
 
 LIST_CAP = 500
 APPOINTMENT_CODE_CONSTRAINT = "uniq_appointment_code_per_center"
@@ -206,38 +205,6 @@ def raise_idempotency_payload_conflict(existing_key, payload_hash):
         )
 
 
-def resolve_room(center, room_id):
-    if room_id is None:
-        return None
-    room = Room.objects.filter(center=center, is_active=True, pk=room_id).first()
-    if room is None:
-        raise DjangoValidationError("Invalid room for this center.")
-    return room
-
-
-def resolve_equipment(center, equipment_id):
-    if equipment_id is None:
-        return None
-    equipment = Equipment.objects.filter(
-        center=center, is_active=True, pk=equipment_id
-    ).first()
-    if equipment is None:
-        raise DjangoValidationError("Invalid equipment for this center.")
-    return equipment
-
-
-def build_associate_payload(raw_associates):
-    payload = []
-    for entry in raw_associates:
-        payload.append(
-            {
-                "role_id": str(entry["role_id"]),
-                "associate_id": entry["associate_id"],
-            }
-        )
-    return payload
-
-
 def dispatch_to_view(view_class, request, *args, **kwargs):
     """Run a sibling view handler without wrapping the DRF request twice."""
     view = view_class()
@@ -304,9 +271,6 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
                 preferred=validated.get("preferred"),
                 start=validated["start"],
                 end=validated["end"],
-                associates=build_associate_payload(validated.get("associates") or []),
-                room=resolve_room(center, validated.get("room_id")),
-                equipment=resolve_equipment(center, validated.get("equipment_id")),
                 customer_profile=validated["customer_profile"],
             )
         except DjangoValidationError as exc:
@@ -616,9 +580,6 @@ class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
                 preferred=validated.get("preferred"),
                 start=validated["start"],
                 end=validated["end"],
-                associates=build_associate_payload(validated.get("associates") or []),
-                room=resolve_room(center, validated.get("room_id")),
-                equipment=resolve_equipment(center, validated.get("equipment_id")),
                 customer_profile=validated["customer_profile"],
                 exclude_appointment=appointment,
             )

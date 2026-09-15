@@ -19,7 +19,6 @@ from appointments.utils.constants import ExceptionSourceType
 from appointments.utils.exceptions import appointment_filter_for_source
 from appointments.utils.scheduling import (
     build_resolve_resource_pools,
-    resolve_pinned_care_team,
 )
 from core.utils.constants import AppointmentModes
 from programs.services.models import CenterServiceAssignment, Service
@@ -212,23 +211,5 @@ class CareTeamEmptyLiveMembersTests(TestCase):
                 self.assignment,
                 AppointmentModes.VIRTUAL,
                 {"care_team_id": self.care_team.pk},
-            )
-        self.assertIn("no live members", str(raised.exception))
-
-    def test_pin_rejects_empty_live_team(self):
-        with self.assertRaises(DjangoValidationError) as raised:
-            resolve_pinned_care_team(
-                self.center,
-                self.care_team.pk,
-                [
-                    {
-                        "role_id": str(self.doctor_role.pk),
-                        "associate_id": self.doctor.pk,
-                    },
-                    {
-                        "role_id": str(self.coach_role.pk),
-                        "associate_id": self.coach.pk,
-                    },
-                ],
             )
         self.assertIn("no live members", str(raised.exception))

@@ -17,22 +17,16 @@ headers {
 
 body:json {
   {
+    "start": "2026-09-09T04:00:00Z",
+    "end": "2026-09-09T04:30:00Z",
     "customer_profile_id": "{{customer_profile_id}}",
     "service_id": "{{service_id}}",
     "modality": "in_person",
-    "start": "2026-09-09T04:00:00Z",
-    "end": "2026-09-09T04:30:00Z",
-    "preferred": {
-      "room_id": "{{room_id}}"
-    },
-    "associates": [
-      {
-        "associate_id": "{{associate_id}}",
-        "role_id": "{{role_id}}"
-      }
-    ],
     "room_id": "{{room_id}}",
     "equipment_id": "{{equipment_id}}",
+    "doctor_id": "{{doctor_id}}",
+    "specialty_id": "{{specialty_id}}",
+    "care_team_id": "{{care_team_id}}",
     "notes": "First visit"
   }
 }
@@ -41,6 +35,28 @@ script:pre-request {
   if (!bru.getEnvVar('idempotency_key')) {
     bru.setEnvVar('idempotency_key', bru.interpolate('{{$uuid}}'));
   }
+  let body = req.getBody();
+  if (typeof body === 'string') {
+    body = JSON.parse(body);
+  }
+  body = body || {};
+  const resourceKeys = ['doctor_id', 'specialty_id', 'care_team_id', 'room_id', 'equipment_id'];
+  for (const key of resourceKeys) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) {
+      continue;
+    }
+    const value = String(body[key] || '').trim();
+    if (value) {
+      body[key] = value;
+    } else {
+      delete body[key];
+    }
+  }
+  if (body.care_team_id) {
+    delete body.doctor_id;
+    delete body.specialty_id;
+  }
+  req.setBody(body);
 }
 
 settings {
@@ -50,19 +66,25 @@ settings {
 
 docs {
   Books a confirmed appointment. Use Idempotency-Key for safe retries.
-  Prefer pin from POST Find Slots (associates + room_id + equipment_id) — server validates free, does not re-pick.
-  Incomplete pin (associates without room_id for in_person) → 400 "Pin requires room_id for in-person appointments."
-  If pin omitted, send preferred; server resolves combo then validates.
-  Staff+room: complete pin OR valid preferred (preference-only; no leftover auto-fill). preferred keys: care_team_id / doctor_id / specialty_id / room_id.
-  Room-only preferred OK when roles exist. Zero roles + no preferred staff → 400
-  "At least one associate is required. Send a pin or preferred care_team_id / doctor_id / specialty_id."
-  preferred.care_team_id XOR doctor_id/specialty_id; room_id required for in_person preferred path. Pin does not require exactly one associate per service role.
-  Pin + preferred.care_team_id stamps care_team only when every live team member is in the pin.
-  Top-level care_team_id removed — use preferred.care_team_id.
-  Booked appointment always has non-empty associates[].
-  Adjust start/end to match a slot. Overlap → 400 "Slot no longer available."
+  Flattened body (no preferred nest, no associates[] pin). Echo Find Slots
+  nested resource `id`s as top-level IDs plus slot start/end.
+  Body lists every allowed key. Empty resource UUIDs stripped in pre-request.
+  If care_team_id is set, pre-request drops doctor_id/specialty_id (XOR) so
+  a filled env still sends. People path: blank care_team_id in env.
+  Staff: care_team_id XOR doctor_id/specialty_id (doctor+specialty OK; not same person).
+  specialty_id must hold a live non-doctor role mapped to this service (many hats OK).
+  Service with 0 role reqs: omit specialty_id; doctor_id / care_team_id still OK.
+  health_coach_id → 400 "Use specialty_id instead of health_coach_id."
+  modality virtual | in_person (not both).
+  end must equal start + center service duration.
+  in_person: room_id required; room active, type active, type mapped to service (OR).
+  virtual: no room_id / equipment_id.
+  equipment_id required when the selected room has ≥1 bookable unit (active + type
+  active + allotted to that room); omit/null when the room has none. Must belong
+  to that room. No auto-pick of first equipment.
+  Booked appointment always has non-empty associates[] (hats stamped server-side).
+  Overlap → 400 "Slot no longer available."
   customer_profile_id / service_id must be active at this center.
-  Invalid room_id / equipment_id → 400 "Invalid room/equipment for this center."
   notes is optional free text, stored on the appointment as-is and also appended to a
   formatted Google event description (patient name, service, date, time, then either
   the clinic address for in_person/both or a "join via Google Meet" line for virtual —

@@ -172,6 +172,7 @@ biopeak-nexus/
 **Identity & Access**
 - `User` (UUID PK, email-based auth) — custom `AUTH_USER_MODEL = 'users.User'`
 - `Associate` (1:1 User) + `AssociateRole` (per-center roles with feature ArrayField)
+- `GoogleCalendarConnection` (1:1 User) — shared Google Calendar tokens (`google_email`, encrypted tokens, expiry); admin or associate may own. See `docs/google-calendar-integration.md`.
 - `AssociateCenterAssignment` — links associate ↔ center with role, is_admin, mode
 - `Customer` (1:1 User) + `CustomerProfile` (family members) + `CustomerOnboarding` (health data)
 - `Center` + `CenterOperatingHour` + `CenterClosure`
