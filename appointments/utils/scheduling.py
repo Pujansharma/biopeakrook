@@ -234,8 +234,7 @@ def pick_unique_role(roles, empty_message, ambiguous_message):
     return roles[0]
 
 
-def pick_doctor_role(roles, service_assignment=None):
-    del service_assignment
+def pick_doctor_role(roles):
     return pick_unique_role(
         [role for role in roles if role_is_doctor(role)],
         MISSING_DOCTOR_ROLE_MESSAGE,
@@ -273,10 +272,12 @@ def pick_specialty_role(roles, service_assignment=None):
     return matching_roles[0]
 
 
-PREFERRED_PERSON_ROLE_PICKERS = {
-    "doctor_id": pick_doctor_role,
-    "specialty_id": pick_specialty_role,
-}
+def pick_preferred_person_role(preferred_key, live_roles, service_assignment):
+    if preferred_key == "specialty_id":
+        return pick_specialty_role(live_roles, service_assignment)
+    if preferred_key == "doctor_id":
+        return pick_doctor_role(live_roles)
+    raise ValidationError(f"Unknown preferred person key: {preferred_key}")
 
 
 def required_room_types_for_assignment(assignment):
@@ -675,11 +676,10 @@ def resolve_preferred_person_entry(
     center_assignment = get_live_assignment_for_associate(
         center, associate_id, modality
     )
-    picker = PREFERRED_PERSON_ROLE_PICKERS.get(preferred_key)
-    if picker is None:
-        raise ValidationError(f"Unknown preferred person key: {preferred_key}")
     live_roles = assignment_active_roles(center_assignment)
-    role = picker(live_roles, service_assignment)
+    role = pick_preferred_person_role(
+        preferred_key, live_roles, service_assignment
+    )
     return {
         "role_id": str(role.pk),
         "associate_id": center_assignment.associate.pk,
@@ -1122,10 +1122,7 @@ def find_appointment_slots(
     }
 
 
-def validate_associate_assignments(
-    center, associates_payload, role_requirements, modality
-):
-    del role_requirements  # pin no longer requires exactly one per service role
+def validate_associate_assignments(center, associates_payload, modality):
     provided_role_ids = set()
     seen_associate_ids = set()
     associate_ids = [entry["associate_id"] for entry in associates_payload]
@@ -1137,9 +1134,9 @@ def validate_associate_assignments(
         role_id = str(entry["role_id"])
         associate_id = str(entry["associate_id"])
         if role_id in provided_role_ids:
-            raise ValidationError("Duplicate role in associates pin.")
+            raise ValidationError("Duplicate role on this appointment.")
         if associate_id in seen_associate_ids:
-            raise ValidationError("Duplicate associate in associates pin.")
+            raise ValidationError("Duplicate associate on this appointment.")
         provided_role_ids.add(role_id)
         seen_associate_ids.add(associate_id)
         assignment = assignments_by_associate.get(associate_id)
@@ -1178,12 +1175,7 @@ def validate_appointment_allocation(
         )
 
     if associates:
-        role_requirements = list(
-            assignment.role_requirements.filter(is_active=True).select_related("role")
-        )
-        validate_associate_assignments(
-            center, associates, role_requirements, modality
-        )
+        validate_associate_assignments(center, associates, modality)
 
     if modality == AppointmentModes.IN_PERSON:
         if room is None:

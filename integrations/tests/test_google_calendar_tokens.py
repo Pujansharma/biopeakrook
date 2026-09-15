@@ -2,11 +2,14 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import requests
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
 from accounts.users.models import User
+from integrations.google_calendar.db import persist_google_calendar_connection
 from integrations.google_calendar.tokens import get_valid_access_token
+from integrations.google_calendar.views import complete_google_calendar_connection
 from integrations.models import GoogleCalendarConnection
 
 
@@ -63,3 +66,70 @@ class GoogleCalendarTokenRefreshTests(TestCase):
         self.connection.refresh_from_db()
         self.assertEqual(self.connection.google_refresh_token, "enc:refresh-b")
         mock_decrypt.assert_called()
+
+
+class GoogleCalendarCompletePersistTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner@example.com")
+        self.stale_user = User.objects.create_user(email="stale@example.com")
+        self.expires_at = timezone.now() + timedelta(hours=1)
+
+    def test_persist_evicts_stale_email_holder(self):
+        GoogleCalendarConnection.objects.create(
+            user=self.stale_user,
+            google_email="care@biopeak.health",
+            google_refresh_token="enc:old",
+        )
+        stale_count = persist_google_calendar_connection(
+            self.owner,
+            "care@biopeak.health",
+            "enc:new-access",
+            "enc:new-refresh",
+            self.expires_at,
+        )
+        self.assertEqual(stale_count, 1)
+        stale = GoogleCalendarConnection.objects.filter(pk=self.stale_user.pk).first()
+        self.assertIsNone(stale.google_email)
+        self.assertIsNone(stale.google_refresh_token)
+        owner = GoogleCalendarConnection.objects.filter(pk=self.owner.pk).first()
+        self.assertEqual(owner.google_email, "care@biopeak.health")
+        self.assertEqual(owner.google_refresh_token, "enc:new-refresh")
+
+    @patch("integrations.google_calendar.views.persist_google_calendar_connection")
+    def test_complete_reuses_row_when_unique_race_already_connected(
+        self, mock_persist
+    ):
+        mock_persist.side_effect = IntegrityError(
+            "uniq_google_calendar_connection_email"
+        )
+        GoogleCalendarConnection.objects.create(
+            user=self.owner,
+            google_email="care@biopeak.health",
+            google_refresh_token="enc:live",
+            is_active=True,
+        )
+        stale_count = complete_google_calendar_connection(
+            self.owner,
+            "care@biopeak.health",
+            "enc:access",
+            "enc:refresh",
+            self.expires_at,
+        )
+        self.assertEqual(stale_count, 0)
+        mock_persist.assert_called_once()
+
+    @patch("integrations.google_calendar.views.persist_google_calendar_connection")
+    def test_complete_retries_unique_race_then_persists(self, mock_persist):
+        mock_persist.side_effect = [
+            IntegrityError("uniq_google_calendar_connection_email"),
+            1,
+        ]
+        stale_count = complete_google_calendar_connection(
+            self.owner,
+            "care@biopeak.health",
+            "enc:access",
+            "enc:refresh",
+            self.expires_at,
+        )
+        self.assertEqual(stale_count, 1)
+        self.assertEqual(mock_persist.call_count, 2)

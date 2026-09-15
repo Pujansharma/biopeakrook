@@ -24,6 +24,14 @@ def google_calendar_connection_is_connected(connection):
     )
 
 
+def google_calendar_connection_matches_email(connection, google_email):
+    if not google_calendar_connection_is_connected(connection):
+        return False
+    if not connection.google_email or not google_email:
+        return False
+    return connection.google_email.lower() == google_email.lower()
+
+
 def user_can_disconnect_shared_organizer(user):
     if Admin.objects.filter(pk=user.pk, is_active=True).exists():
         return True

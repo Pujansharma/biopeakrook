@@ -19,14 +19,15 @@ from integrations.google_calendar import google_oauth
 from integrations.google_calendar.connections import (
     get_google_calendar_connection_for_user,
     google_calendar_connection_is_connected,
+    google_calendar_connection_matches_email,
     user_can_disconnect_shared_organizer,
     user_has_active_google_calendar_owner_profile,
 )
 from integrations.google_calendar.db import (
     clear_google_calendar_tokens,
-    evict_google_calendar_email,
-    get_or_create_google_calendar_connection,
-    revoke_stale_google_calendar_grants,
+    encrypted_stale_refresh_tokens,
+    persist_google_calendar_connection,
+    revoke_stored_google_refresh_token,
     update_google_calendar_tokens,
 )
 from integrations.google_calendar.utils import decrypt, encrypt, ensure_encryption_configured
@@ -45,6 +46,36 @@ def _frontend_redirect(params: dict):
         )
     # Use a URL fragment (#) so these values are not sent to the server
     return HttpResponseRedirect(f"{ADMIN_FRONTEND_URL}/#{urlencode(params)}")
+
+
+def complete_google_calendar_connection(
+    user,
+    google_email,
+    access_token,
+    refresh_token,
+    expires_at,
+):
+    try:
+        with transaction.atomic():
+            return persist_google_calendar_connection(
+                user,
+                google_email,
+                access_token,
+                refresh_token,
+                expires_at,
+            )
+    except IntegrityError:
+        connection = get_google_calendar_connection_for_user(user)
+        if google_calendar_connection_matches_email(connection, google_email):
+            return 0
+        with transaction.atomic():
+            return persist_google_calendar_connection(
+                user,
+                google_email,
+                access_token,
+                refresh_token,
+                expires_at,
+            )
 
 
 class GoogleCalendarConnectView(BaseGenericAPIView):
@@ -133,41 +164,26 @@ class GoogleCalendarCompleteView(BaseGenericAPIView):
                 "into Biopeak with."
             )
 
-        stale_holder_count = 0
-        # Revoke outside the txn so Google HTTP cannot hold a DB connection.
-        # InvalidToken / HTTP fail still proceeds to the local evict below.
-        revoke_stale_google_calendar_grants(google_email, user.pk)
+        stale_refresh_tokens = encrypted_stale_refresh_tokens(google_email, user.pk)
+        expires_at = timezone.now() + timedelta(seconds=expires_in)
         try:
-            with transaction.atomic():
-                # google_email is unique (case-insensitively). Evict whoever
-                # else currently holds this email so the save below doesn't
-                # hit that constraint - same transaction so a failure here
-                # can't leave this Google account unclaimed.
-                connection = get_or_create_google_calendar_connection(user)
-                connection.google_email = google_email
-                connection.google_access_token = encrypt(access_token)
-                connection.google_refresh_token = encrypt(refresh_token)
-                connection.google_access_token_expires_at = timezone.now() + timedelta(
-                    seconds=expires_in
-                )
-                connection.is_active = True
-                stale_holder_count = evict_google_calendar_email(
-                    google_email, connection.pk
-                )
-                connection.save(
-                    update_fields=[
-                        "google_email",
-                        "google_access_token",
-                        "google_refresh_token",
-                        "google_access_token_expires_at",
-                        "is_active",
-                        "updated_at",
-                    ]
-                )
-        except IntegrityError:
-            self.raise_bad_request(
-                "This Google account was just connected by another account. Try again."
+            stale_holder_count = complete_google_calendar_connection(
+                user,
+                google_email,
+                encrypt(access_token),
+                encrypt(refresh_token),
+                expires_at,
             )
+        except IntegrityError:
+            connection = get_google_calendar_connection_for_user(user)
+            if not google_calendar_connection_matches_email(connection, google_email):
+                self.raise_bad_request(
+                    "This Google account was just connected by another account. "
+                    "Try again."
+                )
+            stale_holder_count = 0
+        for stale_refresh_token in stale_refresh_tokens:
+            revoke_stored_google_refresh_token(stale_refresh_token)
         if stale_holder_count:
             logger.warning(
                 f"Google Calendar connect: {google_email} was linked to another "

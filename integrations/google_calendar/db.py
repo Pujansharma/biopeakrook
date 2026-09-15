@@ -67,9 +67,12 @@ def stale_google_calendar_connections(google_email, exclude_pk):
     )
 
 
-def revoke_stale_google_calendar_grants(google_email, exclude_pk):
-    for connection in stale_google_calendar_connections(google_email, exclude_pk):
-        revoke_stored_google_refresh_token(connection.google_refresh_token)
+def encrypted_stale_refresh_tokens(google_email, exclude_pk):
+    return [
+        connection.google_refresh_token
+        for connection in stale_google_calendar_connections(google_email, exclude_pk)
+        if connection.google_refresh_token
+    ]
 
 
 def evict_google_calendar_email(google_email, exclude_pk):
@@ -85,3 +88,30 @@ def evict_google_calendar_email(google_email, exclude_pk):
         google_refresh_token=None,
         google_access_token_expires_at=None,
     )
+
+
+def persist_google_calendar_connection(
+    user,
+    google_email,
+    access_token,
+    refresh_token,
+    expires_at,
+):
+    connection = get_or_create_google_calendar_connection(user)
+    connection.google_email = google_email
+    connection.google_access_token = access_token
+    connection.google_refresh_token = refresh_token
+    connection.google_access_token_expires_at = expires_at
+    connection.is_active = True
+    stale_holder_count = evict_google_calendar_email(google_email, connection.pk)
+    connection.save(
+        update_fields=[
+            "google_email",
+            "google_access_token",
+            "google_refresh_token",
+            "google_access_token_expires_at",
+            "is_active",
+            "updated_at",
+        ]
+    )
+    return stale_holder_count

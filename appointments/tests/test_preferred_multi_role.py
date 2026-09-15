@@ -153,12 +153,11 @@ class MultiRoleAssociatePinTests(TestCase):
                     "associate_id": self.associate.pk,
                 }
             ],
-            role_requirements=[],
             modality=AppointmentModes.VIRTUAL,
         )
 
     def test_duplicate_associate_pin_rejected(self):
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationError) as raised:
             validate_associate_assignments(
                 self.center,
                 [
@@ -171,9 +170,12 @@ class MultiRoleAssociatePinTests(TestCase):
                         "associate_id": self.associate.pk,
                     },
                 ],
-                role_requirements=[],
                 modality=AppointmentModes.VIRTUAL,
             )
+        self.assertIn(
+            "Duplicate associate on this appointment.",
+            raised.exception.messages,
+        )
 
 
 class PreferredPersonRoleStampTests(TestCase):
