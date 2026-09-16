@@ -66,6 +66,9 @@ settings {
 
 docs {
   Books a confirmed appointment. Use Idempotency-Key for safe retries.
+  Same key + same body → 200 existing appointment (slot is not re-checked).
+  Same key + different body → 409.
+  start in the past → 400 "Date cannot be in the past."
   Flattened body (no preferred nest, no associates[] pin). Echo Find Slots
   nested resource `id`s as top-level IDs plus slot start/end.
   Body lists every allowed key. Empty resource UUIDs stripped in pre-request.
@@ -90,10 +93,11 @@ docs {
   the clinic address for in_person/both or a "join via Google Meet" line for virtual —
   no address shown for virtual).
   Google Calendar: if the one fixed shared account (GOOGLE_CALENDAR_ID, see
-  google_calendar/Connect + Complete) is connected, the appointment is mirrored
-  there automatically as this organizer, right after the appointment is saved,
-  with assigned associates invited as attendees. Best-effort — booking always
-  succeeds even if this sync fails or nobody is connected; a Google failure is
-  logged, never surfaced as an error. Response's google_meet_link is populated
-  only when the sync succeeded and the appointment is virtual.
+  google_calendar/Connect + Complete) is connected, a Google Calendar outbox
+  row is queued after commit (not on the request path). The worker mirrors
+  the appointment later, with assigned associates invited as attendees.
+  Best-effort — booking always succeeds even if this sync fails or nobody is
+  connected; a Google failure is logged, never surfaced as an error.
+  Book response google_meet_link is usually null until the worker finishes;
+  refetch appointment detail after sync.
 }

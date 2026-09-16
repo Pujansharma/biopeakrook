@@ -1,10 +1,12 @@
 from datetime import date, datetime, time, timedelta
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from accounts.associates.models import (
     Associate,
@@ -14,8 +16,14 @@ from accounts.associates.models import (
 )
 from accounts.centers.models import Center, CenterOperatingHour
 from accounts.customers.models import Customer, CustomerCenterAssignment, CustomerProfile
+from accounts.models import UserAccount
 from accounts.users.models import User
-from appointments.models import AssociateLeave, AssociateRosterEntry
+from accounts.utils.constants import UserType
+from appointments.models import (
+    AssociateLeave,
+    AssociateRosterEntry,
+    CareTeamAvailabilityBlock,
+)
 from appointments.serializers.booking import (
     AppointmentBookSerializer,
     AppointmentCancelSerializer,
@@ -35,7 +43,9 @@ from appointments.utils.constants import (
 )
 from appointments.utils.exceptions import (
     acknowledge_exception,
+    apply_availability_exception_hooks,
     detect_exceptions_for_appointment,
+    detect_exceptions_for_source,
 )
 from appointments.utils.scheduling import (
     EQUIPMENT_NOT_ALLOWED_EMPTY_ROOM_MESSAGE,
@@ -49,6 +59,7 @@ from appointments.utils.scheduling import (
     resolve_booking_combo,
 )
 from appointments.utils.transitions import validate_transition
+from appointments.views.booking import AppointmentBookView
 from core.utils.constants import AppointmentModes
 from inventory.models import Equipment, EquipmentType, Room, RoomType
 from programs.services.models import (
@@ -1110,3 +1121,174 @@ class ExceptionRaisingTests(BookingWorldTests):
         appointment.refresh_from_db()
         self.assertEqual(created, 0)
         self.assertFalse(appointment.has_open_exception)
+
+    def test_moving_leave_window_resolves_stale_exception(self):
+        appointment = self.book_confirmed()
+        leave = AssociateLeave.objects.create(
+            associate=self.coach,
+            scope=LeaveScope.CENTER,
+            center=self.center,
+            start_datetime=appointment.exclusive_start_datetime,
+            end_datetime=appointment.exclusive_end_datetime,
+            reason="Sick",
+            is_active=True,
+        )
+        detect_exceptions_for_source(
+            ExceptionSourceType.ASSOCIATE_LEAVE,
+            leave.pk,
+            sync=True,
+            center=self.center,
+        )
+        exception = appointment.exceptions.get()
+        self.assertEqual(exception.status, ExceptionStatus.OPEN)
+        new_start = appointment.exclusive_end_datetime + timedelta(hours=2)
+        new_end = new_start + timedelta(hours=1)
+        leave.start_datetime = new_start
+        leave.end_datetime = new_end
+        leave.save(update_fields=["start_datetime", "end_datetime", "updated_at"])
+        apply_availability_exception_hooks(
+            center=self.center,
+            instance=leave,
+            source_type=ExceptionSourceType.ASSOCIATE_LEAVE,
+            validated_data={"start_datetime": new_start, "end_datetime": new_end},
+            created=False,
+        )
+        exception.refresh_from_db()
+        appointment.refresh_from_db()
+        self.assertEqual(exception.status, ExceptionStatus.RESOLVED)
+        self.assertEqual(exception.resolution, ExceptionResolution.BLOCKER_CLEARED)
+        self.assertFalse(appointment.has_open_exception)
+
+    def test_deactivating_care_team_resolves_block_exceptions(self):
+        serializer = CenterCareTeamSerializer(
+            data={
+                "name": "Exception Team",
+                "members": [
+                    {
+                        "associate_id": self.doctor.pk,
+                        "role_id": self.doctor_role.pk,
+                    },
+                    {
+                        "associate_id": self.coach.pk,
+                        "role_id": self.coach_role.pk,
+                    },
+                ],
+            },
+            context={"center": self.center},
+        )
+        serializer.is_valid(raise_exception=True)
+        care_team = serializer.save(center=self.center)
+        preferred = {"care_team_id": str(care_team.pk)}
+        slots_payload = find_slots(self.center, self.virtual_slot_payload(preferred))
+        slot = first_slot(slots_payload)
+        appointment = book_appointment(
+            self.center,
+            self.actor,
+            self.book_virtual_payload(slot, preferred),
+        )
+        block = CareTeamAvailabilityBlock.objects.create(
+            center=self.center,
+            care_team=care_team,
+            is_recurring=False,
+            start_datetime=appointment.exclusive_start_datetime,
+            end_datetime=appointment.exclusive_end_datetime,
+            reason="Team offsite",
+            is_active=True,
+        )
+        detect_exceptions_for_source(
+            ExceptionSourceType.CARE_TEAM_BLOCK,
+            block.pk,
+            sync=True,
+            center=self.center,
+        )
+        exception = appointment.exceptions.get()
+        self.assertEqual(exception.status, ExceptionStatus.OPEN)
+        updater = CenterCareTeamSerializer(
+            care_team,
+            data={"is_active": False},
+            partial=True,
+            context={"center": self.center},
+        )
+        updater.is_valid(raise_exception=True)
+        updater.save()
+        exception.refresh_from_db()
+        appointment.refresh_from_db()
+        block.refresh_from_db()
+        self.assertFalse(block.is_active)
+        self.assertEqual(exception.status, ExceptionStatus.RESOLVED)
+        self.assertEqual(exception.resolution, ExceptionResolution.BLOCKER_CLEARED)
+        self.assertFalse(appointment.has_open_exception)
+
+
+class PastDirectBookingTests(BookingWorldTests):
+    def historical_payload(self):
+        start = datetime(2026, 9, 14, 10, 0, tzinfo=KOLKATA)
+        end = start + timedelta(minutes=30)
+        return {
+            "customer_profile_id": str(self.customer_profile.pk),
+            "service_id": str(self.service.pk),
+            "modality": AppointmentModes.VIRTUAL,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "specialty_id": str(self.coach.pk),
+        }
+
+    def test_book_rejects_historical_start(self):
+        serializer = AppointmentBookSerializer(
+            data=self.historical_payload(),
+            context={"center": self.center},
+        )
+        with self.assertRaises(DRFValidationError) as raised:
+            serializer.is_valid(raise_exception=True)
+        self.assertIn("Date cannot be in the past.", drf_error_text(raised.exception))
+
+    def test_reschedule_rejects_historical_start(self):
+        slots_payload = find_slots(self.center, self.virtual_slot_payload())
+        slot = first_slot(slots_payload)
+        appointment = book_appointment(
+            self.center, self.actor, self.book_virtual_payload(slot)
+        )
+        serializer = AppointmentRescheduleSerializer(
+            appointment,
+            data=self.historical_payload(),
+            context={"center": self.center, "appointment": appointment},
+        )
+        with self.assertRaises(DRFValidationError) as raised:
+            serializer.is_valid(raise_exception=True)
+        self.assertIn("Date cannot be in the past.", drf_error_text(raised.exception))
+
+
+class IdempotentReplayTests(BookingWorldTests):
+    def setUp(self):
+        super().setUp()
+        UserAccount.objects.create(
+            user=self.actor,
+            account_type=UserType.ASSOCIATE,
+        )
+
+    def post_book(self, payload, idempotency_key):
+        factory = APIRequestFactory()
+        request = factory.post(
+            f"/centers/{self.center.pk}/appointments/",
+            payload,
+            format="json",
+            HTTP_IDEMPOTENCY_KEY=idempotency_key,
+        )
+        force_authenticate(request, user=self.actor)
+        view = AppointmentBookView.as_view()
+        return view(request, center_id=self.center.pk)
+
+    def test_replay_same_key_and_payload_returns_existing_appointment(self):
+        slots_payload = find_slots(self.center, self.virtual_slot_payload())
+        slot = first_slot(slots_payload)
+        payload = self.book_virtual_payload(slot)
+        idempotency_key = str(uuid4())
+        first_response = self.post_book(payload, idempotency_key)
+        self.assertEqual(first_response.status_code, 201)
+        replay_response = self.post_book(payload, idempotency_key)
+        self.assertEqual(replay_response.status_code, 200)
+        self.assertEqual(replay_response.data["detail"], "Appointment retrieved.")
+        self.assertEqual(
+            replay_response.data["data"]["id"],
+            first_response.data["data"]["id"],
+        )

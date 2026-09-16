@@ -27,9 +27,9 @@ settings {
 
 docs {
   Allowed from confirmed or checked_in. Not from in_progress. Reason required.
-  Google Calendar: if the appointment was mirrored, the matching event is deleted from the
-  fixed shared account's calendar (GOOGLE_CALENDAR_ID) right after this cancel is saved, and
-  google_event_id/google_meet_link are cleared in a follow-up save. Best-effort — if that
-  Google call fails, the failure is logged and the cancellation stays saved; google_event_id/
-  google_meet_link are left as-is (the Google event may still exist and need manual cleanup).
+  Google Calendar: if the appointment was mirrored, a Google Calendar outbox row is queued after
+  commit to delete the event from the fixed shared account's calendar (GOOGLE_CALENDAR_ID).
+  google_event_id/google_meet_link are left as-is. Best-effort — if that Google call fails, the
+  failure is logged and the cancellation stays saved (the Google event may still exist and need
+  manual cleanup). Cancel HTTP success does not mean the Calendar event is already gone.
 }

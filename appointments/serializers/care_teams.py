@@ -10,6 +10,8 @@ from appointments.models import (
     CenterCareTeamMember,
 )
 from appointments.utils.care_teams import live_associate_center_assignments
+from appointments.utils.constants import ExceptionSourceType
+from appointments.utils.exceptions import resolve_exceptions_for_source
 from appointments.utils.scheduling import get_associate_display_name
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
 
@@ -195,8 +197,19 @@ class CenterCareTeamSerializer(BaseModelSerializer):
             if members_in_payload:
                 self.replace_members(instance, members)
             if was_active and not instance.is_active:
-                CareTeamAvailabilityBlock.objects.filter(
-                    care_team=instance,
-                    is_active=True,
-                ).update(is_active=False, updated_at=timezone.now())
+                block_ids = list(
+                    CareTeamAvailabilityBlock.objects.filter(
+                        care_team=instance,
+                        is_active=True,
+                    ).values_list("pk", flat=True)
+                )
+                if block_ids:
+                    CareTeamAvailabilityBlock.objects.filter(pk__in=block_ids).update(
+                        is_active=False, updated_at=timezone.now()
+                    )
+                    for block_id in block_ids:
+                        resolve_exceptions_for_source(
+                            ExceptionSourceType.CARE_TEAM_BLOCK,
+                            block_id,
+                        )
         return instance

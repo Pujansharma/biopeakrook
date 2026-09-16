@@ -74,9 +74,11 @@ docs {
   to a formatted Google event description (patient/service/date/time + clinic address for
   in_person/both, or a "join via Google Meet" line with no address for virtual).
   Google Calendar: mirrors to the one fixed shared account (GOOGLE_CALENDAR_ID), same as booking —
-  not tied to whichever associate is assigned. If connected, the Google event is updated/created
-  right after this reschedule is saved, so a rejected reschedule (e.g. an overlap) never touches
-  Google at all. Best-effort — if that Google call fails, the failure is logged and the reschedule
-  stays saved with the appointment's existing google_event_id/google_meet_link left unchanged.
-  If the shared account isn't connected, reschedule proceeds unsynced as normal.
+  not tied to whichever associate is assigned. If connected, a Google Calendar outbox row is queued
+  after commit (not on the request path), so a rejected reschedule (e.g. an overlap) never queues
+  Google at all. The worker updates/creates the event later. Best-effort — if that Google call fails,
+  the failure is logged and the reschedule stays saved with the appointment's existing
+  google_event_id/google_meet_link left unchanged. Meet link on the reschedule response may still
+  be the previous value until the worker finishes. If the shared account isn't connected,
+  reschedule proceeds unsynced as normal.
 }

@@ -1,7 +1,10 @@
+import calendar
+import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Sum
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
@@ -21,7 +24,10 @@ from appointments.utils.calendar import (
     get_center_timezone_name,
 )
 from appointments.utils.care_teams import live_care_teams_for_associate
-from appointments.utils.constants import AvailabilityGranularity
+from appointments.utils.constants import (
+    AvailabilityGranularity,
+    BUSY_APPOINTMENT_STATUSES,
+)
 from appointments.utils.intervals import (
     datetime_range_for_dates,
     intersect_intervals,
@@ -35,6 +41,9 @@ from inventory.models import Equipment, Room
 OPERATIONS_CACHE_TTL = 600
 OPERATIONS_VERSION_KEY = "appointments:ops:version:{center_id}"
 STAFF_IDLE_UTILIZATION_THRESHOLD = 0.2
+ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+INVALID_GRANULARITY_MESSAGE = "Invalid granularity. Use day, week, or month."
+END_BEFORE_START_MESSAGE = "End date cannot be before start date."
 
 
 def operations_cache_version_key(center_id) -> str:
@@ -67,16 +76,36 @@ def get_cached_operations(center, start_date, end_date, tab, builder):
     return payload
 
 
+def parse_operations_iso_date(raw, field_name):
+    if not ISO_DATE_PATTERN.fullmatch(raw):
+        raise DjangoValidationError(f"Invalid {field_name}. Use YYYY-MM-DD.")
+    year, month, day = (int(part) for part in raw.split("-"))
+    if month < 1 or month > 12:
+        raise DjangoValidationError(f"Invalid {field_name}. Use YYYY-MM-DD.")
+    max_day = calendar.monthrange(year, month)[1]
+    if day < 1 or day > max_day:
+        raise DjangoValidationError(f"Invalid {field_name}. Use YYYY-MM-DD.")
+    return date(year, month, day)
+
+
 def parse_operations_date_range(query_params, default_start: date | None = None):
     start_raw = query_params.get("start")
     end_raw = query_params.get("end")
     granularity = query_params.get("granularity", AvailabilityGranularity.WEEK)
     if default_start is None:
         default_start = timezone_today()
-    start_date = date.fromisoformat(start_raw) if start_raw else default_start
+    start_date = (
+        parse_operations_iso_date(start_raw, "start date")
+        if start_raw
+        else default_start
+    )
     if end_raw:
-        end_date = date.fromisoformat(end_raw)
+        end_date = parse_operations_iso_date(end_raw, "end date")
+        if end_date < start_date:
+            raise DjangoValidationError(END_BEFORE_START_MESSAGE)
         return start_date, end_date
+    if granularity not in AvailabilityGranularity.values:
+        raise DjangoValidationError(INVALID_GRANULARITY_MESSAGE)
     return resolve_query_date_range(start_date, granularity)
 
 
@@ -98,6 +127,7 @@ def minutes_to_hours(minutes: float) -> float:
 def appointment_range_filter(center, range_start, range_end):
     return Appointment.objects.filter(
         center=center,
+        status__in=BUSY_APPOINTMENT_STATUSES,
         start_datetime__lt=range_end,
         end_datetime__gt=range_start,
     )
@@ -190,6 +220,7 @@ def build_associate_capacity(center, associate, start_date, end_date):
         AppointmentAssociate.objects.filter(
             associate=associate,
             appointment__center=center,
+            appointment__status__in=BUSY_APPOINTMENT_STATUSES,
             appointment__start_datetime__lt=range_end,
             appointment__end_datetime__gt=range_start,
         )
@@ -241,6 +272,7 @@ def build_room_capacity(center, room, start_date, end_date):
         Appointment.objects.filter(
             center=center,
             room=room,
+            status__in=BUSY_APPOINTMENT_STATUSES,
             start_datetime__lt=range_end,
             end_datetime__gt=range_start,
         )
@@ -288,6 +320,7 @@ def build_equipment_capacity(center, equipment, start_date, end_date):
         Appointment.objects.filter(
             center=center,
             equipment=equipment,
+            status__in=BUSY_APPOINTMENT_STATUSES,
             start_datetime__lt=range_end,
             end_datetime__gt=range_start,
         )
@@ -371,6 +404,7 @@ def build_operations_bottlenecks(center, start_date, end_date) -> list:
             dependent_count = Appointment.objects.filter(
                 center=center,
                 room=room,
+                status__in=BUSY_APPOINTMENT_STATUSES,
                 start_datetime__lt=event_end,
                 end_datetime__gt=event_start,
             ).count()
@@ -398,6 +432,7 @@ def build_operations_bottlenecks(center, start_date, end_date) -> list:
             dependent_count = Appointment.objects.filter(
                 center=center,
                 equipment=equipment,
+                status__in=BUSY_APPOINTMENT_STATUSES,
                 start_datetime__lt=event_end,
                 end_datetime__gt=event_start,
             ).count()

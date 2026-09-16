@@ -361,10 +361,9 @@ def scan_source_intervals(
     if not getattr(source, "is_active", True):
         return 0
     intervals = expand_source_intervals(source_type, source, center)
-    if not intervals:
-        return 0
     resource_filter = appointment_filter_for_source(source_type, source)
     created_count = 0
+    conflicted_appointment_ids = set()
     for interval_start, interval_end in intervals:
         snapshot_base = build_source_snapshot(
             source_type,
@@ -379,9 +378,44 @@ def scan_source_intervals(
             resource_filter,
         )
         for appointment in appointments:
+            conflicted_appointment_ids.add(appointment.pk)
             if create_exception_for_appointment(appointment, center, snapshot_base):
                 created_count += 1
+    reconcile_stale_source_exceptions(
+        source_type,
+        source,
+        center,
+        conflicted_appointment_ids,
+    )
     return created_count
+
+
+def reconcile_stale_source_exceptions(
+    source_type: str,
+    source,
+    center: Center,
+    conflicted_appointment_ids,
+):
+    now = timezone.now()
+    stale_exceptions = AppointmentException.objects.filter(
+        center=center,
+        source_type=source_type,
+        source_id=source.pk,
+        status=ExceptionStatus.OPEN,
+    ).exclude(appointment_id__in=conflicted_appointment_ids)
+    appointment_ids_to_recompute = list(
+        stale_exceptions.values_list("appointment_id", flat=True).distinct()
+    )
+    stale_exceptions.update(
+        status=ExceptionStatus.RESOLVED,
+        resolution=ExceptionResolution.BLOCKER_CLEARED,
+        resolved_at=now,
+        updated_at=now,
+    )
+    for appointment_id in appointment_ids_to_recompute:
+        appointment = Appointment.objects.filter(pk=appointment_id).first()
+        if appointment is not None:
+            recompute_appointment_exception_flag(appointment)
 
 
 def detect_and_reconcile_roster_exceptions(center: Center, associate_id) -> int:
@@ -730,18 +764,24 @@ def trigger_exception_resolution(
     )
 
 
+WINDOW_PATCH_FIELDS = {
+    "effective_from",
+    "effective_until",
+    "start_datetime",
+    "end_datetime",
+    "start_time",
+    "end_time",
+    "date",
+    "day_of_week",
+    "recurring_start_time",
+    "recurring_end_time",
+}
+
+
 def should_run_detection_on_patch(source_type: str, source, validated_data: dict) -> bool:
     if validated_data.get("is_active") is True:
         return True
-    tracked_fields = {"effective_from", "effective_until"}
-    if source_type in {
-        ExceptionSourceType.ASSOCIATE_BLOCK,
-        ExceptionSourceType.CARE_TEAM_BLOCK,
-        ExceptionSourceType.ROOM_BLOCK,
-        ExceptionSourceType.EQUIPMENT_BLOCK,
-    }:
-        return any(field in validated_data for field in tracked_fields)
-    return False
+    return any(field in validated_data for field in WINDOW_PATCH_FIELDS)
 
 
 def should_resolve_on_patch(validated_data: dict) -> bool:

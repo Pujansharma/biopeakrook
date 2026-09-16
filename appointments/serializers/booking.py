@@ -331,6 +331,8 @@ class AppointmentBookSerializer(BaseSerializer):
                 "Service is not available at this center."
             )
         attrs["assignment"] = assignment
+        if attrs["start"] < timezone.now():
+            raise serializers.ValidationError("Date cannot be in the past.")
         return attrs
 
     def create(self, validated_data):

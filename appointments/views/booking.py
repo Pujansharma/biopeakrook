@@ -263,6 +263,22 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         assignment = validated["assignment"]
+        idempotency_key = request.headers.get("Idempotency-Key")
+        payload_hash = canonical_payload_hash(request.data)
+        if idempotency_key:
+            existing_key = get_appointment_idempotency_key(
+                center,
+                idempotency_key,
+                unexpired_only=True,
+            )
+            if existing_key:
+                raise_idempotency_payload_conflict(existing_key, payload_hash)
+                detail = AppointmentDetailSerializer(existing_key.appointment).data
+                return self.send_response(
+                    "Appointment retrieved.",
+                    detail,
+                    status=200,
+                )
         try:
             combo = resolve_booking_combo(
                 center=center,
@@ -281,23 +297,6 @@ class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
         room = combo["room"]
         equipment = combo["equipment"]
         care_team = combo["care_team"]
-
-        idempotency_key = request.headers.get("Idempotency-Key")
-        payload_hash = canonical_payload_hash(request.data)
-        if idempotency_key:
-            existing_key = get_appointment_idempotency_key(
-                center,
-                idempotency_key,
-                unexpired_only=True,
-            )
-            if existing_key:
-                raise_idempotency_payload_conflict(existing_key, payload_hash)
-                detail = AppointmentDetailSerializer(existing_key.appointment).data
-                return self.send_response(
-                    "Appointment retrieved.",
-                    detail,
-                    status=200,
-                )
 
         try:
             serializer.save(

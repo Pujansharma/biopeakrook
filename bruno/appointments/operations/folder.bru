@@ -9,4 +9,10 @@ auth {
 
 docs {
   Phase 3 — operations summary APIs.
+  Query: start/end YYYY-MM-DD; granularity day|week|month when end omitted (default week).
+  Junk start/end → 400 "Invalid start|end date. Use YYYY-MM-DD."
+  Junk granularity → 400 "Invalid granularity. Use day, week, or month."
+  End before start → 400 "End date cannot be before start date."
+  Booked minutes/hours/counts/utilization and bottleneck dependents count only
+  confirmed, checked_in, in_progress. Cancelled, completed, no-show excluded.
 }

@@ -249,7 +249,7 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 
 Each slot = one combo. Nested keys only when present (virtual: no room/equipment; care-team XOR people; no equipment when room has none). FE book: extract `id` from nested objects into flattened `doctor_id` / `specialty_id` / `care_team_id` / `room_id` / `equipment_id`.
 
-**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · equipment_id required when room has bookable units · care_team XOR people · service duration missing · no staff (`care_team_id` / `doctor_id` / `specialty_id`).
+**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · equipment_id required when room has bookable units · care_team XOR people · service duration missing · no staff (`care_team_id` / `doctor_id` / `specialty_id`) · start in the past.
 
 ---
 
@@ -257,7 +257,7 @@ Each slot = one combo. Nested keys only when present (virtual: no room/equipment
 
 **Purpose:** Create confirmed appointment.
 
-**Headers:** optional `Idempotency-Key` (UUID). Same key + same payload → 200 existing detail. Same key + different payload → **409**.
+**Headers:** optional `Idempotency-Key` (UUID). Same key + same payload → 200 existing detail (availability is **not** re-checked). Same key + different payload → **409**.
 
 **Body**
 
@@ -266,7 +266,7 @@ Each slot = one combo. Nested keys only when present (virtual: no room/equipment
 | `customer_profile_id` | yes | |
 | `service_id` | yes | |
 | `modality` | yes | `virtual` \| `in_person` |
-| `start` | yes | ISO datetime (from slot). `end` must equal `start` + assignment duration |
+| `start` | yes | ISO datetime (from slot). Must be in the future. `end` must equal `start` + assignment duration. Past → 400 `"Date cannot be in the past."` |
 | `end` | yes | |
 | `room_id` | in_person | Forbidden for virtual |
 | `equipment_id` | if room has bookable equipment | null when room has none; forbidden for virtual |
@@ -427,9 +427,11 @@ Cached ~10 min; invalidated on book/lifecycle.
 
 | Param | Notes |
 |---|---|
-| `start` | `YYYY-MM-DD` (default today UTC date) |
-| `end` | optional end date; if omitted use `granularity` |
-| `granularity` | default `week` — used when `end` omitted |
+| `start` | `YYYY-MM-DD` (default today UTC date). Junk / impossible date → 400 `"Invalid start date. Use YYYY-MM-DD."` |
+| `end` | optional end date; if omitted use `granularity`. Junk → 400 `"Invalid end date. Use YYYY-MM-DD."` End before start → 400 `"End date cannot be before start date."` |
+| `granularity` | default `week` — used when `end` omitted. Junk → 400 `"Invalid granularity. Use day, week, or month."` |
+
+Booked minutes / hours / appointment counts / utilization / bottleneck dependents count only **busy** statuses (`confirmed`, `checked_in`, `in_progress`). Cancelled, completed, and no-show are excluded.
 
 ### GET `…/operations/overview/`
 
@@ -790,6 +792,11 @@ Same contracts as rooms:
 | `specialty_id must hold a live non-doctor role mapped to this service.` | specialty_id has no live non-doctor hat on this service’s role reqs (incl. 0 reqs) |
 | `doctor_id matches more than one live doctor role.` | Person has two+ live `"doctor"`-in-name hats |
 | `Slot no longer available.` | Overlap / race on book/reschedule |
+| `Date cannot be in the past.` | Find Slots past `date`, or book/reschedule `start` before now |
+| `Invalid start date. Use YYYY-MM-DD.` | Operations `start` junk |
+| `Invalid end date. Use YYYY-MM-DD.` | Operations `end` junk |
+| `End date cannot be before start date.` | Operations `end` < `start` |
+| `Invalid granularity. Use day, week, or month.` | Operations or calendar junk `granularity` |
 | `equipment_id must belong to the selected room.` | Unit not on that room |
 | `Idempotency key was already used with a different payload.` | 409 |
 | `Cannot perform '…' from status '…'.` | Illegal lifecycle |
@@ -801,4 +808,4 @@ Same contracts as rooms:
 
 ---
 
-*Canonical FE + availability + scheduling contract. Replaces standalone `docs/scheduling.md` and `docs/availability.md`. Last updated: 2026-09-05.*
+*Canonical FE + availability + scheduling contract. Replaces standalone `docs/scheduling.md` and `docs/availability.md`. Last updated: 2026-09-16.*

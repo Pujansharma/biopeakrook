@@ -1,3 +1,5 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from appointments.mixins import CenterAppointmentsMixin
 from appointments.permissions import CenterAppointmentPermission
 from appointments.utils.operations import (
@@ -17,7 +19,10 @@ class OperationsMixin(CenterAppointmentsMixin):
     permission_classes = [CenterAppointmentPermission]
 
     def get_date_range(self):
-        return parse_operations_date_range(self.request.query_params)
+        try:
+            return parse_operations_date_range(self.request.query_params)
+        except DjangoValidationError as error:
+            self.raise_bad_request(error.messages[0])
 
     def build_cached_response(self, tab, builder):
         center = self.get_center()
