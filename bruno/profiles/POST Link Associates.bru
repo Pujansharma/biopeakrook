@@ -1,0 +1,37 @@
+meta {
+  name: POST Link Associates
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/profiles/{{customer_profile_id}}/link-associates/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "center_id": "{{center_id}}",
+    "add": [{ "id": "{{associate_id}}" }],
+    "remove": []
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Admin only. Link/unlink associates on a customer profile at a center.
+  
+  Body: center_id + add and/or remove arrays of { id: associate UUID }.
+  Omit empty remove or send []. Need at least one of add/remove with IDs.
+  
+  Env: customer_profile_id, center_id, associate_id. Auth: Login Phone Direct first.
+}

@@ -4,6 +4,7 @@ from accounts.associates.serializers import (
     AssociateSourceMixinSerializer,
     assignment_roles_representation,
 )
+from accounts.associates.utils.roles import assignment_for_center
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import (
     CustomerProfile,
@@ -301,11 +302,11 @@ class ExternalCustomerAssociateSerializer(
         ]
 
     def get_roles(self, instance):
-        assignment = getattr(instance, "current_center_assignment", None)
+        assignment = assignment_for_center(instance.associate, instance.center_id)
         return assignment_roles_representation(assignment)["roles"]
 
     def get_role_ids(self, instance):
-        assignment = getattr(instance, "current_center_assignment", None)
+        assignment = assignment_for_center(instance.associate, instance.center_id)
         return assignment_roles_representation(assignment)["role_ids"]
 
     def create(self, validated_data):

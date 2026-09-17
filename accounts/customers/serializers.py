@@ -8,6 +8,8 @@ from accounts.associates.serializers import (
     BaseAssociateSerializer,
     assignment_roles_representation,
 )
+from accounts.associates.utils.roles import assignment_for_center
+from accounts.utils.helper import dedupe_id_dicts, dedupe_ids
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer, BaseCenterSerializer
 from accounts.centers.utils.db import (
@@ -713,8 +715,8 @@ class CustomerAssociateAssignmentSerializer(BaseModelSerializer):
         customer_profile_id = validated_data.pop("customer_profile_id", None)
         created_by = validated_data.pop("created_by", None)
 
-        add_ids = validated_data.get("add", [])
-        remove_ids = validated_data.get("remove", [])
+        add_ids = dedupe_id_dicts(validated_data.get("add", []))
+        remove_ids = dedupe_id_dicts(validated_data.get("remove", []))
 
         if not center_id:
             raise serializers.ValidationError(
@@ -829,11 +831,11 @@ class CustomerAssociateSerializer(BaseModelSerializer):
         ]
 
     def get_roles(self, instance):
-        assignment = instance.current_center_assignment
+        assignment = assignment_for_center(instance.associate, instance.center_id)
         return assignment_roles_representation(assignment)["roles"]
 
     def get_role_ids(self, instance):
-        assignment = instance.current_center_assignment
+        assignment = assignment_for_center(instance.associate, instance.center_id)
         return assignment_roles_representation(assignment)["role_ids"]
 
     def to_representation(self, instance):
@@ -907,8 +909,8 @@ class CustomerCenterAssignmentSerializer(BaseModelSerializer):
     def create(self, validated_data):
         customer_profile_id = validated_data.pop("customer_profile_id")
         created_by = validated_data.pop("created_by")
-        add_center_ids = validated_data.get("add", [])
-        remove_center_ids = validated_data.get("remove", [])
+        add_center_ids = dedupe_ids(validated_data.get("add", []))
+        remove_center_ids = dedupe_ids(validated_data.get("remove", []))
 
         with transaction.atomic():
             if remove_center_ids:

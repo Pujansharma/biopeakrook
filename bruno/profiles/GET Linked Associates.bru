@@ -1,0 +1,26 @@
+meta {
+  name: GET Linked Associates
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/profiles/{{customer_profile_id}}/associates/?center_id={{center_id}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  center_id: {{center_id}}
+  ~role_id: {{role_id}}
+  ~search: 
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  List associates linked to profile. Optional center_id (or X-Center-ID wins),
+  role_id, search. Response includes roles / role_ids for that center.
+}
