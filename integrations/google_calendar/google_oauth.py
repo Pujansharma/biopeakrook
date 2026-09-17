@@ -2,6 +2,7 @@ from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
+from django.core import signing
 from django.core.exceptions import ImproperlyConfigured
 
 from core.utils.log import logger
@@ -16,14 +17,32 @@ USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 REQUEST_TIMEOUT = 10  # seconds
 
-# calendar.events grants create/update/delete/read on the connected calendar's events.
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
 
+FLOW_SHARED = "shared"
+FLOW_PERSONAL = "personal"
 
-def build_auth_url():
+OAUTH_STATE_SALT = "integrations.google_calendar.oauth_state"
+OAUTH_STATE_MAX_AGE = 600  # seconds - matches how long Google's own code stays valid
+
+
+def sign_oauth_state(flow: str, user_id: str | None = None):
+    # Signed so 'state' can't be tampered with on the round trip through Google
+    payload = {"flow": flow}
+    if user_id is not None:
+        payload["user_id"] = str(user_id)
+    return signing.dumps(payload, salt=OAUTH_STATE_SALT)
+
+
+def unsign_oauth_state(state: str):
+    # Raises signing.BadSignature/SignatureExpired on an invalid/expired state.
+    return signing.loads(state, salt=OAUTH_STATE_SALT, max_age=OAUTH_STATE_MAX_AGE)
+
+
+def build_auth_url(state: str):
     if not GOOGLE_CLIENT_ID or not GOOGLE_REDIRECT_URI:
         raise ImproperlyConfigured(
             "GOOGLE_CLIENT_ID / GOOGLE_REDIRECT_URI is not set, cannot build the "
@@ -36,6 +55,7 @@ def build_auth_url():
         "scope": " ".join(SCOPES),
         "access_type": "offline",  # required to receive a refresh_token
         "prompt": "consent",  # forces Google to issue a refresh_token every time
+        "state": state,
     }
     return f"{AUTH_URL}?{urlencode(params)}"
 

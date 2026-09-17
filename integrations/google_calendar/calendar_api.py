@@ -111,6 +111,33 @@ def patch_event(
     return response.json()
 
 
+def list_events(access_token: str, time_min: datetime, time_max: datetime):
+    # singleEvents=False keeps recurring events collapsed to their master item.
+    params = {
+        "timeMin": time_min.isoformat(),
+        "timeMax": time_max.isoformat(),
+        "singleEvents": "false",
+        "showDeleted": "false",
+        "maxResults": 250,
+    }
+    page_token = None
+    while True:
+        if page_token:
+            params["pageToken"] = page_token
+        response = requests.get(
+            EVENTS_URL,
+            params=params,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        yield from payload.get("items", [])
+        page_token = payload.get("nextPageToken")
+        if not page_token:
+            return
+
+
 def delete_event(access_token: str, event_id: str, participant_emails: list[str] | None = None):
     # 404/410 (event already gone) are treated as success, not an error.
     params = {"sendUpdates": "all"} if participant_emails else {}

@@ -33,18 +33,9 @@ def update_google_calendar_tokens(
     connection.save(update_fields=update_fields)
 
 
-def clear_google_calendar_tokens(connection):
-    connection.google_access_token = None
-    connection.google_refresh_token = None
-    connection.google_access_token_expires_at = None
-    connection.save(
-        update_fields=[
-            "google_access_token",
-            "google_refresh_token",
-            "google_access_token_expires_at",
-            "updated_at",
-        ]
-    )
+def deactivate_google_calendar_connection(connection):
+    connection.is_active = False
+    connection.save(update_fields=["is_active", "updated_at"])
 
 
 def revoke_stored_google_refresh_token(encrypted_refresh_token):

@@ -96,6 +96,7 @@ class AssociateAvailabilityBlock(BaseUUIDModel):
     effective_from = models.DateField(null=True, blank=True)
     effective_until = models.DateField(null=True, blank=True)
     reason = models.CharField(max_length=255, blank=True)
+    google_event_id = models.CharField(max_length=1024, blank=True, db_index=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

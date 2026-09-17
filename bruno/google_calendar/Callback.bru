@@ -12,6 +12,7 @@ get {
 
 params:query {
   ~code: {{google_oauth_code}}
+  ~state: {{google_oauth_state}}
 }
 
 headers {
@@ -24,13 +25,33 @@ settings {
 
 docs {
   Google redirects the staff member's browser here after consent - not
-  meant to be called directly. Forwards `code` unchanged to
-  ADMIN_FRONTEND_URL as a redirect, carried in the URL fragment (`#code=...`,
-  not a query string, so it's never sent to the server or logged); never
-  touches the database itself.
+  normally called directly, since the real flow is one browser round trip
+  (Connect.bru/PersonalConnect.bru's auth_url -> Google's consent screen ->
+  here -> ADMIN_FRONTEND_URL). This request lets you replay that last hop by
+  hand.
+
+  Unlike an earlier version of this flow, there is no separate /complete/
+  step anymore: this one view unsigns `state` (google_oauth.unsign_oauth_state)
+  to learn which flow started it (and, for the personal flow, which Biopeak
+  user - see PersonalConnect.bru), exchanges `code` with Google for real
+  tokens, fetches the connected account's email, and saves everything itself
+  - all before redirecting. It redirects to ADMIN_FRONTEND_URL with a plain
+  outcome flag: `#gcal_connected=1` on success, or `#gcal_error=<message>`
+  on any failure (denied consent, expired/tampered state, wrong account for
+  the shared flow, etc.) - never the raw code, never the tokens.
+
+  To test this directly rather than through a real browser round trip:
+  `state` must be a value this same server actually signed - copy it out of
+  Connect.bru's or PersonalConnect.bru's `auth_url` response (the `state=`
+  query param in that URL) within 10 minutes, and pair it with a fresh
+  `code` copied out of the browser's address bar right after approving
+  consent (codes are one-time-use, so a stale one only exercises the
+  "failed to exchange with Google" error path, not the happy path).
 
   Method: GET
   Path: /google-calendar/callback/
   Source: integrations.google_calendar.views.GoogleCalendarCallbackView
-  Auth: None (public).
+  Auth: None (public) - Google's redirect can't carry our JWT, which is
+  exactly why the personal flow's user identity has to ride inside the
+  signed `state` instead of request.user.
 }

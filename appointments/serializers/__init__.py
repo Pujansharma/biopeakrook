@@ -211,6 +211,7 @@ def create_associate_availability_block(
     effective_until,
     reason,
     is_active,
+    google_event_id="",
 ):
     return AssociateAvailabilityBlock.objects.create(
         center=center,
@@ -226,6 +227,7 @@ def create_associate_availability_block(
         effective_until=effective_until,
         reason=reason,
         is_active=is_active,
+        google_event_id=google_event_id,
     )
 
 

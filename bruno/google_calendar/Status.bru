@@ -27,6 +27,9 @@ docs {
   google_email - google_email is left populated after disconnect as a
   "connected as ___" record. Soft-off (is_active=false) is disconnected.
 
+  last_synced_at is null until Sync.bru has completed at least once for this
+  connection; it's set (not just "attempted") only on a successful sync.
+
   Method: GET
   Path: /google-calendar/
   Source: integrations.google_calendar.views.GoogleCalendarStatusView

@@ -255,3 +255,18 @@ def sync_appointment_with_google(appointment_id):
     if appointment is None:
         return "Appointment no longer exists"
     return apply_google_desired_state(appointment)
+
+
+def send_google_calendar_outbound_event(
+    connection, title, start, end, notes=None, event_id=None
+):
+    access_token = get_valid_access_token(connection)
+    event = calendar_api.insert_event(
+        access_token,
+        title=title,
+        start=start,
+        end=end,
+        notes=notes,
+        event_id=event_id,
+    )
+    return event["id"]
