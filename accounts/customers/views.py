@@ -1,4 +1,4 @@
-from django.db.models import Exists, OuterRef, Q, FilteredRelation, F, Subquery, Value
+from django.db.models import Exists, OuterRef, Q, F, Subquery, Value
 from django.db.models.functions import Coalesce, Concat
 from django.db.models.query import Prefetch
 from rest_framework.exceptions import NotFound
@@ -10,6 +10,7 @@ from accounts.associates.models import (
     AssociateCenterAssignmentRole,
 )
 from accounts.associates.serializers import BaseCenterAssociateSerializer
+from accounts.associates.utils.roles import associate_center_assignments_prefetch
 from accounts.centers.models import Center
 from accounts.centers.serializers import CustomerAvailableCenterSerializer
 from accounts.centers.utils.db import decrement_customer_count
@@ -311,9 +312,17 @@ class CustomerLinkAssociateView(BaseCreateAPIView):
     permission_classes = [IsAdminUser]
     serializer_class = CustomerAssociateAssignmentSerializer
 
+    def get_customer_profile(self):
+        return get_object_or_404(
+            CustomerProfile.objects.filter(),
+            "Customer profile not found",
+            pk=self.kwargs["pk"],
+        )
+
     def perform_create(self, serializer):
+        profile = self.get_customer_profile()
         serializer.save(
-            customer_profile_id=self.kwargs["pk"],
+            customer_profile_id=profile.pk,
             created_by=self.request.user,
         )
 
@@ -370,12 +379,6 @@ class CustomerAssociateListView(BaseListAPIView):
                     Value(" "),
                     F("associate__user__last_name"),
                 ),
-                current_center_assignment=FilteredRelation(
-                    "associate__center_assignments",
-                    condition=Q(
-                        associate__center_assignments__center=F("center")
-                    ),
-                ),
             )
             .filter(
                 search,
@@ -383,14 +386,11 @@ class CustomerAssociateListView(BaseListAPIView):
                 customer_profile_id=self.kwargs["pk"],
                 **filter_kwargs,
             )
-            .select_related(
-                "associate__user",
-                "current_center_assignment",
-            )
+            .select_related("associate__user")
             .prefetch_related(
                 "center",
                 "created_by",
-                "current_center_assignment__role_links__role",
+                associate_center_assignments_prefetch(),
             )
             .order_by("-created_at")
             .distinct()
@@ -441,9 +441,17 @@ class CustomerCenterLinkView(BaseCreateAPIView):
     permission_classes = [IsAdminUser | IsAssociateUser]
     serializer_class = CustomerCenterAssignmentSerializer
 
+    def get_customer_profile(self):
+        return get_object_or_404(
+            CustomerProfile.objects.filter(),
+            "Customer profile not found",
+            pk=self.kwargs["pk"],
+        )
+
     def perform_create(self, serializer):
+        profile = self.get_customer_profile()
         serializer.save(
-            customer_profile_id=self.kwargs["pk"],
+            customer_profile_id=profile.pk,
             created_by=self.request.user,
         )
 

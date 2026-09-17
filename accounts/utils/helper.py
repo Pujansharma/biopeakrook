@@ -49,3 +49,28 @@ def get_age_from_date_of_birth(date_of_birth):
     _date = arrow.get(date_of_birth).date()
     diff = (timezone.localdate() - _date).days // 365
     return diff
+
+
+def dedupe_ids(item_ids):
+    """Preserve order; drop duplicate IDs (Postgres ON CONFLICT batch safety)."""
+    seen = set()
+    unique_ids = []
+    for item_id in item_ids:
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        unique_ids.append(item_id)
+    return unique_ids
+
+
+def dedupe_id_dicts(items):
+    """Keep first dict per `id`."""
+    seen = set()
+    unique_items = []
+    for item in items:
+        item_id = item["id"]
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        unique_items.append(item)
+    return unique_items

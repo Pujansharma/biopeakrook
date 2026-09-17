@@ -1,7 +1,11 @@
 from django.db.models import Prefetch, Q
 from rest_framework import serializers
 
-from accounts.associates.models import AssociateCenterAssignmentRole, AssociateRole
+from accounts.associates.models import (
+    AssociateCenterAssignment,
+    AssociateCenterAssignmentRole,
+    AssociateRole,
+)
 
 
 def active_role_links_prefetch():
@@ -29,6 +33,26 @@ def assignment_active_roles(assignment):
         roles.append(link.role)
     assignment._assignment_active_roles = roles
     return roles
+
+
+def assignment_for_center(associate, center_id):
+    """Pick associate×center assignment from prefetched `center_assignments`."""
+    if associate is None or center_id is None:
+        return None
+    for assignment in associate.center_assignments.all():
+        if assignment.center_id == center_id:
+            return assignment
+    return None
+
+
+def associate_center_assignments_prefetch():
+    """Prefetch center assignments + active role links (safe w/o FilteredRelation)."""
+    return Prefetch(
+        "associate__center_assignments",
+        queryset=AssociateCenterAssignment.objects.prefetch_related(
+            active_role_links_prefetch()
+        ),
+    )
 
 
 def assignment_holds_role(assignment, role_id):

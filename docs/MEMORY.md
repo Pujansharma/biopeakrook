@@ -75,6 +75,8 @@ Pointers: appointments+availability → [`docs/appointments-frontend-api.md`](ap
 **API / tenancy**
 
 - Customer associate list: `X-Center-ID` present → exclusive center filter; `center_id` query only if header absent. Role join against each returned customer-assignment center; keep nested roles; no multi-center fan-out.
+- **Never** `FilteredRelation` + `prefetch_related` on that alias → Django `ValueError` 500. Prefetch `associate__center_assignments` + `active_role_links_prefetch`; resolve via `assignment_for_center(associate, center_id)`.
+- `POST .../link-associates/`: profile missing → 404; dedupe `add`/`remove` IDs before `bulk_create` (dup IDs → Postgres ON CONFLICT 500).
 - `Associate.centers_count` = all `AssociateCenterAssignment` rows (any active). Assignment mutations refresh via subquery; center delete bulk-updates before cascade.
 - Admin `GET`/`POST /associates/`: max-three center preview, no assignment flags. Create needs non-empty `add_centers`; each `is_admin` and/or `is_care_staff`; dup center UUID = last wins. Create `centers_count` may be stale — FE refetch.
 - Hours/closures write: `/centers/<uuid>/availability/operating-hours/` GET/PATCH bulk upsert; `/closures/` GET/POST + PATCH soft reopen. `CenterClosure.type`=`holiday`|`manual` + `reason`. Closures GET `.order_by("-date")` only. Availability URL `<uuid:center_id>` so resource `pk` no collide. Center calendar default `granularity=week`.

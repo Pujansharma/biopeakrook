@@ -18,6 +18,7 @@ from accounts.associates.utils.roles import (
     assignment_active_roles,
     resolve_center_roles,
 )
+from accounts.utils.helper import dedupe_ids
 from accounts.centers.models import Center
 from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.centers.utils.db import (
@@ -1268,8 +1269,8 @@ class AssociateProfileLinkSerializer(BaseSerializer):
                     }
                 )
 
-        attrs["add"] = add_ids
-        attrs["remove"] = remove_ids
+        attrs["add"] = dedupe_ids(add_ids)
+        attrs["remove"] = dedupe_ids(remove_ids)
         return attrs
 
     def create(self, validated_data):
