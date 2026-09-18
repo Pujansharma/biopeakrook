@@ -1,11 +1,12 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from django.conf import settings
 
 CALENDAR_ID = "primary"  # the primary calendar of whichever access_token is passed in
 EVENTS_URL = f"https://www.googleapis.com/calendar/v3/calendars/{CALENDAR_ID}/events"
+CHANNELS_STOP_URL = "https://www.googleapis.com/calendar/v3/channels/stop"
 REQUEST_TIMEOUT = 10
 
 
@@ -148,4 +149,36 @@ def delete_event(access_token: str, event_id: str, participant_emails: list[str]
         timeout=REQUEST_TIMEOUT,
     )
     if response.status_code not in (204, 404, 410):
+        response.raise_for_status()
+
+
+def watch_events(
+    access_token: str, channel_id: str, channel_token: str, address: str, ttl: timedelta,
+):
+    body = {
+        "id": channel_id,
+        "type": "web_hook",
+        "address": address,
+        "token": channel_token,
+        "params": {"ttl": str(int(ttl.total_seconds()))},
+    }
+    response = requests.post(
+        f"{EVENTS_URL}/watch",
+        json=body,
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def stop_channel(access_token: str, channel_id: str, resource_id: str):
+    # 404 (channel already expired/unknown to Google) is treated as success.
+    response = requests.post(
+        CHANNELS_STOP_URL,
+        json={"id": channel_id, "resourceId": resource_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code not in (204, 404):
         response.raise_for_status()

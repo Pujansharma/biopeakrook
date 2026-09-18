@@ -35,7 +35,17 @@ from integrations.google_calendar.db import (
     update_google_calendar_tokens,
 )
 from integrations.google_calendar.google_sync import GOOGLE_SYNC_ERRORS
-from integrations.google_calendar.utils import decrypt, encrypt, ensure_encryption_configured
+from integrations.google_calendar.utils import (
+    decrypt,
+    encrypt,
+    ensure_encryption_configured,
+)
+from integrations.google_calendar.webhook_channel import (
+    channel_token_is_valid,
+    ensure_watch_channel_active,
+    find_connection_for_watch_channel,
+    stop_watch_channel,
+)
 
 User = get_user_model()
 
@@ -163,6 +173,17 @@ def _persist_connection(user, google_email, tokens):
     return None
 
 
+def _start_personal_watch_channel(user):
+    connection = get_google_calendar_connection_for_user(user)
+    try:
+        ensure_watch_channel_active(connection)
+    except GOOGLE_SYNC_ERRORS as error:
+        logger.warning(
+            f"Google Calendar watch: failed to register a notification "
+            f"channel for user {user.pk}: {error}"
+        )
+
+
 def _complete_shared_connection(google_email: str):
     if not GOOGLE_CALENDAR_ID or google_email.lower() != GOOGLE_CALENDAR_ID.lower():
         return (
@@ -245,6 +266,8 @@ class GoogleCalendarCallbackView(BaseGenericAPIView):
 
         if error:
             return _frontend_redirect({"gcal_error": error})
+        if flow == google_oauth.FLOW_PERSONAL:
+            _start_personal_watch_channel(user)
         return _frontend_redirect({"gcal_connected": "1"})
 
 
@@ -279,6 +302,14 @@ class GoogleCalendarSyncView(BaseGenericAPIView):
         connection = get_google_calendar_connection_for_user(request.user)
         if not google_calendar_connection_is_connected(connection):
             self.raise_bad_request("Connect Google Calendar before syncing.")
+
+        try:
+            ensure_watch_channel_active(connection)
+        except GOOGLE_SYNC_ERRORS as error:
+            logger.warning(
+                f"Google Calendar watch: failed to (re)register a "
+                f"notification channel for user {request.user.pk}: {error}"
+            )
 
         try:
             summary = sync_google_events_to_availability_blocks(request.user, connection)
@@ -316,6 +347,8 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
                 "appointment sync across all centers. Only an active platform "
                 "admin or center admin can disconnect it."
             )
+
+        stop_watch_channel(connection)
 
         try:
             google_oauth.revoke_token(decrypt(connection.google_refresh_token))
@@ -402,3 +435,38 @@ class GoogleCalendarStatusView(BaseGenericAPIView):
                 "last_synced_at": last_synced_at,
             },
         )
+
+
+class GoogleCalendarWebhookView(BaseGenericAPIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, *args, **kwargs):
+        channel_id = request.headers.get("X-Goog-Channel-ID")
+        resource_id = request.headers.get("X-Goog-Resource-ID")
+        resource_state = request.headers.get("X-Goog-Resource-State")
+
+        connection = find_connection_for_watch_channel(channel_id, resource_id)
+        if connection is None or not channel_token_is_valid(
+            connection, request.headers.get("X-Goog-Channel-Token")
+        ):
+            logger.warning(
+                f"Google Calendar webhook: unrecognized or unverified "
+                f"channel {channel_id!r}."
+            )
+            return self.send_response("Ignored.")
+
+        if resource_state == "sync":
+            # Google's initial handshake when the channel is created, not a
+            # change notification, so nothing to sync yet.
+            return self.send_response("Channel confirmed.")
+
+        try:
+            sync_google_events_to_availability_blocks(connection.user, connection)
+        except GOOGLE_SYNC_ERRORS as error:
+            logger.warning(
+                f"Google Calendar webhook: sync failed for user "
+                f"{connection.pk}: {error}"
+            )
+
+        return self.send_response("Google Calendar webhook processed.")

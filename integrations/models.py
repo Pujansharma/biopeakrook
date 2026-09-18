@@ -26,6 +26,10 @@ class GoogleCalendarConnection(BaseModel):
     google_refresh_token = models.TextField(null=True, blank=True)
     google_access_token_expires_at = models.DateTimeField(null=True, blank=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
+    watch_channel_id = models.CharField(null=True, blank=True, db_index=True)
+    watch_resource_id = models.CharField(null=True, blank=True)
+    watch_channel_token = models.CharField(null=True, blank=True)
+    watch_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

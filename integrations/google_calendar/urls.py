@@ -10,4 +10,5 @@ urlpatterns = [
     path("refresh/", views.GoogleCalendarRefreshTokenView.as_view()),
     path("personal/connect/", views.GoogleCalendarPersonalConnectView.as_view()),
     path("sync/", views.GoogleCalendarSyncView.as_view()),
+    path("webhook/", views.GoogleCalendarWebhookView.as_view()),
 ]

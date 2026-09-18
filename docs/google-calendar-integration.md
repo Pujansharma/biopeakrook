@@ -14,7 +14,7 @@ hooks as WhatsApp), not inline on the request. See "Event sync
 
 **A second, separate feature lives in this same package: personal calendar
 connect + availability sync.** Any signed-in Admin or Associate can connect
-their *own* personal Google Calendar (not the shared organizer account
+their _own_ personal Google Calendar (not the shared organizer account
 above) from Settings, then pull their own busy events into Biopeak as
 `AssociateAvailabilityBlock` rows - so a break or recurring lunch added
 directly in someone's personal Google Calendar also blocks that time in
@@ -107,9 +107,11 @@ All under `integrations/google_calendar/`:
 | `tokens.py`                                           | The glue: given a `GoogleCalendarConnection`, hands back a token that's guaranteed to still be valid (refreshing it first if needed).                                                                                                                                                                              |
 | `db.py`                                               | Persists a refreshed access/refresh token onto the `GoogleCalendarConnection` row via `save(update_fields=...)` - only the columns that changed, not a full-row save.                                                                                                                                              |
 | `connections.py`                                      | Owner lookup: active `Admin` or `Associate` profile, the signed-in user's connection row, shared-organizer disconnect gate, `get_fixed_calendar_organizer()`.                                                                                                                                                      |
-| `views.py`                                            | The HTTP endpoints admin/associate staff (and Google's own redirect) hit: status, connect, callback, disconnect, refresh, personal/connect. `/callback/` alone does the whole token exchange + save for both connect flows now - see below.                                                                                                                                                                                             |
-| `urls.py`                                             | Routes those views under `/google-calendar/`.                                                                                                                                                                                                                                                                  |
-| `google_sync.py`                                      | Desired-state sync: match Google Calendar to the live `Appointment`. Called from the communication outbox worker (`process_google_outbox_message`), not from the book/cancel/reschedule request. See "Event sync (book/reschedule/cancel)" below.                                                                     |
+| `views.py`                                            | The HTTP endpoints admin/associate staff (and Google's own redirect) hit: status, connect, callback, disconnect, refresh, personal/connect. `/callback/` alone does the whole token exchange + save for both connect flows now - see below.                                                                        |
+| `urls.py`                                             | Routes those views under `/google-calendar/`.                                                                                                                                                                                                                                                                      |
+| `google_sync.py`                                      | Desired-state sync: match Google Calendar to the live `Appointment`. Called from the communication outbox worker (`process_google_outbox_message`), not from the book/cancel/reschedule request. See "Event sync (book/reschedule/cancel)" below.                                                                  |
+| `availability_sync.py`                                | Desired-state sync: match a personal calendar's busy events to that user's `AssociateAvailabilityBlock` rows. Called manually from `/sync/` and automatically from the webhook below. See "Personal calendar connect & availability sync" below.                                                                   |
+| `webhook_channel.py`                                  | Google push-notification channel lifecycle: register (`start_watch_channel`), stop (`stop_watch_channel`), self-heal/renew (`ensure_watch_channel_active`), and match an incoming notification to a connection. See "Personal calendar webhook (push notifications)" below.                                        |
 | `appointments/utils/emails.py` (outside this package) | Builds the formatted event `description` text (`build_appointment_confirmed_notes()`/`build_appointment_rescheduled_notes()`) - patient/service plus a modality-conditional clinic address or Meet-link note. See "Event description" below.                                                                       |
 
 Connection tokens live on `GoogleCalendarConnection` (`integrations/models.py`,
@@ -118,13 +120,13 @@ below.
 
 ## Connect/disconnect/refresh endpoints
 
-| Endpoint                              | Auth            | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /google-calendar/connect/`      | None (public)   | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). No body needed - see "Identity" below for why. The frontend navigates the browser there itself.                                                                                                                                                                                                                                                                                                                                                                            |
-| `GET /google-calendar/callback/`      | None (public)   | Google redirects the browser here after consent - and this one view does the entire rest of the exchange itself, no separate `/complete/` step. Unsigns `state` (`google_oauth.unsign_oauth_state()`, expecting `flow="shared"` - see "Routing two flows through one OAuth app" below) - redirects with `#gcal_error=Invalid Google Calendar connection attempt.` if it doesn't decode or has expired (10 minutes); `#gcal_error=...was cancelled or failed.` if consent was denied (no code). Only then exchanges the code with Google and fetches the connected account's email - redirects with `#gcal_error=This is not the shared Google Calendar account used for appointment sync...` unless that email case-insensitively equals `settings.GOOGLE_CALENDAR_ID`. Only then does it look up the active `User` whose login email matches **and** who has an active platform `Admin` or `Associate` profile, and saves the tokens onto that user's `GoogleCalendarConnection` (ORM-evict any other connection that stale-held the same `google_email`, then revoke those copied grants after commit). Unique-email race: if this user is already connected as that email, treat it as success (the one-time `code` is already spent); else retry persist once; else redirect with an error flag. On success, redirects to `ADMIN_FRONTEND_URL/#gcal_connected=1` - the frontend learns `google_email` afterwards from `GET /google-calendar/`, not from this redirect. Raises a config error (`ImproperlyConfigured`) instead of redirecting if `ADMIN_FRONTEND_URL` isn't set. |
-| `DELETE /google-calendar/disconnect/` | Admin or Associate (JWT) | Revokes the token with Google, then flips the signed-in user's own `GoogleCalendarConnection.is_active` to `False` - `google_email`/`google_access_token`/`google_refresh_token`/`google_access_token_expires_at`/`last_synced_at` are all left exactly as they were, as a record of the last connection. Check `is_active` **and** `google_refresh_token` (i.e. `is_connected`) to know if actually still connected, never `google_refresh_token` alone. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), disconnecting kills sync for every center - platform `Admin` may disconnect; an associate must be `is_active` **and** hold `is_admin=True` on at least one active center assignment - 403 otherwise. Reconnecting the same account (via `/connect/` + `/callback/` again) sets `is_active` back to `True` and restores live tokens. |
-| `POST /google-calendar/refresh/`      | Admin or Associate (JWT) | Forces a refresh of the signed-in user's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Requires `is_active` and a live `google_refresh_token` (same connected test as status). Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_google_calendar_tokens()`. |
-| `GET /google-calendar/`               | Admin or Associate (JWT) | Returns `{"data": {"google_email": "...", "is_connected": true/false}}` for the signed-in user's `GoogleCalendarConnection` - `is_connected` is `connection.is_active` **and** `bool(connection.google_refresh_token)`, not just whether `google_email` is set (see the "last connected as \_\_\_" note above). Soft-off (`is_active=False`) matches `get_fixed_calendar_organizer()` skipping that row. Never exposes the token columns themselves. |
+| Endpoint                              | Auth                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /google-calendar/connect/`      | None (public)            | Returns Google's consent-screen URL as JSON (`{"data": {"auth_url": "..."}}`). No body needed - see "Identity" below for why. The frontend navigates the browser there itself.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `GET /google-calendar/callback/`      | None (public)            | Google redirects the browser here after consent - and this one view does the entire rest of the exchange itself, no separate `/complete/` step. Unsigns `state` (`google_oauth.unsign_oauth_state()`, expecting `flow="shared"` - see "Routing two flows through one OAuth app" below) - redirects with `#gcal_error=Invalid Google Calendar connection attempt.` if it doesn't decode or has expired (10 minutes); `#gcal_error=...was cancelled or failed.` if consent was denied (no code). Only then exchanges the code with Google and fetches the connected account's email - redirects with `#gcal_error=This is not the shared Google Calendar account used for appointment sync...` unless that email case-insensitively equals `settings.GOOGLE_CALENDAR_ID`. Only then does it look up the active `User` whose login email matches **and** who has an active platform `Admin` or `Associate` profile, and saves the tokens onto that user's `GoogleCalendarConnection` (ORM-evict any other connection that stale-held the same `google_email`, then revoke those copied grants after commit). Unique-email race: if this user is already connected as that email, treat it as success (the one-time `code` is already spent); else retry persist once; else redirect with an error flag. On success, redirects to `ADMIN_FRONTEND_URL/#gcal_connected=1` - the frontend learns `google_email` afterwards from `GET /google-calendar/`, not from this redirect. Raises a config error (`ImproperlyConfigured`) instead of redirecting if `ADMIN_FRONTEND_URL` isn't set. |
+| `DELETE /google-calendar/disconnect/` | Admin or Associate (JWT) | Revokes the token with Google, then flips the signed-in user's own `GoogleCalendarConnection.is_active` to `False` - `google_email`/`google_access_token`/`google_refresh_token`/`google_access_token_expires_at`/`last_synced_at` are all left exactly as they were, as a record of the last connection. Check `is_active` **and** `google_refresh_token` (i.e. `is_connected`) to know if actually still connected, never `google_refresh_token` alone. If the caller is the fixed shared calendar organizer (`google_email == settings.GOOGLE_CALENDAR_ID`), disconnecting kills sync for every center - platform `Admin` may disconnect; an associate must be `is_active` **and** hold `is_admin=True` on at least one active center assignment - 403 otherwise. Reconnecting the same account (via `/connect/` + `/callback/` again) sets `is_active` back to `True` and restores live tokens.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `POST /google-calendar/refresh/`      | Admin or Associate (JWT) | Forces a refresh of the signed-in user's own tokens right now via `google_oauth.refresh_access_token()`, regardless of whether the stored access token has actually expired - unlike the lazy, only-if-expired refresh `get_valid_access_token()` does internally before every Calendar API call. Requires `is_active` and a live `google_refresh_token` (same connected test as status). Saves the new `access_token`/`expires_at` (and `refresh_token`, if Google rotates it) via `update_google_calendar_tokens()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `GET /google-calendar/`               | Admin or Associate (JWT) | Returns `{"data": {"google_email": "...", "is_connected": true/false}}` for the signed-in user's `GoogleCalendarConnection` - `is_connected` is `connection.is_active` **and** `bool(connection.google_refresh_token)`, not just whether `google_email` is set (see the "last connected as \_\_\_" note above). Soft-off (`is_active=False`) matches `get_fixed_calendar_organizer()` skipping that row. Never exposes the token columns themselves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 **Why `/connect/` doesn't redirect directly:** the callback (`/callback/`) is a
 plain browser navigation triggered by Google - it can't carry our
@@ -164,7 +166,7 @@ configured shared account instead."). This is not a per-user "connect your
 own calendar" flow; only the one fixed shared account may ever hold tokens
 through this endpoint. Only past that check does it look up the `User`
 whose **login** email (`User.email`) matches that same email, requiring
-`User.is_active` **and** an active platform `Admin` or `Associate` profile
+`User.is_active`**and** an active platform`Admin`or`Associate` profile
 (`#gcal_error=No active Biopeak admin or staff account uses this Google
 account's email..." otherwise) - `GoogleCalendarConnection.google_email`
 (the "you're connected as \_\_\_" column) is a separate field that gets set
@@ -184,13 +186,14 @@ nonce to guard against being triggered on someone else's behalf, and a
 valid `code` can only exist if someone actually completed Google's own
 consent screen for our registered `client_id` - Google's own
 client-secret-backed exchange (`exchange_code()`) already guarantees that.
-This app *does* use `state` (see "Routing two flows through one OAuth app"
+This app _does_ use `state` (see "Routing two flows through one OAuth app"
 below), primarily to tell the shared and personal connect flows apart, and
+
 - for the personal flow specifically - to carry the initiating user's id
-through Google and back with tamper-proof integrity (since that request has
-no `request.user` of its own). It's still not "was this `code` used within
-N minutes of a `/connect/` call," which isn't a meaningful security
-boundary here.
+  through Google and back with tamper-proof integrity (since that request has
+  no `request.user` of its own). It's still not "was this `code` used within
+  N minutes of a `/connect/` call," which isn't a meaningful security
+  boundary here.
 
 **Why the redirect never carries the connected email:** URL fragments and
 query strings both end up in browser history, but query strings additionally
@@ -216,27 +219,32 @@ google columns, then drops those Associate columns.
 
 ### `GoogleCalendarConnection` (`integrations/models.py`)
 
-One row per `User`. For the *shared* flow specifically, only the one login
+One row per `User`. For the _shared_ flow specifically, only the one login
 whose email matches `settings.GOOGLE_CALENDAR_ID` will ever have tokens
 populated that way - `/callback/` rejects any other Google account for
-that flow (see "Identity" above). The *personal* flow (see "Personal
+that flow (see "Identity" above). The _personal_ flow (see "Personal
 calendar connect & availability sync" below) deliberately populates this
 same table for any staff login that connects their own account, so in
 practice this table does hold one row per connected staff member overall -
 just not through the shared flow's endpoint.
 
-| Column                           | Type                   | What it stores                                                         | Why we need it                                                                                                                                               |
-| -------------------------------- | ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `user`                           | OneToOne `User` (PK)   | The Biopeak login that owns this connection (`Admin` or `Associate`)   | Either account type can hold the shared calendar tokens. Distinct from center-admin `AssociateCenterAssignment.is_admin`.                                    |
-| `google_email`                   | Email (optional)       | The connected Google account's email, e.g. `care@biopeak.health` (should match `settings.GOOGLE_CALENDAR_ID`) | Shown in the UI as "Connected as \_\_\_". Distinct from `user.email` (the login email) - this is the _connected Google_ account, which may differ.           |
-| `google_access_token`            | Text (optional)        | An encrypted, short-lived Google access key (expires in about an hour) | Needed to make Google Calendar API calls on the owner's behalf. Encrypted before saving - never stored as plain text.                                        |
-| `google_refresh_token`           | Text (optional)        | An encrypted, long-lived Google key that doesn't expire on its own     | Used to get a new `google_access_token` automatically once the old one expires, without asking the owner to reconnect. Encrypted before saving.              |
-| `google_access_token_expires_at` | Date + time (optional) | When `google_access_token` stops working                               | Lets the code check "has this expired?" and refresh it first if so.                                                                                          |
-| `last_synced_at`                 | Date + time (optional) | When `POST /google-calendar/sync/` last *completed successfully* for this connection | Drives the "Last synced ___" label in Settings; null means never synced (or every attempt so far has failed). Personal-connect-only in practice - the shared organizer account never calls `/sync/`. |
+| Column                           | Type                   | What it stores                                                                                                | Why we need it                                                                                                                                                                                                                                  |
+| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user`                           | OneToOne `User` (PK)   | The Biopeak login that owns this connection (`Admin` or `Associate`)                                          | Either account type can hold the shared calendar tokens. Distinct from center-admin `AssociateCenterAssignment.is_admin`.                                                                                                                       |
+| `google_email`                   | Email (optional)       | The connected Google account's email, e.g. `care@biopeak.health` (should match `settings.GOOGLE_CALENDAR_ID`) | Shown in the UI as "Connected as \_\_\_". Distinct from `user.email` (the login email) - this is the _connected Google_ account, which may differ.                                                                                              |
+| `google_access_token`            | Text (optional)        | An encrypted, short-lived Google access key (expires in about an hour)                                        | Needed to make Google Calendar API calls on the owner's behalf. Encrypted before saving - never stored as plain text.                                                                                                                           |
+| `google_refresh_token`           | Text (optional)        | An encrypted, long-lived Google key that doesn't expire on its own                                            | Used to get a new `google_access_token` automatically once the old one expires, without asking the owner to reconnect. Encrypted before saving.                                                                                                 |
+| `google_access_token_expires_at` | Date + time (optional) | When `google_access_token` stops working                                                                      | Lets the code check "has this expired?" and refresh it first if so.                                                                                                                                                                             |
+| `last_synced_at`                 | Date + time (optional) | When `POST /google-calendar/sync/` last _completed successfully_ for this connection                          | Drives the "Last synced \_\_\_" label in Settings; null means never synced (or every attempt so far has failed). Personal-connect-only in practice - the shared organizer account never calls `/sync/`.                                         |
+| `watch_channel_id`               | String (optional)      | Our own random id (`uuid.uuid4()`) for the active Google push-notification channel                            | Identifies which channel a `POST /google-calendar/webhook/` call is about; also what we hand back to Google's `channels.stop` on disconnect. Indexed - the webhook looks connections up by this.                                                |
+| `watch_resource_id`              | String (optional)      | Google's own id for the watched calendar resource, returned by `events.watch`                                 | Google requires both `id` (channel id) and `resourceId` together to identify/stop a channel - neither alone is enough.                                                                                                                          |
+| `watch_channel_token`            | String (optional)      | A random secret (`secrets.token_urlsafe(32)`) generated when the channel is created                           | Echoed back by Google on every notification (`X-Goog-Channel-Token`) - lets the webhook verify a request is really about _this_ channel, not a guessed id. Not a Google credential, so unlike the OAuth tokens above it's stored in plain text. |
+| `watch_expires_at`               | Date + time (optional) | When the current channel stops sending notifications                                                          | Google calendar watch channels aren't renewable in place - a new one is created ahead of this and the old one stopped, see "Personal calendar webhook" below.                                                                                   |
 
-All four token/email columns are optional (nullable); `last_synced_at` is
-too, and is unrelated to whether the connection itself is still live (that's
-`is_active` + `google_refresh_token`, as above).
+All four token/email columns are optional (nullable); `last_synced_at` and
+the four `watch_*` columns are too, and none of them are what decides
+whether the connection itself is still live (that's `is_active` +
+`google_refresh_token`, as above).
 
 Separately, `AssociateAvailabilityBlock` (`appointments/models.py`) carries
 a `google_event_id` column (blank for anything created through the regular
@@ -249,6 +257,7 @@ as everywhere else in this codebase. `google_email` and the tokens are
 deliberately left in place as a record of the last-connected account (see
 "Why `/disconnect/` ..." above for why anything checking "is this user
 connected" must test `connection.is_active` **and** `google_refresh_token`
+
 - i.e. `is_connected` - not `google_email` or the presence of a token alone).
 
 **Uniqueness:** `google_email` must be unique, case-insensitively -
@@ -307,9 +316,13 @@ _hosts_ the event is a separate question from who's invited, and isn't tied
 to the assigned associates at all - see "Picking which calendar hosts the
 event" below.
 
-**Also intentionally left out:** no `sync_token` / `watch_channel_id` /
-`watch_channel_expiration` columns - those are for a "Google notifies us
-when something changes" feature that isn't built yet.
+**`watch_channel_id` / `watch_resource_id` / `watch_channel_token` /
+`watch_expires_at`** on `GoogleCalendarConnection` back the push-notification
+webhook - see "Personal calendar webhook (push notifications)" below.
+**Still intentionally left out:** no `sync_token` column - the webhook only
+triggers a re-run of the existing full-window `sync_google_events_to_availability_blocks()`,
+it doesn't do an incremental `events.list` fetch. That's a possible later
+efficiency improvement, not required for correctness (see that section).
 
 ## Event sync (book/reschedule/cancel)
 
@@ -461,14 +474,14 @@ also blocks that time here - without anyone re-entering it by hand.
 `GoogleCalendarConnection` row (1:1 `User`) - there's no second table, and
 both flows are completed by the same `GoogleCalendarCallbackView.get()`
 (see "Routing two flows through one OAuth app" below for how it tells them
-apart). Where they differ is *which* user the tokens save onto and how
+apart). Where they differ is _which_ user the tokens save onto and how
 that's checked: the shared flow resolves the owning `User` purely by
 matching the connected account's email against `settings.GOOGLE_CALENDAR_ID`
 then `User.email` (`_complete_shared_connection()`) - the caller of
 `/connect/` is never even authenticated, so there's no "caller" to compare
 against. The personal flow instead always saves onto whichever user's id
 was signed into `state` at `/personal/connect/` time
-(`_complete_personal_connection()`, since that request *is* authenticated -
+(`_complete_personal_connection()`, since that request _is_ authenticated -
 see "Routing two flows through one OAuth app" below) - but it then requires
 the connected Google account's own email to case-insensitively match that
 same user's `User.email` (their Biopeak login), rejecting the connection
@@ -483,15 +496,16 @@ email cannot use this feature to connect it (they'd need a Biopeak login
 that uses that same email). It's also rejected outright if the connected
 account is `GOOGLE_CALENDAR_ID` itself (redirects with an error flag so a
 stray personal-connect click can never steal the shared organizer's tokens
+
 - see "Identity" above for why the eviction logic itself is otherwise
-generic). `GOOGLE_CALENDAR_STAFF_PERMISSION` (`IsAdminUser | IsAssociateUser`)
-gates `/personal/connect/`, unlike the public shared-flow `/connect/`;
-`/callback/` itself stays public either way, since it's Google calling, not
-the frontend.
+  generic). `GOOGLE_CALENDAR_STAFF_PERMISSION` (`IsAdminUser | IsAssociateUser`)
+  gates `/personal/connect/`, unlike the public shared-flow `/connect/`;
+  `/callback/` itself stays public either way, since it's Google calling, not
+  the frontend.
 
 **Scope.** Both flows request the same `google_oauth.SCOPES`
 (`calendar.events` - full read/write, plus `userinfo.email`). The
-personal-calendar sync code itself only ever *reads* (see `availability_sync.py`
+personal-calendar sync code itself only ever _reads_ (see `availability_sync.py`
 below) - it doesn't use the write half of this scope today - but it's
 granted upfront anyway, so a future personal-calendar write feature (e.g.
 mirroring an associate's own Biopeak appointments onto their personal
@@ -504,7 +518,7 @@ Google OAuth client and the same registered redirect URI
 (`GOOGLE_REDIRECT_URI`), so `/callback/` can't tell them apart from the URL
 alone - and for the personal flow specifically, `/callback/` also has no
 `request.user` of its own (it's Google calling, not an authenticated
-frontend request) to know *whose* tokens these are. Both problems are
+frontend request) to know _whose_ tokens these are. Both problems are
 solved the same way: `build_auth_url()` takes a `state` argument built by
 `google_oauth.sign_oauth_state(flow, user_id=None)` - `{"flow": "shared"}`
 for `/connect/`, or `{"flow": "personal", "user_id": "<caller's own id>"}`
@@ -525,12 +539,12 @@ exchanged twice, which is where that guarantee actually needs to live.
 
 **Endpoints:**
 
-| Endpoint                                  | Auth            | What it does                                                                                                                                                                       |
-| ------------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /google-calendar/personal/connect/`  | Admin or Associate (JWT) | Returns `{"data": {"auth_url": "..."}}` with `state` signed as `{"flow": "personal", "user_id": <caller's id>}`. Same scope as the shared flow (see "Scope" above). `/callback/` (shared by both flows) does the rest - see "How it works" above. |
-| `POST /google-calendar/sync/`              | Admin or Associate (JWT) | Runs the sync described below for the caller. 400s if not connected. |
-| `GET /google-calendar/`                    | Admin or Associate (JWT) | Same status endpoint as the shared flow (it's per-user already) - now also returns `last_synced_at`. |
-| `DELETE /google-calendar/disconnect/`, `POST /google-calendar/refresh/` | Admin or Associate (JWT) | Unchanged, already per-signed-in-user - reused as-is for a personal connection. |
+| Endpoint                                                                | Auth                     | What it does                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /google-calendar/personal/connect/`                               | Admin or Associate (JWT) | Returns `{"data": {"auth_url": "..."}}` with `state` signed as `{"flow": "personal", "user_id": <caller's id>}`. Same scope as the shared flow (see "Scope" above). `/callback/` (shared by both flows) does the rest - see "How it works" above. |
+| `POST /google-calendar/sync/`                                           | Admin or Associate (JWT) | Runs the sync described below for the caller. 400s if not connected.                                                                                                                                                                              |
+| `GET /google-calendar/`                                                 | Admin or Associate (JWT) | Same status endpoint as the shared flow (it's per-user already) - now also returns `last_synced_at`.                                                                                                                                              |
+| `DELETE /google-calendar/disconnect/`, `POST /google-calendar/refresh/` | Admin or Associate (JWT) | Unchanged, already per-signed-in-user - reused as-is for a personal connection.                                                                                                                                                                   |
 
 **What counts as "busy."** `integrations/google_calendar/availability_sync.py`
 calls `calendar_api.list_events()` (`events.list` with `singleEvents=false`,
@@ -609,6 +623,96 @@ events against their previously-imported rows, per Google event id:
 
 `GoogleCalendarConnection.last_synced_at` is set only after a sync actually
 completes successfully - not on every click, and not on a failed one.
+
+## Personal calendar webhook (push notifications)
+
+Everything above ("What counts as busy", re-syncing) still describes the
+actual diffing logic - `sync_google_events_to_availability_blocks()` is
+unchanged. This section is only about _what triggers_ that function: instead
+of relying solely on someone clicking `POST /sync/`, Google can call us the
+moment a personal calendar actually changes, so a lunch break or leave added
+directly in someone's own Google Calendar shows up as a Biopeak block within
+moments - not whenever that person (or a scheduled job) next happens to hit
+`/sync/`.
+
+**Registering a channel.** Right after a personal connect succeeds
+(`GoogleCalendarCallbackView.get()`, `flow == FLOW_PERSONAL`), and again on
+every `POST /google-calendar/sync/` call as a self-heal,
+`ensure_watch_channel_active()` (`integrations/google_calendar/webhook_channel.py`)
+checks whether the connection's channel is missing or expiring within
+`RENEWAL_THRESHOLD` (1 day) and, if so, calls `events.watch` on Google's
+Calendar API (`calendar_api.watch_events()`) with a fresh random channel id
+(`uuid.uuid4()`) and a fresh random channel token (`secrets.token_urlsafe(32)`),
+asking Google to POST to `BE_SERVICE_BASE_URL` + `/google-calendar/webhook/`
+whenever that calendar changes. Google's response (`resourceId`, and the
+`expiration` it actually granted - which can be shorter than the
+`WATCH_TTL` requested) is persisted onto the four `watch_*` columns (see
+"Database columns" above). **This is entirely best-effort** - a failure here
+is logged and swallowed (`GOOGLE_SYNC_ERRORS`), never surfaced as a
+connect/sync failure, since the connection is still fully usable through
+manual `/sync/` even with no channel registered at all. If
+`BE_SERVICE_BASE_URL` isn't set, channel registration is
+skipped outright (`google_calendar_webhook_configured()`) - same
+"unconfigured means proceed unsynced" pattern as `GOOGLE_CALENDAR_ID`
+elsewhere in this integration.
+
+**The shared organizer never gets a channel.** Nothing reads busy time back
+from `settings.GOOGLE_CALENDAR_ID`'s own calendar (it's the one-way
+Biopeak→Google direction described above `Personal calendar connect &
+availability sync`), so `personal_connections_needing_watch_renewal()`
+explicitly excludes whichever connection holds that email.
+
+**Renewal.** Google Calendar watch channels aren't renewable in place - a
+new channel has to be created and the old one stopped. `uv run manage.py
+renew_google_calendar_watch_channels` (same style as
+`process_communication_outbox`) should run on a daily schedule; it calls
+`ensure_watch_channel_active()` for every personal connection whose channel
+is missing or expires within a day. Even without that command running, a
+channel gets renewed lazily the next time that user hits `POST /sync/` -
+the scheduled command just means it happens without anyone needing to.
+
+**Receiving a notification.** `POST /google-calendar/webhook/`
+(`GoogleCalendarWebhookView`, public - Google is calling, not an
+authenticated frontend request) reads four headers Google sends, no body:
+`X-Goog-Channel-ID`, `X-Goog-Resource-ID`, `X-Goog-Channel-Token`,
+`X-Goog-Resource-State`. It looks up an active `GoogleCalendarConnection` by
+channel id + resource id (`find_connection_for_watch_channel()`) and checks
+the channel token matches (`channel_token_is_valid()`, constant-time
+compare) - an unrecognized channel or a token mismatch is logged and
+ignored, not rejected with an error status. `X-Goog-Resource-State: sync` is
+Google's one-time handshake right when the channel is first created, not a
+real change - it's a no-op. Any other state (`exists`, the only other value
+Calendar's `events.watch` sends) means "something on this calendar changed,
+go look" - it re-runs the exact same
+`sync_google_events_to_availability_blocks()` that `POST /sync/` calls
+manually, for that connection's own user. **This endpoint always answers
+200**, even when the channel is unrecognized or the sync itself fails
+(`GOOGLE_SYNC_ERRORS`, logged) - Google retries a non-2xx response with
+backoff and can eventually stop a channel that keeps failing, which would be
+worse than silently no-op'ing one bad notification.
+
+**Notifications carry no event data.** Unlike, say, a WhatsApp status
+webhook, Google's Calendar push notification is deliberately a bare "go
+check" signal - it never says _what_ changed. That's why the webhook calls
+the same full-window sync function `/sync/` uses rather than trying to patch
+one event: there's nothing in the notification to patch with. A `sync_token`-based
+incremental fetch (see "Database columns" above) would still call
+`events.list`, just with a narrower diff to compute - a possible later
+optimization, not a correctness requirement today.
+
+**Disconnecting stops the channel.** `DELETE /google-calendar/disconnect/`
+calls `stop_watch_channel()` before revoking the OAuth grant, which calls
+Google's `channels.stop` and clears all four `watch_*` columns. Same
+best-effort philosophy as everywhere else here: if Google can't be reached,
+the columns are still cleared locally (so a stale channel id can never
+falsely match a future notification) and disconnect proceeds regardless -
+an unstopped channel simply expires on Google's side on its own.
+
+**Endpoint:**
+
+| Endpoint                         | Auth          | What it does                                                                                                                                                                                  |
+| -------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /google-calendar/webhook/` | None (public) | Google's push-notification callback. Verified via channel id + resource id + channel token match, not JWT. Always responds 200. See above for what it does with each `X-Goog-Resource-State`. |
 
 ## Required `.env` values
 

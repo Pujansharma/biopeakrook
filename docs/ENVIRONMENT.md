@@ -167,6 +167,20 @@ one with:
 uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
+`BE_SERVICE_BASE_URL` is this backend's own public HTTPS URL
+(e.g. `https://api.biopeak.com`), used to tell Google where to POST
+push notifications for a connected personal calendar - see "Personal
+calendar webhook (push notifications)" in `docs/google-calendar-integration.md`.
+Google requires this to be a publicly reachable HTTPS address it can verify
+domain ownership for; a bare `localhost`/`127.0.0.1` URL won't work; leave
+this unset in development (or point it at a tunnel like ngrok) to skip
+channel registration entirely rather than failing:
+
+```env
+STG_BE_SERVICE_BASE_URL=https://staging-api.yourdomain.com
+PRD_BE_SERVICE_BASE_URL=https://api.yourdomain.com
+```
+
 If it ever leaks, treat it like a leaked password: rotate it and have every
 connected staff member reconnect their calendar. If unset, `_get_fernet()`
 (`integrations/google_calendar/utils.py`) raises `ImproperlyConfigured` the
@@ -342,10 +356,10 @@ Same keys with `STG_` / `PRD_` prefixes.
 Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language.
 Templates use **named** body variables. Backend sends `parameter_name` + `text`.
 
-| Template | Named params |
-|---|---|
+| Template                | Named params                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
 | confirmed / rescheduled | `patient_name`, `appointment_date`, `appointment_time`, `service_name`, `clinic_address` |
-| cancelled | `patient_name`, `appointment_date`, `appointment_time`, `service_name` |
+| cancelled               | `patient_name`, `appointment_date`, `appointment_time`, `service_name`                   |
 
 `clinic_address` value format: `{center.name}, {address lines/city/state/pincode}`.
 
@@ -364,10 +378,10 @@ Staging / production: `STG_` / `PRD_` prefix on the queue URL. Set `AWS_REGION` 
 
 Not in `deploy-aws.yml` (image/service only).
 
-| Trigger | Command | Purpose |
-|---|---|---|
-| SQS wake (on outbox insert) | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync |
-| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh` | Retry outbox (attempt 2) + drain exception scans |
+| Trigger                        | Command                                         | Purpose                                          |
+| ------------------------------ | ----------------------------------------------- | ------------------------------------------------ |
+| SQS wake (on outbox insert)    | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync   |
+| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh`                  | Retry outbox (attempt 2) + drain exception scans |
 
 Cap concurrent ECS RunTasks at 1 for the wake consumer. Sweep script:
 

@@ -21,12 +21,19 @@ vars:pre-request {
   diagnostics_slot_datetime: 2026-08-15T06:00:00
   diagnostics_request_id: 
   diagnostics_test_id: 12345
-  diagnostics_idempotency_key: 
+  diagnostics_idempotency_key:
+  gcal_webhook_channel_id:
+  gcal_webhook_resource_id:
+  gcal_webhook_channel_token:
 }
 
 script:pre-request {
   const url = String(req.getUrl() || '');
-  if (url.includes('/webhooks/') || url.includes('/google-calendar/callback')) {
+  if (
+    url.includes('/webhooks/')
+    || url.includes('/google-calendar/callback')
+    || url.includes('/google-calendar/webhook')
+  ) {
     return;
   }
   const token =
@@ -43,5 +50,6 @@ docs {
   Biopeak Nexus API — synced incrementally from Django.
   Auth: collection pre-request sets Authorization from env/collection access_token
   (skips empty runtime var — avoids 401 "Authorization header must contain two space-delimited values").
-  Run Auth → Login Phone Direct first. Webhooks + Google callback skip JWT.
+  Run Auth → Login Phone Direct first. Webhooks + Google callback + Google
+  Calendar webhook skip JWT.
 }
