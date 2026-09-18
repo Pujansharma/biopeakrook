@@ -41,7 +41,6 @@ from integrations.google_calendar.utils import (
     ensure_encryption_configured,
 )
 from integrations.google_calendar.webhook_channel import (
-    channel_token_is_valid,
     ensure_watch_channel_active,
     find_connection_for_watch_channel,
     stop_watch_channel,
@@ -447,12 +446,9 @@ class GoogleCalendarWebhookView(BaseGenericAPIView):
         resource_state = request.headers.get("X-Goog-Resource-State")
 
         connection = find_connection_for_watch_channel(channel_id, resource_id)
-        if connection is None or not channel_token_is_valid(
-            connection, request.headers.get("X-Goog-Channel-Token")
-        ):
+        if connection is None:
             logger.warning(
-                f"Google Calendar webhook: unrecognized or unverified "
-                f"channel {channel_id!r}."
+                f"Google Calendar webhook: unrecognized channel {channel_id!r}."
             )
             return self.send_response("Ignored.")
 

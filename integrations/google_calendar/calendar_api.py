@@ -153,13 +153,12 @@ def delete_event(access_token: str, event_id: str, participant_emails: list[str]
 
 
 def watch_events(
-    access_token: str, channel_id: str, channel_token: str, address: str, ttl: timedelta,
+    access_token: str, channel_id: str, address: str, ttl: timedelta,
 ):
     body = {
         "id": channel_id,
         "type": "web_hook",
         "address": address,
-        "token": channel_token,
         "params": {"ttl": str(int(ttl.total_seconds()))},
     }
     response = requests.post(

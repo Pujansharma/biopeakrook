@@ -228,21 +228,20 @@ same table for any staff login that connects their own account, so in
 practice this table does hold one row per connected staff member overall -
 just not through the shared flow's endpoint.
 
-| Column                           | Type                   | What it stores                                                                                                | Why we need it                                                                                                                                                                                                                                  |
-| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `user`                           | OneToOne `User` (PK)   | The Biopeak login that owns this connection (`Admin` or `Associate`)                                          | Either account type can hold the shared calendar tokens. Distinct from center-admin `AssociateCenterAssignment.is_admin`.                                                                                                                       |
-| `google_email`                   | Email (optional)       | The connected Google account's email, e.g. `care@biopeak.health` (should match `settings.GOOGLE_CALENDAR_ID`) | Shown in the UI as "Connected as \_\_\_". Distinct from `user.email` (the login email) - this is the _connected Google_ account, which may differ.                                                                                              |
-| `google_access_token`            | Text (optional)        | An encrypted, short-lived Google access key (expires in about an hour)                                        | Needed to make Google Calendar API calls on the owner's behalf. Encrypted before saving - never stored as plain text.                                                                                                                           |
-| `google_refresh_token`           | Text (optional)        | An encrypted, long-lived Google key that doesn't expire on its own                                            | Used to get a new `google_access_token` automatically once the old one expires, without asking the owner to reconnect. Encrypted before saving.                                                                                                 |
-| `google_access_token_expires_at` | Date + time (optional) | When `google_access_token` stops working                                                                      | Lets the code check "has this expired?" and refresh it first if so.                                                                                                                                                                             |
-| `last_synced_at`                 | Date + time (optional) | When `POST /google-calendar/sync/` last _completed successfully_ for this connection                          | Drives the "Last synced \_\_\_" label in Settings; null means never synced (or every attempt so far has failed). Personal-connect-only in practice - the shared organizer account never calls `/sync/`.                                         |
-| `watch_channel_id`               | String (optional)      | Our own random id (`uuid.uuid4()`) for the active Google push-notification channel                            | Identifies which channel a `POST /google-calendar/webhook/` call is about; also what we hand back to Google's `channels.stop` on disconnect. Indexed - the webhook looks connections up by this.                                                |
-| `watch_resource_id`              | String (optional)      | Google's own id for the watched calendar resource, returned by `events.watch`                                 | Google requires both `id` (channel id) and `resourceId` together to identify/stop a channel - neither alone is enough.                                                                                                                          |
-| `watch_channel_token`            | String (optional)      | A random secret (`secrets.token_urlsafe(32)`) generated when the channel is created                           | Echoed back by Google on every notification (`X-Goog-Channel-Token`) - lets the webhook verify a request is really about _this_ channel, not a guessed id. Not a Google credential, so unlike the OAuth tokens above it's stored in plain text. |
-| `watch_expires_at`               | Date + time (optional) | When the current channel stops sending notifications                                                          | Google calendar watch channels aren't renewable in place - a new one is created ahead of this and the old one stopped, see "Personal calendar webhook" below.                                                                                   |
+| Column                           | Type                   | What it stores                                                                                                | Why we need it                                                                                                                                                                                          |
+| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user`                           | OneToOne `User` (PK)   | The Biopeak login that owns this connection (`Admin` or `Associate`)                                          | Either account type can hold the shared calendar tokens. Distinct from center-admin `AssociateCenterAssignment.is_admin`.                                                                               |
+| `google_email`                   | Email (optional)       | The connected Google account's email, e.g. `care@biopeak.health` (should match `settings.GOOGLE_CALENDAR_ID`) | Shown in the UI as "Connected as \_\_\_". Distinct from `user.email` (the login email) - this is the _connected Google_ account, which may differ.                                                      |
+| `google_access_token`            | Text (optional)        | An encrypted, short-lived Google access key (expires in about an hour)                                        | Needed to make Google Calendar API calls on the owner's behalf. Encrypted before saving - never stored as plain text.                                                                                   |
+| `google_refresh_token`           | Text (optional)        | An encrypted, long-lived Google key that doesn't expire on its own                                            | Used to get a new `google_access_token` automatically once the old one expires, without asking the owner to reconnect. Encrypted before saving.                                                         |
+| `google_access_token_expires_at` | Date + time (optional) | When `google_access_token` stops working                                                                      | Lets the code check "has this expired?" and refresh it first if so.                                                                                                                                     |
+| `last_synced_at`                 | Date + time (optional) | When `POST /google-calendar/sync/` last _completed successfully_ for this connection                          | Drives the "Last synced \_\_\_" label in Settings; null means never synced (or every attempt so far has failed). Personal-connect-only in practice - the shared organizer account never calls `/sync/`. |
+| `watch_channel_id`               | String (optional)      | Our own random id (`uuid.uuid4()`) for the active Google push-notification channel                            | Identifies which channel a `POST /google-calendar/webhook/` call is about; also what we hand back to Google's `channels.stop` on disconnect. Indexed - the webhook looks connections up by this.        |
+| `watch_resource_id`              | String (optional)      | Google's own id for the watched calendar resource, returned by `events.watch`                                 | Google requires both `id` (channel id) and `resourceId` together to identify/stop a channel - neither alone is enough.                                                                                  |
+| `watch_expires_at`               | Date + time (optional) | When the current channel stops sending notifications                                                          | Google calendar watch channels aren't renewable in place - a new one is created ahead of this and the old one stopped, see "Personal calendar webhook" below.                                           |
 
 All four token/email columns are optional (nullable); `last_synced_at` and
-the four `watch_*` columns are too, and none of them are what decides
+the three `watch_*` columns are too, and none of them are what decides
 whether the connection itself is still live (that's `is_active` +
 `google_refresh_token`, as above).
 
@@ -316,8 +315,8 @@ _hosts_ the event is a separate question from who's invited, and isn't tied
 to the assigned associates at all - see "Picking which calendar hosts the
 event" below.
 
-**`watch_channel_id` / `watch_resource_id` / `watch_channel_token` /
-`watch_expires_at`** on `GoogleCalendarConnection` back the push-notification
+**`watch_channel_id` / `watch_resource_id` / `watch_expires_at`** on
+`GoogleCalendarConnection` back the push-notification
 webhook - see "Personal calendar webhook (push notifications)" below.
 **Still intentionally left out:** no `sync_token` column - the webhook only
 triggers a re-run of the existing full-window `sync_google_events_to_availability_blocks()`,
@@ -642,8 +641,7 @@ every `POST /google-calendar/sync/` call as a self-heal,
 checks whether the connection's channel is missing or expiring within
 `RENEWAL_THRESHOLD` (1 day) and, if so, calls `events.watch` on Google's
 Calendar API (`calendar_api.watch_events()`) with a fresh random channel id
-(`uuid.uuid4()`) and a fresh random channel token (`secrets.token_urlsafe(32)`),
-asking Google to POST to `BE_SERVICE_BASE_URL` + `/google-calendar/webhook/`
+(`uuid.uuid4()`), asking Google to POST to `BE_SERVICE_BASE_URL` + `/google-calendar/webhook/`
 whenever that calendar changes. Google's response (`resourceId`, and the
 `expiration` it actually granted - which can be shorter than the
 `WATCH_TTL` requested) is persisted onto the four `watch_*` columns (see
@@ -673,13 +671,14 @@ the scheduled command just means it happens without anyone needing to.
 
 **Receiving a notification.** `POST /google-calendar/webhook/`
 (`GoogleCalendarWebhookView`, public - Google is calling, not an
-authenticated frontend request) reads four headers Google sends, no body:
-`X-Goog-Channel-ID`, `X-Goog-Resource-ID`, `X-Goog-Channel-Token`,
-`X-Goog-Resource-State`. It looks up an active `GoogleCalendarConnection` by
-channel id + resource id (`find_connection_for_watch_channel()`) and checks
-the channel token matches (`channel_token_is_valid()`, constant-time
-compare) - an unrecognized channel or a token mismatch is logged and
-ignored, not rejected with an error status. `X-Goog-Resource-State: sync` is
+authenticated frontend request) reads three headers Google sends, no body:
+`X-Goog-Channel-ID`, `X-Goog-Resource-ID`, `X-Goog-Resource-State`. It looks
+up an active `GoogleCalendarConnection` by channel id + resource id
+(`find_connection_for_watch_channel()`) - an unrecognized channel is logged
+and ignored, not rejected with an error status. `channel_id` is a random
+`uuid.uuid4()` we mint ourselves and never expose outside the
+Google<->server exchange, so this id+resource-id match is the verification.
+`X-Goog-Resource-State: sync` is
 Google's one-time handshake right when the channel is first created, not a
 real change - it's a no-op. Any other state (`exists`, the only other value
 Calendar's `events.watch` sends) means "something on this calendar changed,
@@ -710,9 +709,9 @@ an unstopped channel simply expires on Google's side on its own.
 
 **Endpoint:**
 
-| Endpoint                         | Auth          | What it does                                                                                                                                                                                  |
-| -------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /google-calendar/webhook/` | None (public) | Google's push-notification callback. Verified via channel id + resource id + channel token match, not JWT. Always responds 200. See above for what it does with each `X-Goog-Resource-State`. |
+| Endpoint                         | Auth          | What it does                                                                                                                                                                  |
+| -------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /google-calendar/webhook/` | None (public) | Google's push-notification callback. Verified via channel id + resource id match, not JWT. Always responds 200. See above for what it does with each `X-Goog-Resource-State`. |
 
 ## Required `.env` values
 

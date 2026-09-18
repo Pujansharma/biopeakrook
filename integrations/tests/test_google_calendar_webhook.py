@@ -9,7 +9,6 @@ from rest_framework.test import APIRequestFactory
 from accounts.users.models import User
 from integrations.google_calendar.views import GoogleCalendarWebhookView
 from integrations.google_calendar.webhook_channel import (
-    channel_token_is_valid,
     ensure_watch_channel_active,
     find_connection_for_watch_channel,
     google_calendar_webhook_configured,
@@ -51,24 +50,6 @@ class WatchChannelExpiryTests(TestCase):
         self.assertFalse(watch_channel_expires_soon(connection))
 
 
-class ChannelTokenValidationTests(TestCase):
-    def test_matching_token_is_valid(self):
-        connection = create_connection(watch_channel_token="secret-token")
-        self.assertTrue(channel_token_is_valid(connection, "secret-token"))
-
-    def test_wrong_token_is_invalid(self):
-        connection = create_connection(watch_channel_token="secret-token")
-        self.assertFalse(channel_token_is_valid(connection, "wrong-token"))
-
-    def test_missing_token_is_invalid(self):
-        connection = create_connection(watch_channel_token="secret-token")
-        self.assertFalse(channel_token_is_valid(connection, None))
-
-    def test_no_stored_token_is_invalid(self):
-        connection = create_connection()
-        self.assertFalse(channel_token_is_valid(connection, "anything"))
-
-
 class FindConnectionForWatchChannelTests(TestCase):
     def test_matches_active_connection(self):
         connection = create_connection(
@@ -105,7 +86,6 @@ class StartAndStopWatchChannelTests(TestCase):
         self.connection.refresh_from_db()
         self.assertTrue(self.connection.watch_channel_id)
         self.assertEqual(self.connection.watch_resource_id, "res-xyz")
-        self.assertTrue(self.connection.watch_channel_token)
         self.assertIsNotNone(self.connection.watch_expires_at)
 
     @patch("integrations.google_calendar.webhook_channel.get_valid_access_token")
@@ -113,7 +93,6 @@ class StartAndStopWatchChannelTests(TestCase):
     def test_stop_clears_fields_and_calls_google(self, mock_stop, mock_token):
         self.connection.watch_channel_id = "chan-1"
         self.connection.watch_resource_id = "res-1"
-        self.connection.watch_channel_token = "secret"
         self.connection.watch_expires_at = timezone.now() + timedelta(days=1)
         self.connection.save()
         mock_token.return_value = "access-token"
@@ -124,7 +103,6 @@ class StartAndStopWatchChannelTests(TestCase):
         self.connection.refresh_from_db()
         self.assertIsNone(self.connection.watch_channel_id)
         self.assertIsNone(self.connection.watch_resource_id)
-        self.assertIsNone(self.connection.watch_channel_token)
         self.assertIsNone(self.connection.watch_expires_at)
 
     @patch("integrations.google_calendar.webhook_channel.get_valid_access_token")
@@ -196,17 +174,14 @@ class GoogleCalendarWebhookViewTests(TestCase):
         self.connection = create_connection(
             watch_channel_id="chan-1",
             watch_resource_id="res-1",
-            watch_channel_token="secret-token",
         )
 
-    def post_webhook(self, resource_state, channel_id="chan-1", resource_id="res-1",
-                      channel_token="secret-token"):
+    def post_webhook(self, resource_state, channel_id="chan-1", resource_id="res-1"):
         factory = APIRequestFactory()
         request = factory.post(
             "/google-calendar/webhook/",
             HTTP_X_GOOG_CHANNEL_ID=channel_id,
             HTTP_X_GOOG_RESOURCE_ID=resource_id,
-            HTTP_X_GOOG_CHANNEL_TOKEN=channel_token,
             HTTP_X_GOOG_RESOURCE_STATE=resource_state,
         )
         return GoogleCalendarWebhookView.as_view()(request)
@@ -220,12 +195,6 @@ class GoogleCalendarWebhookViewTests(TestCase):
     @patch("integrations.google_calendar.views.sync_google_events_to_availability_blocks")
     def test_initial_sync_handshake_does_not_trigger_a_sync(self, mock_sync):
         response = self.post_webhook("sync")
-        self.assertEqual(response.status_code, 200)
-        mock_sync.assert_not_called()
-
-    @patch("integrations.google_calendar.views.sync_google_events_to_availability_blocks")
-    def test_wrong_channel_token_is_ignored(self, mock_sync):
-        response = self.post_webhook("exists", channel_token="wrong-token")
         self.assertEqual(response.status_code, 200)
         mock_sync.assert_not_called()
 

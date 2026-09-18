@@ -42,18 +42,15 @@ def persist_google_calendar_watch_channel(
     connection,
     channel_id: str,
     resource_id: str,
-    channel_token: str,
     expires_at: datetime,
 ):
     connection.watch_channel_id = channel_id
     connection.watch_resource_id = resource_id
-    connection.watch_channel_token = channel_token
     connection.watch_expires_at = expires_at
     connection.save(
         update_fields=[
             "watch_channel_id",
             "watch_resource_id",
-            "watch_channel_token",
             "watch_expires_at",
             "updated_at",
         ]
@@ -63,13 +60,11 @@ def persist_google_calendar_watch_channel(
 def clear_google_calendar_watch_channel(connection):
     connection.watch_channel_id = None
     connection.watch_resource_id = None
-    connection.watch_channel_token = None
     connection.watch_expires_at = None
     connection.save(
         update_fields=[
             "watch_channel_id",
             "watch_resource_id",
-            "watch_channel_token",
             "watch_expires_at",
             "updated_at",
         ]
@@ -118,7 +113,6 @@ def evict_google_calendar_email(google_email, exclude_pk):
         google_access_token_expires_at=None,
         watch_channel_id=None,
         watch_resource_id=None,
-        watch_channel_token=None,
         watch_expires_at=None,
     )
 

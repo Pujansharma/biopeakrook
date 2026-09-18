@@ -1,4 +1,3 @@
-import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -37,12 +36,6 @@ def watch_channel_expires_soon(connection) -> bool:
     return timezone.now() >= connection.watch_expires_at - RENEWAL_THRESHOLD
 
 
-def channel_token_is_valid(connection, channel_token: str | None) -> bool:
-    return bool(connection.watch_channel_token) and secrets.compare_digest(
-        connection.watch_channel_token, channel_token or ""
-    )
-
-
 def find_connection_for_watch_channel(channel_id: str | None, resource_id: str | None):
     if not channel_id or not resource_id:
         return None
@@ -71,16 +64,15 @@ def stop_watch_channel(connection):
 
 def start_watch_channel(connection):
     channel_id = str(uuid.uuid4())
-    channel_token = secrets.token_urlsafe(32)
     access_token = get_valid_access_token(connection)
     watch = calendar_api.watch_events(
-        access_token, channel_id, channel_token, webhook_address(), WATCH_TTL,
+        access_token, channel_id, webhook_address(), WATCH_TTL,
     )
     expires_at = timezone.localtime(
         datetime.fromtimestamp(int(watch["expiration"]) / 1000, tz=UTC)
     )
     persist_google_calendar_watch_channel(
-        connection, channel_id, watch["resourceId"], channel_token, expires_at,
+        connection, channel_id, watch["resourceId"], expires_at,
     )
 
 
