@@ -554,12 +554,13 @@ imported) if it's cancelled, marked free (`transparency: "transparent"` -
 Google Calendar's own "Free" vs "Busy" toggle), or declined by the caller
 themselves (`attendees[].self.responseStatus == "declined"`). An all-day
 event (`date` instead of `dateTime` on `start`/`end` - e.g. a leave/
-out-of-office entry) is imported as a one-off block spanning local midnight
-of the start date through the end of the last covered day - Google's
-all-day `end.date` is exclusive, so that's `end.date` minus one day.
+out-of-office entry) or an event with `eventType: "outOfOffice"` is imported
+as an **`AssociateLeave`** instead of a block (see "Leave" below), unless it
+carries a `recurrence` (Biopeak leave has no recurrence, so a recurring
+all-day event stays a recurring block).
 
 **One-off vs recurring, using the same create path the manual Blocks API
-uses - minus the overlap check.** `build_block_spec_from_event()` builds a
+uses - minus the overlap check.** `build_spec_from_event()` builds a
 plain dict, then `_create_blocks_for_spec()` calls the same
 `create_associate_availability_block()` (`appointments/serializers/__init__.py`)
 the `POST .../availability/associates/<id>/blocks/` endpoint uses, but
@@ -571,14 +572,34 @@ blocks, so an imported block is free to coincide with any other block
 appointments that now conflict get flagged the same way. A non-recurring
 Google event (no `recurrence`) becomes a one-off block
 (`is_recurring=false`, `start_datetime`/`end_datetime`). A recurring event
-only imports if `parse_supported_weekly_rrule()` can read its RRULE as a
-plain, never-ending weekly pattern - `FREQ=WEEKLY`, `INTERVAL` unset or `1`,
-no `UNTIL`/`COUNT`, and a `BYDAY` made only of `MO`/`TU`/.../`SU` tokens.
-Anything else (daily/monthly, an `INTERVAL` > 1, a finite/expiring
-recurrence) is skipped outright rather than approximated - Biopeak recurring
-blocks have no end date (`effective_until` is DB-only, unwritable via the
-manual API too), so pretending a 6-week Google recurrence "recurs forever"
-would silently misrepresent the associate's real schedule.
+only imports if `parse_supported_rrule()` can map its RRULE onto the recurring
+block payload (`days_of_week`, `recurring_start_time`/`recurring_end_time`,
+`effective_from`, `effective_until`):
+
+| Google repeat option                           | RRULE                              | Biopeak recurring block                            |
+| ---------------------------------------------- | ---------------------------------- | -------------------------------------------------- |
+| Daily                                          | `FREQ=DAILY`                       | `days_of_week` = all 7 (`"0"`..`"6"`, Mon=`"0"`)    |
+| Weekly on Thursday                             | `FREQ=WEEKLY;BYDAY=TH`             | `days_of_week=["3"]`                               |
+| Every weekday                                  | `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` | `days_of_week=["0","1","2","3","4"]`               |
+| Custom, every 1 week, chosen days              | `FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,SA` | matching `days_of_week`                            |
+| Ends "On date"                                 | `UNTIL=...` added                  | `effective_until` = last date an occurrence starts |
+| Ends "After N occurrences"                     | `COUNT=N`                          | **skipped** (no equivalent)                        |
+| Every N > 1 days/weeks, monthly, annually      | `INTERVAL>1`, `FREQ=MONTHLY/YEARLY` | **skipped**                                       |
+
+Skipped means never approximated - the event is simply not imported.
+`EXDATE` (deleted single occurrences) is ignored, so the block still covers
+that day (over-blocks rather than under-blocks).
+
+**Leave.** An all-day or Out-of-office event (non-recurring) becomes one
+`AssociateLeave` with `scope=all_centers`, `center=null`, e.g. all-day
+17-18 Sep -> `start_datetime` `2026-09-17T00:00:00+05:30`, `end_datetime`
+`2026-09-18T23:59:59+05:30`, `reason` = event title (fallback
+`"Leave (Google Calendar)"`). `AssociateLeave.google_event_id` (blank =
+created manually) drives the same reconcile as blocks: unchanged -> skip,
+edited -> deactivate + recreate, gone from Google -> soft-deactivate. An
+event that flips between leave and block (e.g. ticking "All day") is
+deactivated on its old side and created on the new one. No overlap check;
+exception hooks run once per active center.
 
 **Every active center, not just one.** `AssociateAvailabilityBlock.center`
 is a required FK - there's no "all centers" block type (unlike
@@ -614,11 +635,10 @@ events against their previously-imported rows, per Google event id:
   filters by event end time, so an already-ended event naturally drops out
   of the fetch whether or not anyone deleted it, and treating that as
   "gone" would misreport a normal, harmless expiry as a removal. Recurring
-  blocks don't need this carve-out: they're imported only when the RRULE is
-  a never-ending weekly pattern (see below), so a still-existing recurring
-  event always has an occurrence inside the rolling `SYNC_WINDOW_DAYS`
-  window and keeps showing up in every fetch - its absence can only mean it
-  was actually deleted/freed/declined in Google.
+  blocks don't need this carve-out: Google's `timeMin` already drops a
+  recurring series once its `UNTIL` has passed, and a still-running one
+  always keeps showing up in every fetch - so its absence means it was
+  deleted/freed/declined in Google, or its series simply ended.
 
 `GoogleCalendarConnection.last_synced_at` is set only after a sync actually
 completes successfully - not on every click, and not on a failed one.

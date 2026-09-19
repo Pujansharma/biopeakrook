@@ -131,6 +131,7 @@ class AssociateLeave(BaseUUIDModel):
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
     reason = models.CharField(max_length=255, blank=True)
+    google_event_id = models.CharField(blank=True, db_index=True)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
