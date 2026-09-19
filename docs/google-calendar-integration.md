@@ -641,18 +641,14 @@ every `POST /google-calendar/sync/` call as a self-heal,
 checks whether the connection's channel is missing or expiring within
 `RENEWAL_THRESHOLD` (1 day) and, if so, calls `events.watch` on Google's
 Calendar API (`calendar_api.watch_events()`) with a fresh random channel id
-(`uuid.uuid4()`), asking Google to POST to `BE_SERVICE_BASE_URL` + `/google-calendar/webhook/`
+(`uuid.uuid4()`), asking Google to POST to `https://api.biopeak.com/google-calendar/webhook/`
 whenever that calendar changes. Google's response (`resourceId`, and the
 `expiration` it actually granted - which can be shorter than the
 `WATCH_TTL` requested) is persisted onto the four `watch_*` columns (see
 "Database columns" above). **This is entirely best-effort** - a failure here
 is logged and swallowed (`GOOGLE_SYNC_ERRORS`), never surfaced as a
 connect/sync failure, since the connection is still fully usable through
-manual `/sync/` even with no channel registered at all. If
-`BE_SERVICE_BASE_URL` isn't set, channel registration is
-skipped outright (`google_calendar_webhook_configured()`) - same
-"unconfigured means proceed unsynced" pattern as `GOOGLE_CALENDAR_ID`
-elsewhere in this integration.
+manual `/sync/` even with no channel registered at all.
 
 **The shared organizer never gets a channel.** Nothing reads busy time back
 from `settings.GOOGLE_CALENDAR_ID`'s own calendar (it's the one-way

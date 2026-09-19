@@ -2,7 +2,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
-from django.db.models import Q
 from django.utils import timezone
 
 from core.utils.log import logger
@@ -17,17 +16,13 @@ from integrations.models import GoogleCalendarConnection
 
 
 WATCH_TTL = timedelta(days=30)  # Google's maxbound for a channel is 30 days
-RENEWAL_THRESHOLD = timedelta(days=2)
+RENEWAL_THRESHOLD = timedelta(days=1)
+WEBHOOK_BASE_URL = "https://api.biopeak.com"
 WEBHOOK_PATH = "google-calendar/webhook/"
 
 
-def google_calendar_webhook_configured() -> bool:
-    return bool(getattr(settings, "BE_SERVICE_BASE_URL", None))
-
-
 def webhook_address() -> str:
-    base_url = settings.BE_SERVICE_BASE_URL.rstrip("/")
-    return f"{base_url}/{WEBHOOK_PATH}"
+    return f"{WEBHOOK_BASE_URL}/{WEBHOOK_PATH}"
 
 
 def watch_channel_expires_soon(connection) -> bool:
@@ -83,15 +78,14 @@ def personal_connections_needing_watch_renewal():
     ).exclude(google_refresh_token__isnull=True).exclude(google_refresh_token="")
     if calendar_id:
         queryset = queryset.exclude(google_email__iexact=calendar_id)
-    return queryset.filter(
-        Q(watch_channel_id__isnull=True)
-        | Q(watch_expires_at__lte=timezone.now() + RENEWAL_THRESHOLD)
+    return (
+        queryset.exclude(watch_channel_id__isnull=True)
+        .exclude(watch_channel_id="")
+        .filter(watch_expires_at__lte=timezone.now() + RENEWAL_THRESHOLD)
     )
 
 
 def ensure_watch_channel_active(connection):
-    if not google_calendar_webhook_configured():
-        return
     if not watch_channel_expires_soon(connection):
         return
     if connection.watch_channel_id:

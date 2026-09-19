@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import requests
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
@@ -11,7 +11,6 @@ from integrations.google_calendar.views import GoogleCalendarWebhookView
 from integrations.google_calendar.webhook_channel import (
     ensure_watch_channel_active,
     find_connection_for_watch_channel,
-    google_calendar_webhook_configured,
     start_watch_channel,
     stop_watch_channel,
     watch_channel_expires_soon,
@@ -69,7 +68,6 @@ class FindConnectionForWatchChannelTests(TestCase):
         self.assertIsNone(find_connection_for_watch_channel("chan-1", "res-1"))
 
 
-@override_settings(BE_SERVICE_BASE_URL="https://api.biopeak.com")
 class StartAndStopWatchChannelTests(TestCase):
     def setUp(self):
         self.connection = create_connection()
@@ -123,7 +121,6 @@ class StartAndStopWatchChannelTests(TestCase):
         stop_watch_channel(self.connection)  # must not raise
 
 
-@override_settings(BE_SERVICE_BASE_URL="https://api.biopeak.com")
 class EnsureWatchChannelActiveTests(TestCase):
     def setUp(self):
         self.connection = create_connection()
@@ -154,19 +151,6 @@ class EnsureWatchChannelActiveTests(TestCase):
 
         mock_stop.assert_called_once_with(self.connection)
         mock_start.assert_called_once_with(self.connection)
-
-
-class WebhookNotConfiguredTests(TestCase):
-    @override_settings(BE_SERVICE_BASE_URL=None)
-    def test_google_calendar_webhook_configured_is_false(self):
-        self.assertFalse(google_calendar_webhook_configured())
-
-    @override_settings(BE_SERVICE_BASE_URL=None)
-    @patch("integrations.google_calendar.webhook_channel.start_watch_channel")
-    def test_ensure_is_a_noop_when_not_configured(self, mock_start):
-        connection = create_connection()
-        ensure_watch_channel_active(connection)
-        mock_start.assert_not_called()
 
 
 class GoogleCalendarWebhookViewTests(TestCase):

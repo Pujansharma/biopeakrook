@@ -167,20 +167,6 @@ one with:
 uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-`BE_SERVICE_BASE_URL` is this backend's own public HTTPS URL
-(e.g. `https://api.biopeak.com`), used to tell Google where to POST
-push notifications for a connected personal calendar - see "Personal
-calendar webhook (push notifications)" in `docs/google-calendar-integration.md`.
-Google requires this to be a publicly reachable HTTPS address it can verify
-domain ownership for; a bare `localhost`/`127.0.0.1` URL won't work; leave
-this unset in development (or point it at a tunnel like ngrok) to skip
-channel registration entirely rather than failing:
-
-```env
-STG_BE_SERVICE_BASE_URL=https://staging-api.yourdomain.com
-PRD_BE_SERVICE_BASE_URL=https://api.yourdomain.com
-```
-
 If it ever leaks, treat it like a leaked password: rotate it and have every
 connected staff member reconnect their calendar. If unset, `_get_fernet()`
 (`integrations/google_calendar/utils.py`) raises `ImproperlyConfigured` the
