@@ -91,6 +91,14 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 - Bruno: added `google_calendar/Webhook.bru` (`auth: none`); `collection.bru`'s pre-request JWT-skip regex extended to also match `/google-calendar/webhook` (previously only `/webhooks/` and `/google-calendar/callback`).
 - **Follow-up, 2026-09-18 — `watch_channel_token` removed, superseding line 85 above.** User judged the token redundant: `channel_id` is a server-minted `uuid.uuid4()` never exposed outside the Google<->server exchange, so the `find_connection_for_watch_channel()` match on channel id + resource id is already unguessable on its own — the extra token layered no real protection, and was further undermined by `GoogleCalendarWebhookView.post()` logging the full incoming request headers (which include `X-Goog-Channel-Token` itself). Removed `watch_channel_token` field (migration `0006_remove_googlecalendarconnection_watch_channel_token`), `channel_token_is_valid()`, the `token` sent to Google's `events.watch`, and the header check in the webhook view — verification is channel id + resource id match only now. Debug `print()`/`logger.info()` calls in `webhook_channel.py`/`views.py` intentionally left in place for now (user still testing).
 
+## 2026-09-21 — Personal Google Calendar outbound (Biopeak → Google)
+
+- Manual associate block / recurring series / leave create+update+soft-off enqueue `CommunicationOutbox` (`channel=google_calendar`, event `associate_block_sync` / `associate_leave_sync`). Worker desired-state via `personal_outbound.sync_*` → `send_google_calendar_outbound_event` (personal tokens only).
+- Loop fence: `AvailabilityOrigin` on block+leave (`manual`|`google`). Inbound sync sets `google`; enqueue + sync skip non-manual. Recurring create mints shared `series_id` (one Google RRULE). Outbox: nullable `appointment` + exactly-one target check (`appointment` | `associate_availability_block` | `associate_leave` | `availability_series_id`).
+- Not connected → outbox processed as SKIPPED `"Personal Google Calendar not connected"`. Agent does **not** write migrations — user `makemigrations` appointments+integrations then migrate.
+
+---
+
 ## 2026-09-20 — Google sync: Google repeat options → Biopeak payloads
 
 - `availability_sync.py` now maps Google recurrence to the Biopeak recurring-block payload: `FREQ=DAILY` → all 7 days; `FREQ=WEEKLY` (every 1) + `BYDAY` → those days; `UNTIL` → `effective_until` (user pointed out the Biopeak recurring payload supports it; last date an occurrence starts, UTC UNTIL converted to local). User chose "support only what matches the payload": `COUNT`, `INTERVAL`>1, monthly, yearly are **skipped**, never expanded to one-offs. `EXDATE` ignored (over-blocks).

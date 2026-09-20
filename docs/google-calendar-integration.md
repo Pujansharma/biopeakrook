@@ -643,6 +643,35 @@ events against their previously-imported rows, per Google event id:
 `GoogleCalendarConnection.last_synced_at` is set only after a sync actually
 completes successfully - not on every click, and not on a failed one.
 
+## Personal calendar outbound (Biopeak → Google)
+
+Reverse of inbound sync: when staff create/update/soft-off an associate
+**block** (one-off or recurring) or **leave** in Biopeak, the API enqueues a
+`CommunicationOutbox` row (`channel=google_calendar`, event
+`associate_block_sync` / `associate_leave_sync`) via
+`schedule_queue_associate_block_sync` /
+`schedule_queue_associate_leave_sync` (`transaction.on_commit`). The same
+outbox worker dispatches to
+`integrations/google_calendar/personal_outbound.py`, which upserts/deletes on
+the associate's **personal** calendar through
+`send_google_calendar_outbound_event` (not the shared organizer).
+
+**Loop fence.** `AssociateAvailabilityBlock.origin` /
+`AssociateLeave.origin` is `manual` (API) or `google` (inbound sync). Only
+`manual` rows enqueue or write back. Inbound-created rows never echo.
+
+**Recurring.** A multi-day create shares one `series_id`; one outbox target +
+one Google master with `RRULE:FREQ=WEEKLY;BYDAY=...`. Soft-off / edit of any
+row in the series rebuilds from all still-active siblings.
+
+**Not connected.** Outbox still enqueued; worker marks `SKIPPED` with
+`"Personal Google Calendar not connected"` (no Google HTTP).
+
+**Schema.** `CommunicationOutbox.appointment` is nullable; exactly one of
+`appointment` / `associate_availability_block` / `associate_leave` /
+`availability_series_id` (DB check). User runs migrations for new columns
+(`origin`, `series_id`, outbox FKs) — agent does not write them.
+
 ## Personal calendar webhook (push notifications)
 
 Everything above ("What counts as busy", re-syncing) still describes the

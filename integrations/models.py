@@ -48,7 +48,24 @@ class CommunicationOutbox(BaseUUIDModel):
         "appointments.Appointment",
         on_delete=models.CASCADE,
         related_name="communication_messages",
+        null=True,
+        blank=True,
     )
+    associate_availability_block = models.ForeignKey(
+        "appointments.AssociateAvailabilityBlock",
+        on_delete=models.CASCADE,
+        related_name="communication_messages",
+        null=True,
+        blank=True,
+    )
+    associate_leave = models.ForeignKey(
+        "appointments.AssociateLeave",
+        on_delete=models.CASCADE,
+        related_name="communication_messages",
+        null=True,
+        blank=True,
+    )
+    availability_series_id = models.UUIDField(null=True, blank=True, db_index=True)
     channel = models.CharField(
         max_length=32,
         choices=CommunicationChannel,
@@ -105,6 +122,35 @@ class CommunicationOutbox(BaseUUIDModel):
                     ],
                 ),
                 name="uniq_comm_outbox_appointment_channel_terminal_event",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        appointment__isnull=False,
+                        associate_availability_block__isnull=True,
+                        associate_leave__isnull=True,
+                        availability_series_id__isnull=True,
+                    )
+                    | Q(
+                        appointment__isnull=True,
+                        associate_availability_block__isnull=False,
+                        associate_leave__isnull=True,
+                        availability_series_id__isnull=True,
+                    )
+                    | Q(
+                        appointment__isnull=True,
+                        associate_availability_block__isnull=True,
+                        associate_leave__isnull=False,
+                        availability_series_id__isnull=True,
+                    )
+                    | Q(
+                        appointment__isnull=True,
+                        associate_availability_block__isnull=True,
+                        associate_leave__isnull=True,
+                        availability_series_id__isnull=False,
+                    )
+                ),
+                name="comm_outbox_exactly_one_target",
             ),
         ]
 

@@ -10,6 +10,7 @@ from accounts.utils import get_user_model
 from appointments.utils.constants import (
     AppointmentAuditAction,
     AppointmentStatus,
+    AvailabilityOrigin,
     ExceptionResolution,
     ExceptionScanJobStatus,
     ExceptionSourceType,
@@ -97,6 +98,13 @@ class AssociateAvailabilityBlock(BaseUUIDModel):
     effective_until = models.DateField(null=True, blank=True)
     reason = models.CharField(max_length=255, blank=True)
     google_event_id = models.CharField(max_length=1024, blank=True, db_index=True)
+    series_id = models.UUIDField(null=True, blank=True, db_index=True)
+    origin = models.CharField(
+        max_length=16,
+        choices=AvailabilityOrigin,
+        default=AvailabilityOrigin.MANUAL,
+        db_index=True,
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -132,6 +140,12 @@ class AssociateLeave(BaseUUIDModel):
     end_datetime = models.DateTimeField()
     reason = models.CharField(max_length=255, blank=True)
     google_event_id = models.CharField(blank=True, db_index=True)
+    origin = models.CharField(
+        max_length=16,
+        choices=AvailabilityOrigin,
+        default=AvailabilityOrigin.MANUAL,
+        db_index=True,
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

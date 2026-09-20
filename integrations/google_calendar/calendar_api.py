@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import requests
 from django.conf import settings
@@ -10,18 +10,57 @@ CHANNELS_STOP_URL = "https://www.googleapis.com/calendar/v3/channels/stop"
 REQUEST_TIMEOUT = 10
 
 
+def _date_value(value):
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _exclusive_all_day_end(end_value):
+    # Google all-day end.date is exclusive.
+    if isinstance(end_value, datetime):
+        last_day = end_value.date()
+    elif isinstance(end_value, date):
+        last_day = end_value
+    else:
+        return end_value
+    return (last_day + timedelta(days=1)).isoformat()
+
+
 def _event_body(
-    title: str, start: datetime, end: datetime, location: str | None, notes: str | None,
+    title: str,
+    start,
+    end,
+    location: str | None,
+    notes: str | None,
     participant_emails: list[str] | None,
+    *,
+    all_day: bool = False,
+    recurrence: list[str] | None = None,
 ):
-    return {
-        "summary": title,
-        "start": {"dateTime": start.isoformat(), "timeZone": settings.TIME_ZONE},
-        "end": {"dateTime": end.isoformat(), "timeZone": settings.TIME_ZONE},
-        "location": location or "",
-        "description": notes or "",
-        "attendees": [{"email": email} for email in participant_emails or []],
-    }
+    if all_day:
+        body = {
+            "summary": title,
+            "start": {"date": _date_value(start)},
+            "end": {"date": _exclusive_all_day_end(end)},
+            "location": location or "",
+            "description": notes or "",
+            "attendees": [{"email": email} for email in participant_emails or []],
+        }
+    else:
+        body = {
+            "summary": title,
+            "start": {"dateTime": start.isoformat(), "timeZone": settings.TIME_ZONE},
+            "end": {"dateTime": end.isoformat(), "timeZone": settings.TIME_ZONE},
+            "location": location or "",
+            "description": notes or "",
+            "attendees": [{"email": email} for email in participant_emails or []],
+        }
+    if recurrence:
+        body["recurrence"] = recurrence
+    return body
 
 
 def extract_meet_link(google_event: dict):
@@ -45,11 +84,28 @@ def get_event(access_token: str, event_id: str):
 
 
 def insert_event(
-    access_token: str, title: str, start: datetime, end: datetime,
-    location: str | None = None, notes: str | None = None, need_meet_link: bool = False,
-    participant_emails: list[str] | None = None, event_id: str | None = None,
+    access_token: str,
+    title: str,
+    start,
+    end,
+    location: str | None = None,
+    notes: str | None = None,
+    need_meet_link: bool = False,
+    participant_emails: list[str] | None = None,
+    event_id: str | None = None,
+    all_day: bool = False,
+    recurrence: list[str] | None = None,
 ):
-    body = _event_body(title, start, end, location, notes, participant_emails)
+    body = _event_body(
+        title,
+        start,
+        end,
+        location,
+        notes,
+        participant_emails,
+        all_day=all_day,
+        recurrence=recurrence,
+    )
     if event_id:
         body["id"] = event_id
     params = {}
@@ -76,16 +132,34 @@ def insert_event(
 
 
 def patch_event(
-    access_token: str, event_id: str, title: str, start: datetime, end: datetime,
-    location: str | None = None, notes: str | None = None, add_meet_link: bool = False,
-    clear_meet_link: bool = False, participant_emails: list[str] | None = None,
+    access_token: str,
+    event_id: str,
+    title: str,
+    start,
+    end,
+    location: str | None = None,
+    notes: str | None = None,
+    add_meet_link: bool = False,
+    clear_meet_link: bool = False,
+    participant_emails: list[str] | None = None,
+    all_day: bool = False,
+    recurrence: list[str] | None = None,
 ):
     # add_meet_link=True rotates the Meet link if the event already has one -
     # only pass True the first time a Meet link is added to this event.
     # clear_meet_link=True drops an existing Meet link (e.g. modality changed
     # from virtual to in-person), Google's API removes conference data when
     # conferenceData is explicitly null, not an empty object.
-    body = _event_body(title, start, end, location, notes, participant_emails)
+    body = _event_body(
+        title,
+        start,
+        end,
+        location,
+        notes,
+        participant_emails,
+        all_day=all_day,
+        recurrence=recurrence,
+    )
     params = {}
     if add_meet_link:
         body["conferenceData"] = {

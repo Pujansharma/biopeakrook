@@ -10,7 +10,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from appointments.models import AssociateAvailabilityBlock, AssociateLeave
 from appointments.serializers import create_associate_availability_block
-from appointments.utils.constants import ExceptionSourceType, LeaveScope
+from appointments.utils.constants import AvailabilityOrigin, ExceptionSourceType, LeaveScope
 from appointments.utils.exceptions import (
     apply_availability_exception_hooks,
     pick_exception_scan_status,
@@ -217,6 +217,7 @@ def _create_blocks(centers, associate, user, spec: dict):
                 spec.get("effective_from"), spec.get("effective_until"),
                 spec["reason"], True,
                 google_event_id=spec["google_event_id"],
+                origin=AvailabilityOrigin.GOOGLE,
             )
             scan_results.append(
                 _run_exception_hooks(center, block, ExceptionSourceType.ASSOCIATE_BLOCK)
@@ -247,6 +248,7 @@ def _create_leave(centers, associate, user, spec: dict):
         reason=spec["reason"],
         created_by=user,
         google_event_id=spec["google_event_id"],
+        origin=AvailabilityOrigin.GOOGLE,
     )
     return [
         _run_exception_hooks(center, leave, ExceptionSourceType.ASSOCIATE_LEAVE)

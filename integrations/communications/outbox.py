@@ -22,6 +22,10 @@ from integrations.google_calendar.google_sync import (
     is_google_calendar_configured,
     sync_appointment_with_google,
 )
+from integrations.google_calendar.personal_outbound import (
+    sync_associate_blocks_to_personal_google,
+    sync_associate_leave_to_personal_google,
+)
 from integrations.models import CommunicationOutbox, CommunicationWebhookEvent
 from integrations.utils.constants import (
     CommunicationChannel,
@@ -108,7 +112,7 @@ def existing_open_google_outbox(appointment):
 
 
 def create_outbox_message(
-    appointment,
+    appointment=None,
     *,
     channel,
     event_type,
@@ -118,10 +122,16 @@ def create_outbox_message(
     parameters=None,
     status,
     skip_reason="",
+    associate_availability_block=None,
+    associate_leave=None,
+    availability_series_id=None,
 ):
     try:
         return CommunicationOutbox.objects.create(
             appointment=appointment,
+            associate_availability_block=associate_availability_block,
+            associate_leave=associate_leave,
+            availability_series_id=availability_series_id,
             channel=channel,
             event_type=event_type,
             to_phone=to_phone,
@@ -132,10 +142,95 @@ def create_outbox_message(
             skip_reason=skip_reason,
         )
     except IntegrityError:
+        if appointment is None:
+            raise
         existing = existing_terminal_outbox(appointment, event_type, channel)
         if existing is not None:
             return existing
         raise
+
+
+def google_outbox_target_filter(
+    *,
+    appointment_id=None,
+    associate_availability_block_id=None,
+    associate_leave_id=None,
+    availability_series_id=None,
+):
+    if appointment_id is not None:
+        return {"appointment_id": appointment_id}
+    if availability_series_id is not None:
+        return {"availability_series_id": availability_series_id}
+    if associate_availability_block_id is not None:
+        return {
+            "associate_availability_block_id": associate_availability_block_id
+        }
+    if associate_leave_id is not None:
+        return {"associate_leave_id": associate_leave_id}
+    return None
+
+
+def google_outbox_target_filter_for_message(message):
+    return google_outbox_target_filter(
+        appointment_id=message.appointment_id,
+        associate_availability_block_id=message.associate_availability_block_id,
+        associate_leave_id=message.associate_leave_id,
+        availability_series_id=message.availability_series_id,
+    )
+
+
+def existing_open_google_availability_outbox(
+    *,
+    associate_availability_block=None,
+    associate_leave=None,
+    availability_series_id=None,
+):
+    filters = {
+        "channel": CommunicationChannel.GOOGLE_CALENDAR,
+        "status__in": OPEN_GOOGLE_OUTBOX_STATUSES,
+        "attempt_count__lt": MAX_OUTBOX_ATTEMPTS,
+    }
+    if availability_series_id is not None:
+        filters["availability_series_id"] = availability_series_id
+    elif associate_availability_block is not None:
+        filters["associate_availability_block"] = associate_availability_block
+    elif associate_leave is not None:
+        filters["associate_leave"] = associate_leave
+    else:
+        return None
+    return (
+        CommunicationOutbox.objects.filter(**filters)
+        .order_by("created_at")
+        .first()
+    )
+
+
+def enqueue_associate_block_sync(*, block=None, series_id=None):
+    existing = existing_open_google_availability_outbox(
+        associate_availability_block=block if series_id is None else None,
+        availability_series_id=series_id,
+    )
+    if existing is not None:
+        return existing
+    return create_outbox_message(
+        channel=CommunicationChannel.GOOGLE_CALENDAR,
+        event_type=CommunicationEventType.ASSOCIATE_BLOCK_SYNC,
+        status=CommunicationOutboxStatus.PENDING,
+        associate_availability_block=block if series_id is None else None,
+        availability_series_id=series_id,
+    )
+
+
+def enqueue_associate_leave_sync(leave):
+    existing = existing_open_google_availability_outbox(associate_leave=leave)
+    if existing is not None:
+        return existing
+    return create_outbox_message(
+        channel=CommunicationChannel.GOOGLE_CALENDAR,
+        event_type=CommunicationEventType.ASSOCIATE_LEAVE_SYNC,
+        status=CommunicationOutboxStatus.PENDING,
+        associate_leave=leave,
+    )
 
 
 def enqueue_whatsapp_message(
@@ -402,6 +497,17 @@ def has_in_flight_google_sync(appointment_id):
     ).exists()
 
 
+def has_in_flight_google_sync_for_message(message):
+    target = google_outbox_target_filter_for_message(message)
+    if target is None:
+        return False
+    return CommunicationOutbox.objects.filter(
+        channel=CommunicationChannel.GOOGLE_CALENDAR,
+        status=CommunicationOutboxStatus.SENDING,
+        **target,
+    ).exists()
+
+
 def remaining_google_outbox_work(appointment_id, exclude_message_id):
     return (
         CommunicationOutbox.objects.filter(
@@ -415,8 +521,24 @@ def remaining_google_outbox_work(appointment_id, exclude_message_id):
     )
 
 
+def remaining_google_outbox_work_for_message(message):
+    target = google_outbox_target_filter_for_message(message)
+    if target is None:
+        return False
+    return (
+        CommunicationOutbox.objects.filter(
+            channel=CommunicationChannel.GOOGLE_CALENDAR,
+            status__in=OPEN_GOOGLE_OUTBOX_STATUSES,
+            attempt_count__lt=MAX_OUTBOX_ATTEMPTS,
+            **target,
+        )
+        .exclude(pk=message.pk)
+        .exists()
+    )
+
+
 def finish_google_outbox_message(message, result):
-    if remaining_google_outbox_work(message.appointment_id, message.pk):
+    if remaining_google_outbox_work_for_message(message):
         publish_outbox_wake()
     return result
 
@@ -456,14 +578,27 @@ RETRYABLE_GOOGLE_SKIP_REASONS = {
 }
 
 
-def process_google_outbox_message(message):
-    if not is_google_calendar_configured():
-        return finish_google_outbox_message(
-            message,
-            mark_outbox_skipped(message, "Google Calendar is not configured"),
+def run_google_outbox_desired_state(message):
+    if message.appointment_id is not None:
+        if not is_google_calendar_configured():
+            return "Google Calendar is not configured"
+        return sync_appointment_with_google(message.appointment_id)
+    if message.availability_series_id is not None:
+        return sync_associate_blocks_to_personal_google(
+            series_id=message.availability_series_id
         )
+    if message.associate_availability_block_id is not None:
+        return sync_associate_blocks_to_personal_google(
+            block_id=message.associate_availability_block_id
+        )
+    if message.associate_leave_id is not None:
+        return sync_associate_leave_to_personal_google(message.associate_leave_id)
+    return "Google Calendar outbox row has no sync target"
+
+
+def process_google_outbox_message(message):
     try:
-        skip_reason = sync_appointment_with_google(message.appointment_id)
+        skip_reason = run_google_outbox_desired_state(message)
     except GOOGLE_SYNC_ERRORS as error:
         return finish_google_outbox_message(
             message,
@@ -519,7 +654,7 @@ def process_outbox_message(message_id):
         return message
     if (
         message.channel == CommunicationChannel.GOOGLE_CALENDAR
-        and has_in_flight_google_sync(message.appointment_id)
+        and has_in_flight_google_sync_for_message(message)
     ):
         return message
 

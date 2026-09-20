@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -16,7 +18,7 @@ from appointments.models import (
     RoomAvailabilityBlock,
     RoomDowntime,
 )
-from appointments.utils.constants import LeaveScope
+from appointments.utils.constants import AvailabilityOrigin, LeaveScope
 from appointments.utils.operating_hours import (
     assert_operating_hours_cover_roster,
     assert_roster_within_operating_hours,
@@ -34,6 +36,10 @@ from appointments.utils.overlap import (
 )
 from core.utils.constants import AppointmentDays
 from core.utils.serializers import BaseModelSerializer, BaseSerializer
+from integrations.communications import (
+    schedule_queue_associate_block_sync,
+    schedule_queue_associate_leave_sync,
+)
 from inventory.models import Equipment, Room
 
 
@@ -212,6 +218,8 @@ def create_associate_availability_block(
     reason,
     is_active,
     google_event_id="",
+    origin=AvailabilityOrigin.MANUAL,
+    series_id=None,
 ):
     return AssociateAvailabilityBlock.objects.create(
         center=center,
@@ -228,6 +236,8 @@ def create_associate_availability_block(
         reason=reason,
         is_active=is_active,
         google_event_id=google_event_id,
+        origin=origin,
+        series_id=series_id,
     )
 
 
@@ -412,6 +422,10 @@ class AssociateAvailabilityBlockSerializer(BaseModelSerializer):
         if instance.effective_until is not None:
             instance.effective_until = None
             instance.save(update_fields=["effective_until", "updated_at"])
+        if instance.origin == AvailabilityOrigin.MANUAL:
+            schedule_queue_associate_block_sync(
+                block=instance, series_id=instance.series_id
+            )
         return instance
 
 
@@ -458,6 +472,7 @@ class AssociateAvailabilityBlockCreateSerializer(BaseSerializer):
         is_recurring = validated_data.get("is_recurring", False)
         reason = validated_data.get("reason", "")
         is_active = validated_data.get("is_active", True)
+        series_id = uuid.uuid7() if is_recurring else None
         results = []
         with transaction.atomic():
             if is_recurring:
@@ -490,6 +505,7 @@ class AssociateAvailabilityBlockCreateSerializer(BaseSerializer):
                             None,
                             reason,
                             is_active,
+                            series_id=series_id,
                         )
                     )
             else:
@@ -523,6 +539,10 @@ class AssociateAvailabilityBlockCreateSerializer(BaseSerializer):
                         is_active,
                     )
                 )
+        if results:
+            schedule_queue_associate_block_sync(
+                block=results[0], series_id=series_id
+            )
         return results
 
 
@@ -808,12 +828,30 @@ class AssociateLeaveSerializer(BaseModelSerializer):
             )
         return data
 
+    def create(self, validated_data):
+        leave = AssociateLeave.objects.create(
+            associate=validated_data["associate"],
+            scope=validated_data.get("scope", LeaveScope.CENTER),
+            center=validated_data.get("center"),
+            start_datetime=validated_data["start_datetime"],
+            end_datetime=validated_data["end_datetime"],
+            reason=validated_data.get("reason", ""),
+            is_active=validated_data.get("is_active", True),
+            created_by=validated_data.get("created_by"),
+            origin=AvailabilityOrigin.MANUAL,
+        )
+        schedule_queue_associate_leave_sync(leave)
+        return leave
+
     def update(self, instance, validated_data):
         scope = validated_data.get("scope", instance.scope)
         validated_data["center"] = resolve_associate_leave_center(
             scope, self.context.get("center")
         )
-        return super().update(instance, validated_data)
+        instance = super().update(instance, validated_data)
+        if instance.origin == AvailabilityOrigin.MANUAL:
+            schedule_queue_associate_leave_sync(instance)
+        return instance
 
 
 class RoomAvailabilityBlockSerializer(BaseModelSerializer):

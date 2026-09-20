@@ -258,15 +258,63 @@ def sync_appointment_with_google(appointment_id):
 
 
 def send_google_calendar_outbound_event(
-    connection, title, start, end, notes=None, event_id=None
+    connection,
+    title,
+    start,
+    end,
+    notes=None,
+    event_id=None,
+    *,
+    all_day=False,
+    recurrence=None,
 ):
+    """
+    Upsert an event onto the personal calendar owned by `connection`.
+    Uses insert with a deterministic id, falling back to patch on conflict
+    or when a stored event_id is already known.
+    """
     access_token = get_valid_access_token(connection)
-    event = calendar_api.insert_event(
-        access_token,
-        title=title,
-        start=start,
-        end=end,
-        notes=notes,
-        event_id=event_id,
-    )
-    return event["id"]
+    stored_event_id = event_id
+    if stored_event_id:
+        try:
+            event = calendar_api.patch_event(
+                access_token,
+                stored_event_id,
+                title=title,
+                start=start,
+                end=end,
+                notes=notes,
+                all_day=all_day,
+                recurrence=recurrence,
+            )
+            return event["id"]
+        except requests.HTTPError as error:
+            if not is_stale_google_event_error(error):
+                raise
+    try:
+        event = calendar_api.insert_event(
+            access_token,
+            title=title,
+            start=start,
+            end=end,
+            notes=notes,
+            event_id=stored_event_id,
+            all_day=all_day,
+            recurrence=recurrence,
+        )
+        return event["id"]
+    except requests.HTTPError as error:
+        if not is_google_event_conflict_error(error):
+            raise
+        event = calendar_api.get_event(access_token, stored_event_id)
+        event = calendar_api.patch_event(
+            access_token,
+            event["id"],
+            title=title,
+            start=start,
+            end=end,
+            notes=notes,
+            all_day=all_day,
+            recurrence=recurrence,
+        )
+        return event["id"]
