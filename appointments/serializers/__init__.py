@@ -314,6 +314,13 @@ def reject_effective_until(initial_data):
         )
 
 
+def reject_google_origin_edit(instance):
+    if instance is not None and instance.origin == AvailabilityOrigin.GOOGLE:
+        raise serializers.ValidationError(
+            "This entry is synced from Google Calendar. Change it in Google Calendar."
+        )
+
+
 def clear_effective_until(instance):
     if instance.effective_until is not None:
         instance.effective_until = None
@@ -376,14 +383,17 @@ class AssociateAvailabilityBlockSerializer(BaseModelSerializer):
             "recurring_end_time",
             "effective_from",
             "reason",
+            "origin",
+            "google_event_id",
             "is_active",
             "created_by",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "origin", "google_event_id", "created_at", "updated_at"]
 
     def validate(self, data):
+        reject_google_origin_edit(self.instance)
         if "effective_until" in self.initial_data:
             raise serializers.ValidationError(
                 {
@@ -786,13 +796,17 @@ class AssociateLeaveSerializer(BaseModelSerializer):
             "start_datetime",
             "end_datetime",
             "reason",
+            "origin",
+            "google_event_id",
             "is_active",
             "created_by",
             "created_at",
             "updated_at",
         ]
+        read_only_fields = ["origin", "google_event_id"]
 
     def validate(self, data):
+        reject_google_origin_edit(self.instance)
         scope = data.get("scope", getattr(self.instance, "scope", LeaveScope.CENTER))
         associate = self.context.get("associate") or getattr(
             self.instance, "associate", None

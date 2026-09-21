@@ -11,6 +11,10 @@ from accounts.models import UserAccount
 from accounts.users.models import User
 from accounts.utils.constants import UserType
 from appointments.models import AssociateAvailabilityBlock, AssociateLeave
+from appointments.serializers import (
+    AssociateAvailabilityBlockSerializer,
+    AssociateLeaveSerializer,
+)
 from appointments.utils.constants import AvailabilityOrigin, LeaveScope
 from integrations.google_calendar import availability_sync as sync
 from integrations.google_calendar.calendar_api import (
@@ -413,6 +417,13 @@ class SyncDatabaseTests(TestCase):
         self.run_sync([timed_event("Test one-off")])
         self.assertEqual(self.counts([timed_event("Test one-off", transparency="transparent")]), (0, 0, 1))
 
+    def test_event_edited_to_unsupported_rule_keeps_imported_rows(self):
+        weekly = timed_event("Test weekly", recurrence=rrule("FREQ=WEEKLY;BYDAY=TH"))
+        self.run_sync([weekly])
+        unsupported = timed_event("Test weekly", recurrence=rrule("FREQ=WEEKLY;INTERVAL=2;BYDAY=TH"))
+        self.assertEqual(self.counts([unsupported]), (0, 0, 0))
+        self.assertEqual(self.active_blocks("Test weekly").count(), 1)
+
     def test_manually_created_rows_are_never_touched(self):
         manual_block = AssociateAvailabilityBlock.objects.create(
             center=self.center, associate=self.associate, reason="Test manual block",
@@ -528,3 +539,37 @@ class SyncDatabaseTests(TestCase):
             sync.sync_google_events_to_availability_blocks(self.user, self.connection)
         # 2 block rows (one per center) + 1 leave hook per center.
         self.assertEqual(hooks.call_count, 4)
+
+
+class GoogleOriginReadOnlyTests(TestCase):
+    def setUp(self):
+        self.center = Center.objects.create(name="Test Origin Center", code="CT-TORIG")
+        user = User.objects.create_user(email="test-origin-associate@example.com")
+        UserAccount.objects.create(user=user, account_type=UserType.ASSOCIATE)
+        self.associate = Associate.objects.create(user=user)
+        start = timezone.now() + timedelta(days=1)
+        self.block = AssociateAvailabilityBlock.objects.create(
+            center=self.center, associate=self.associate, reason="Test google block",
+            start_datetime=start, end_datetime=start + timedelta(hours=1),
+            google_event_id="Test event", origin=AvailabilityOrigin.GOOGLE,
+        )
+        self.leave = AssociateLeave.objects.create(
+            associate=self.associate, scope=LeaveScope.ALL_CENTERS, reason="Test google leave",
+            start_datetime=start, end_datetime=start + timedelta(days=1),
+            google_event_id="Test leave", origin=AvailabilityOrigin.GOOGLE,
+        )
+
+    def test_google_block_and_leave_cannot_be_edited(self):
+        for serializer_class, row in (
+            (AssociateAvailabilityBlockSerializer, self.block),
+            (AssociateLeaveSerializer, self.leave),
+        ):
+            with self.subTest(serializer=serializer_class.__name__):
+                serializer = serializer_class(row, data={"is_active": False}, partial=True)
+                self.assertFalse(serializer.is_valid())
+
+    def test_origin_is_exposed_read_only(self):
+        data = AssociateAvailabilityBlockSerializer(self.block).data
+        self.assertEqual(data["origin"], "Google")
+        self.assertEqual(data["google_event_id"], "Test event")
+        self.assertEqual(AssociateLeaveSerializer(self.leave).data["origin"], "Google")

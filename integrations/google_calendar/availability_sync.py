@@ -121,14 +121,17 @@ def _is_leave_event(event: dict):
     return event.get("eventType") == "outOfOffice" or "date" in event.get("start", {})
 
 
-def build_spec_from_event(event: dict):
-    # Returns None if the event shouldn't block anything; "kind" is "leave" or "block".
-    if (
+def event_frees_time(event: dict):
+    # True when Google itself says the event no longer blocks the person's time
+    return (
         event.get("status") == "cancelled"
         or event.get("transparency") == "transparent"
         or calendar_api.event_is_biopeak_outbound(event)
         or _is_declined_by_self(event)
-    ):
+    )
+
+def build_spec_from_event(event: dict):
+    if event_frees_time(event):
         return None
 
     bounds = _event_bounds(event)
@@ -389,7 +392,9 @@ def _imported_rows_by_event_id(handler, associate):
     return rows_by_event_id
 
 
-def _sync_kind(handler, associate, user, centers, specs: dict, time_min):
+def _sync_kind(
+    handler, associate, user, centers, specs: dict, unreadable_event_ids: set, time_min
+):
     rows_by_event_id = _imported_rows_by_event_id(handler, associate)
     created = replaced = 0
     scan_results = []
@@ -398,6 +403,7 @@ def _sync_kind(handler, associate, user, centers, specs: dict, time_min):
         event_id
         for event_id, rows in rows_by_event_id.items()
         if event_id not in specs
+        and event_id not in unreadable_event_ids
         and any(handler.is_live(row, time_min) for row in rows)
     ]
     gone_pks = _deactivate_event_rows(handler, associate, gone_event_ids)
@@ -443,16 +449,20 @@ def sync_google_events_to_availability_blocks(user, connection):
     time_max = time_min + timedelta(days=SYNC_WINDOW_DAYS)
 
     specs_by_kind = {"block": {}, "leave": {}}
+    unreadable_event_ids = set()
     for event in calendar_api.list_events(access_token, time_min, time_max):
         spec = build_spec_from_event(event)
         if spec is not None:
             specs_by_kind[spec["kind"]][spec["google_event_id"]] = spec
+        elif not event_frees_time(event):
+            unreadable_event_ids.add(event["id"])
 
     created = replaced = removed = 0
     scan_results = []
     for kind, specs in specs_by_kind.items():
         kind_created, kind_replaced, kind_removed, kind_scans = _sync_kind(
-            SPEC_HANDLERS[kind], associate, user, centers, specs, time_min
+            SPEC_HANDLERS[kind], associate, user, centers, specs,
+            unreadable_event_ids, time_min,
         )
         created += kind_created
         replaced += kind_replaced

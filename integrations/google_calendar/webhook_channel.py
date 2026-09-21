@@ -7,6 +7,9 @@ from django.utils import timezone
 
 from core.utils.log import logger
 from integrations.google_calendar import calendar_api
+from integrations.google_calendar.availability_sync import (
+    sync_google_events_to_availability_blocks,
+)
 from integrations.google_calendar.db import (
     clear_google_calendar_watch_channel,
     persist_google_calendar_watch_channel,
@@ -100,6 +103,9 @@ def ensure_watch_channel_active(connection):
 
     start_watch_channel(connection)
     stop_channel_at_google(connection, old_channel_id, old_resource_id)
+    if old_channel_id:
+        # Pushes sent to the old channel works now even while we swapped were dropped, catch up now
+        sync_google_events_to_availability_blocks(connection.user, connection)
 
 
 def ensure_watch_channel_active_or_log(connection):

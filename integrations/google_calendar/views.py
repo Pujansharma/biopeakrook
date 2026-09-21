@@ -350,6 +350,7 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
                 f"token revoke for user {request.user.pk}: {error}. Not "
                 "clearing the local connection so this can be retried."
             )
+            ensure_watch_channel_active_or_log(connection)
             raise ServiceUnavailable(
                 "Failed to reach Google to revoke the Google Calendar "
                 "connection. Please try again."

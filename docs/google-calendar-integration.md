@@ -642,6 +642,16 @@ events against their previously-imported rows, per Google event id:
   recurring series once its `UNTIL` has passed, and a still-running one
   always keeps showing up in every fetch - so its absence means it was
   deleted/freed/declined in Google, or its series simply ended.
+- **Present but unreadable** - an event still on Google's calendar that we
+  can't import (unsupported `RRULE`: `INTERVAL>1`, `COUNT`, monthly, bad
+  bounds) is _not_ "gone". Its already-imported rows are left exactly as they
+  are (nothing created, nothing removed). Only an event that is missing from
+  the fetch, or that Google marks cancelled / free / declined / Biopeak-outbound,
+  is soft-offed.
+- **Google rows are read-only in the API.** `AssociateAvailabilityBlockSerializer`
+  and `AssociateLeaveSerializer` expose read-only `origin` and `google_event_id`,
+  and a PATCH on an `origin=google` row returns 400 (edit it in Google
+  Calendar). Otherwise the next sync would just recreate it.
 
 `GoogleCalendarConnection.last_synced_at` is set only after a sync actually
 completes successfully - not on every click, and not on a failed one.
