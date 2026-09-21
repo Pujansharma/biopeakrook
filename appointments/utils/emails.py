@@ -20,6 +20,12 @@ def build_location_note(appointment: Appointment) -> str:
     return f"<b>Clinic Address:</b> {clinic_address}\n\n"
 
 
+def build_attendance_note(appointment: Appointment) -> str:
+    if appointment.modality == AppointmentModes.VIRTUAL:
+        return "<b>Note:</b> Please join the meeting on time."
+    return "<b>Note:</b> Please arrive 10 minutes before your scheduled appointment."
+
+
 def get_appointment_date(appointment: Appointment) -> str:
     return timezone.localtime(appointment.start_datetime).strftime(
         APPOINTMENT_DATE_FORMAT
@@ -47,7 +53,7 @@ def build_appointment_confirmed_notes(appointment: Appointment, notes: str | Non
         f"<b>Service:</b> {service_name}\n"
         f"{build_location_note(appointment)}"
         f"We look forward to seeing you.\n\n"
-        f"<b>Note:</b> Please arrive 10 minutes before your scheduled appointment."
+        f"{build_attendance_note(appointment)}"
     )
     return append_notes(message, notes)
 
@@ -62,6 +68,6 @@ def build_appointment_rescheduled_notes(appointment: Appointment, notes: str | N
         f"<b>Service:</b> {service_name}\n"
         f"{build_location_note(appointment)}"
         f"Please refer to the updated date and time.\n\n"
-        f"<b>Note:</b> Please arrive 10 minutes before your scheduled appointment."
+        f"{build_attendance_note(appointment)}"
     )
     return append_notes(message, notes)
