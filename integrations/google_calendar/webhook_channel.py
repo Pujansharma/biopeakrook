@@ -100,11 +100,18 @@ def ensure_watch_channel_active(connection):
         return
     old_channel_id = connection.watch_channel_id
     old_resource_id = connection.watch_resource_id
+    old_channel_had_expired = bool(
+        old_channel_id
+        and connection.watch_expires_at
+        and connection.watch_expires_at <= timezone.now()
+    )
 
     start_watch_channel(connection)
     stop_channel_at_google(connection, old_channel_id, old_resource_id)
-    if old_channel_id:
-        # Pushes sent to the old channel works now even while we swapped were dropped, catch up now
+    if old_channel_had_expired:
+        # An expired channel left a real gap (pushes were dropped), so catch up now.
+        # An early renewal overlaps old and new channels; only a push landing in the
+        # instant before the new channel id is saved can be missed (next push/Sync fixes it)
         sync_google_events_to_availability_blocks(connection.user, connection)
 
 

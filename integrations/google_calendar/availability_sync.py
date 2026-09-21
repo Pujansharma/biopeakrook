@@ -31,17 +31,37 @@ RRULE_BYDAY_TO_DAY_OF_WEEK = {
 ALL_DAYS_OF_WEEK = list(RRULE_BYDAY_TO_DAY_OF_WEEK.values())
 
 
+def _parse_aware_datetime(value: str):
+    # Google's text is outside our control: unparsable or timezone-less -> None
+    try:
+        parsed = parse_datetime(value)
+    except ValueError:
+        return None
+    if parsed is None or timezone.is_naive(parsed):
+        return None
+    return parsed
+
+
+def _parse_date_or_none(value: str):
+    try:
+        return parse_date(value)
+    except ValueError:
+        return None
+
+
 def _parse_rrule_until(until_value: str, start_dt: datetime):
     # Last date an occurrence can start on (UNTIL may be a date or a UTC/floating datetime).
-    if "T" not in until_value:
-        return datetime.strptime(until_value, "%Y%m%d").date()
+    # Returns None when UNTIL is malformed.
     local_zone = timezone.get_current_timezone()
     zone = UTC if until_value.endswith("Z") else local_zone
-    until_dt = (
-        datetime.strptime(until_value.removesuffix("Z"), "%Y%m%dT%H%M%S")
-        .replace(tzinfo=zone)
-        .astimezone(local_zone)
-    )
+    date_format = "%Y%m%dT%H%M%S" if "T" in until_value else "%Y%m%d"
+    try:
+        parsed = datetime.strptime(until_value.removesuffix("Z"), date_format)
+    except ValueError:
+        return None
+    if "T" not in until_value:
+        return parsed.date()
+    until_dt = parsed.replace(tzinfo=zone).astimezone(local_zone)
     if until_dt.time() >= start_dt.time():
         return until_dt.date()
     return until_dt.date() - timedelta(days=1)
@@ -79,7 +99,7 @@ def parse_supported_rrule(recurrence_lines: list[str], start_dt: datetime):
     effective_until = None
     if "UNTIL" in rule_parts:
         effective_until = _parse_rrule_until(rule_parts["UNTIL"], start_dt)
-        if effective_until < start_dt.date():
+        if effective_until is None or effective_until < start_dt.date():
             return None
     return {"days_of_week": days_of_week, "effective_until": effective_until}
 
@@ -94,9 +114,13 @@ def _is_declined_by_self(event: dict):
 def _all_day_event_bounds(start_date: str, end_date: str):
     # Google's all-day end.date is exclusive.
     zone = timezone.get_current_timezone()
-    last_day = parse_date(end_date) - timedelta(days=1)
+    first_day = _parse_date_or_none(start_date)
+    exclusive_end = _parse_date_or_none(end_date)
+    if first_day is None or exclusive_end is None:
+        return None
+    last_day = exclusive_end - timedelta(days=1)
     return (
-        datetime.combine(parse_date(start_date), time.min, tzinfo=zone),
+        datetime.combine(first_day, time.min, tzinfo=zone),
         datetime.combine(last_day, time(23, 59, 59), tzinfo=zone),
     )
 
@@ -105,10 +129,11 @@ def _event_bounds(event: dict):
     start = event.get("start", {})
     end = event.get("end", {})
     if "dateTime" in start and "dateTime" in end:
-        return (
-            timezone.localtime(parse_datetime(start["dateTime"])),
-            timezone.localtime(parse_datetime(end["dateTime"])),
-        )
+        start_dt = _parse_aware_datetime(start["dateTime"])
+        end_dt = _parse_aware_datetime(end["dateTime"])
+        if start_dt is None or end_dt is None:
+            return None
+        return timezone.localtime(start_dt), timezone.localtime(end_dt)
     if "date" in start and "date" in end:
         return _all_day_event_bounds(start["date"], end["date"])
     return None

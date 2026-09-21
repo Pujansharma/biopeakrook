@@ -573,3 +573,21 @@ class GoogleOriginReadOnlyTests(TestCase):
         self.assertEqual(data["origin"], "Google")
         self.assertEqual(data["google_event_id"], "Test event")
         self.assertEqual(AssociateLeaveSerializer(self.leave).data["origin"], "Google")
+
+
+class MalformedGoogleEventTests(SimpleTestCase):
+    def test_bad_datetime_is_unreadable_not_now(self):
+        for bad in ("garbage", "2026-13-45T10:00:00+05:30", "2026-09-25T10:00:00"):
+            with self.subTest(value=bad):
+                event = timed_event()
+                event["start"]["dateTime"] = bad
+                self.assertIsNone(sync.build_spec_from_event(event))
+                self.assertFalse(sync.event_frees_time(event))
+
+    def test_bad_all_day_date_is_unreadable(self):
+        event = {"id": "bad", "start": {"date": "2026-99-99"}, "end": {"date": "2026-10-01"}}
+        self.assertIsNone(sync.build_spec_from_event(event))
+
+    def test_bad_rrule_until_is_unreadable(self):
+        event = timed_event(recurrence=["RRULE:FREQ=WEEKLY;UNTIL=notadate"])
+        self.assertIsNone(sync.build_spec_from_event(event))

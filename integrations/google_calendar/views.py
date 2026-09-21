@@ -173,7 +173,15 @@ def _persist_connection(user, google_email, tokens):
 
 
 def _start_personal_watch_channel(user):
-    ensure_watch_channel_active_or_log(get_google_calendar_connection_for_user(user))
+    connection = get_google_calendar_connection_for_user(user)
+    ensure_watch_channel_active_or_log(connection)
+    try:
+        sync_google_events_to_availability_blocks(user, connection)
+    except GOOGLE_SYNC_ERRORS as error:
+        logger.warning(
+            f"Google Calendar connect: first availability sync failed for user "
+            f"{user.pk}: {error}"
+        )
 
 
 def _complete_shared_connection(google_email: str):
