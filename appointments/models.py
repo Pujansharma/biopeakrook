@@ -139,7 +139,7 @@ class AssociateLeave(BaseUUIDModel):
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
     reason = models.CharField(max_length=255, blank=True)
-    google_event_id = models.CharField(blank=True, db_index=True)
+    google_event_id = models.CharField(max_length=1024, blank=True, db_index=True)
     origin = models.CharField(
         max_length=16,
         choices=AvailabilityOrigin,

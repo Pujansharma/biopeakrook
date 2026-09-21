@@ -9,6 +9,16 @@ EVENTS_URL = f"https://www.googleapis.com/calendar/v3/calendars/{CALENDAR_ID}/ev
 CHANNELS_STOP_URL = "https://www.googleapis.com/calendar/v3/channels/stop"
 REQUEST_TIMEOUT = 10
 
+# Private extended property stamped on Biopeak→Google outbound events so inbound
+# sync never re-imports them as foreign busy (loop fence).
+BIOPEAK_OUTBOUND_PRIVATE_KEY = "biopeakOutbound"
+BIOPEAK_OUTBOUND_PRIVATE_VALUE = "1"
+
+
+def event_is_biopeak_outbound(event: dict) -> bool:
+    private = (event.get("extendedProperties") or {}).get("private") or {}
+    return private.get(BIOPEAK_OUTBOUND_PRIVATE_KEY) == BIOPEAK_OUTBOUND_PRIVATE_VALUE
+
 
 def _date_value(value):
     if isinstance(value, datetime):
@@ -39,6 +49,7 @@ def _event_body(
     *,
     all_day: bool = False,
     recurrence: list[str] | None = None,
+    biopeak_outbound: bool = False,
 ):
     if all_day:
         body = {
@@ -60,6 +71,12 @@ def _event_body(
         }
     if recurrence:
         body["recurrence"] = recurrence
+    if biopeak_outbound:
+        body["extendedProperties"] = {
+            "private": {
+                BIOPEAK_OUTBOUND_PRIVATE_KEY: BIOPEAK_OUTBOUND_PRIVATE_VALUE,
+            }
+        }
     return body
 
 
@@ -95,6 +112,7 @@ def insert_event(
     event_id: str | None = None,
     all_day: bool = False,
     recurrence: list[str] | None = None,
+    biopeak_outbound: bool = False,
 ):
     body = _event_body(
         title,
@@ -105,6 +123,7 @@ def insert_event(
         participant_emails,
         all_day=all_day,
         recurrence=recurrence,
+        biopeak_outbound=biopeak_outbound,
     )
     if event_id:
         body["id"] = event_id
@@ -144,6 +163,7 @@ def patch_event(
     participant_emails: list[str] | None = None,
     all_day: bool = False,
     recurrence: list[str] | None = None,
+    biopeak_outbound: bool = False,
 ):
     # add_meet_link=True rotates the Meet link if the event already has one -
     # only pass True the first time a Meet link is added to this event.
@@ -159,6 +179,7 @@ def patch_event(
         participant_emails,
         all_day=all_day,
         recurrence=recurrence,
+        biopeak_outbound=biopeak_outbound,
     )
     params = {}
     if add_meet_link:

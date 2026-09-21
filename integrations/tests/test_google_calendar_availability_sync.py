@@ -10,8 +10,12 @@ from accounts.models import UserAccount
 from accounts.users.models import User
 from accounts.utils.constants import UserType
 from appointments.models import AssociateAvailabilityBlock, AssociateLeave
-from appointments.utils.constants import LeaveScope
+from appointments.utils.constants import AvailabilityOrigin, LeaveScope
 from integrations.google_calendar import availability_sync as sync
+from integrations.google_calendar.calendar_api import (
+    BIOPEAK_OUTBOUND_PRIVATE_KEY,
+    BIOPEAK_OUTBOUND_PRIVATE_VALUE,
+)
 
 MODULE = "integrations.google_calendar.availability_sync"
 START_DAY = timezone.localdate() + timedelta(days=3)
@@ -144,6 +148,17 @@ class SpecBuildingTests(SimpleTestCase):
         spec = sync.build_spec_from_event(timed_event("Test ooo", eventType="outOfOffice"))
         self.assertEqual(spec["kind"], "leave")
         self.assertEqual(spec["start_datetime"].isoformat()[11:19], "13:30:00")
+
+    def test_biopeak_outbound_events_are_skipped(self):
+        event = timed_event(
+            "Test outbound",
+            extendedProperties={
+                "private": {
+                    BIOPEAK_OUTBOUND_PRIVATE_KEY: BIOPEAK_OUTBOUND_PRIVATE_VALUE,
+                }
+            },
+        )
+        self.assertIsNone(sync.build_spec_from_event(event))
 
     def test_recurring_all_day_stays_a_block(self):
         event = all_day_event("Test all-day repeat", START_DAY, START_DAY, recurrence=rrule("FREQ=DAILY"))
@@ -361,17 +376,57 @@ class SyncDatabaseTests(TestCase):
         self.assertTrue(manual_block.is_active)
         self.assertTrue(manual_leave.is_active)
 
+    def test_manual_outbound_rows_with_google_event_id_are_not_reconciled(self):
+        # Loop fence: outbound stamps google_event_id on MANUAL rows; inbound must
+        # not treat them as imports (esp. multi-center wanted-state mismatch).
+        self.add_second_center()
+        start = timezone.now() + timedelta(days=1)
+        manual_block = AssociateAvailabilityBlock.objects.create(
+            center=self.center,
+            associate=self.associate,
+            reason="Test outbound block",
+            start_datetime=start,
+            end_datetime=start + timedelta(hours=1),
+            google_event_id="Test outbound block",
+            origin=AvailabilityOrigin.MANUAL,
+        )
+        # Same id as the manual outbound event — must be skipped by marker, and even
+        # without a matching import the MANUAL row must stay active.
+        outbound_event = timed_event(
+            "Test outbound block",
+            extendedProperties={
+                "private": {
+                    BIOPEAK_OUTBOUND_PRIVATE_KEY: BIOPEAK_OUTBOUND_PRIVATE_VALUE,
+                }
+            },
+        )
+        self.assertEqual(self.counts([outbound_event]), (0, 0, 0))
+        manual_block.refresh_from_db()
+        self.assertTrue(manual_block.is_active)
+        self.assertEqual(manual_block.origin, AvailabilityOrigin.MANUAL)
+        self.assertEqual(
+            AssociateAvailabilityBlock.objects.filter(
+                associate=self.associate,
+                google_event_id="Test outbound block",
+                origin=AvailabilityOrigin.GOOGLE,
+                is_active=True,
+            ).count(),
+            0,
+        )
+
     def test_already_ended_one_off_rows_are_not_reported_removed(self):
         ended = timezone.now() - timedelta(days=2)
         block = AssociateAvailabilityBlock.objects.create(
             center=self.center, associate=self.associate, reason="Test ended",
             start_datetime=ended, end_datetime=ended + timedelta(hours=1),
             google_event_id="Test ended block",
+            origin=AvailabilityOrigin.GOOGLE,
         )
         leave = AssociateLeave.objects.create(
             associate=self.associate, scope=LeaveScope.ALL_CENTERS, reason="Test ended",
             start_datetime=ended, end_datetime=ended + timedelta(hours=1),
             google_event_id="Test ended leave",
+            origin=AvailabilityOrigin.GOOGLE,
         )
         self.assertEqual(self.counts([]), (0, 0, 0))
         block.refresh_from_db()

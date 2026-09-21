@@ -286,6 +286,7 @@ def send_google_calendar_outbound_event(
                 notes=notes,
                 all_day=all_day,
                 recurrence=recurrence,
+                biopeak_outbound=True,
             )
             return event["id"]
         except requests.HTTPError as error:
@@ -301,6 +302,7 @@ def send_google_calendar_outbound_event(
             event_id=stored_event_id,
             all_day=all_day,
             recurrence=recurrence,
+            biopeak_outbound=True,
         )
         return event["id"]
     except requests.HTTPError as error:
@@ -316,5 +318,6 @@ def send_google_calendar_outbound_event(
             notes=notes,
             all_day=all_day,
             recurrence=recurrence,
+            biopeak_outbound=True,
         )
         return event["id"]

@@ -94,7 +94,7 @@ Non-obvious decisions, agent prefs, traps. No code dumps. No CLAUDE.md / CODING_
 ## 2026-09-21 — Personal Google Calendar outbound (Biopeak → Google)
 
 - Manual associate block / recurring series / leave create+update+soft-off enqueue `CommunicationOutbox` (`channel=google_calendar`, event `associate_block_sync` / `associate_leave_sync`). Worker desired-state via `personal_outbound.sync_*` → `send_google_calendar_outbound_event` (personal tokens only).
-- Loop fence: `AvailabilityOrigin` on block+leave (`manual`|`google`). Inbound sync sets `google`; enqueue + sync skip non-manual. Recurring create mints shared `series_id` (one Google RRULE). Outbox: nullable `appointment` + exactly-one target check (`appointment` | `associate_availability_block` | `associate_leave` | `availability_series_id`).
+- Loop fence (two layers): (1) `AvailabilityOrigin` on block+leave (`manual`|`google`) — inbound reconcile / `_deactivate` only touch `origin=google`; enqueue + outbound sync skip non-manual. (2) Outbound insert/patch stamps private `extendedProperties.private.biopeakOutbound=1`; inbound `build_spec_from_event` skips those events so our writes never re-import even before `google_event_id` is persisted. Recurring create mints shared `series_id` (one Google RRULE). Outbox: nullable `appointment` + exactly-one target check + partial unique on open PENDING/FAILED per series/block/leave target.
 - Not connected → outbox processed as SKIPPED `"Personal Google Calendar not connected"`. Agent does **not** write migrations — user `makemigrations` appointments+integrations then migrate.
 
 ---

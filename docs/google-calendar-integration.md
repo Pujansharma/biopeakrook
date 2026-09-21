@@ -656,9 +656,14 @@ outbox worker dispatches to
 the associate's **personal** calendar through
 `send_google_calendar_outbound_event` (not the shared organizer).
 
-**Loop fence.** `AssociateAvailabilityBlock.origin` /
+**Loop fence (two layers).** `AssociateAvailabilityBlock.origin` /
 `AssociateLeave.origin` is `manual` (API) or `google` (inbound sync). Only
-`manual` rows enqueue or write back. Inbound-created rows never echo.
+`manual` rows enqueue or write back. Inbound reconcile and `_deactivate` only
+touch `origin=google` rows (so MANUAL rows that carry a `google_event_id` after
+outbound are never replaced or soft-off'd by import). Outbound insert/patch also
+stamps private `extendedProperties.private.biopeakOutbound=1`; inbound
+`build_spec_from_event` skips those events so Biopeak-written busy never
+re-imports even if the webhook races ahead of persisting `google_event_id`.
 
 **Recurring.** A multi-day create shares one `series_id`; one outbox target +
 one Google master with `RRULE:FREQ=WEEKLY;BYDAY=...`. Soft-off / edit of any
@@ -669,8 +674,10 @@ row in the series rebuilds from all still-active siblings.
 
 **Schema.** `CommunicationOutbox.appointment` is nullable; exactly one of
 `appointment` / `associate_availability_block` / `associate_leave` /
-`availability_series_id` (DB check). User runs migrations for new columns
-(`origin`, `series_id`, outbox FKs) — agent does not write them.
+`availability_series_id` (DB check). Partial unique on open PENDING/FAILED
+google rows per series/block/leave target. User runs migrations for new columns
+(`origin`, `series_id`, outbox FKs/uniques, leave `google_event_id` max_length)
+— agent does not write them.
 
 ## Personal calendar webhook (push notifications)
 

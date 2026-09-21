@@ -152,6 +152,39 @@ class CommunicationOutbox(BaseUUIDModel):
                 ),
                 name="comm_outbox_exactly_one_target",
             ),
+            models.UniqueConstraint(
+                fields=["availability_series_id", "channel"],
+                condition=Q(
+                    availability_series_id__isnull=False,
+                    status__in=[
+                        CommunicationOutboxStatus.PENDING,
+                        CommunicationOutboxStatus.FAILED,
+                    ],
+                ),
+                name="uniq_comm_outbox_series_google_open",
+            ),
+            models.UniqueConstraint(
+                fields=["associate_availability_block", "channel"],
+                condition=Q(
+                    associate_availability_block__isnull=False,
+                    status__in=[
+                        CommunicationOutboxStatus.PENDING,
+                        CommunicationOutboxStatus.FAILED,
+                    ],
+                ),
+                name="uniq_comm_outbox_block_google_open",
+            ),
+            models.UniqueConstraint(
+                fields=["associate_leave", "channel"],
+                condition=Q(
+                    associate_leave__isnull=False,
+                    status__in=[
+                        CommunicationOutboxStatus.PENDING,
+                        CommunicationOutboxStatus.FAILED,
+                    ],
+                ),
+                name="uniq_comm_outbox_leave_google_open",
+            ),
         ]
 
     def __str__(self):

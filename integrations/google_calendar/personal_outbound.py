@@ -80,14 +80,13 @@ def _persist_leave_google_event_id(leave, event_id):
 
 
 def _load_block_rows(*, series_id=None, block_id=None):
+    queryset = AssociateAvailabilityBlock.objects.select_related("associate__user")
     if series_id is not None:
         return list(
-            AssociateAvailabilityBlock.objects.filter(series_id=series_id).order_by(
-                "day_of_week", "pk"
-            )
+            queryset.filter(series_id=series_id).order_by("day_of_week", "pk")
         )
     if block_id is not None:
-        block = AssociateAvailabilityBlock.objects.filter(pk=block_id).first()
+        block = queryset.filter(pk=block_id).first()
         return [block] if block is not None else []
     return []
 

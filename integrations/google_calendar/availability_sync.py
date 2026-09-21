@@ -124,6 +124,7 @@ def build_spec_from_event(event: dict):
     if (
         event.get("status") == "cancelled"
         or event.get("transparency") == "transparent"
+        or calendar_api.event_is_biopeak_outbound(event)
         or _is_declined_by_self(event)
     ):
         return None
@@ -280,7 +281,10 @@ def _deactivate(model, associate, event_ids: list):
     if not event_ids:
         return 0
     return model.objects.filter(
-        associate=associate, google_event_id__in=event_ids, is_active=True
+        associate=associate,
+        google_event_id__in=event_ids,
+        is_active=True,
+        origin=AvailabilityOrigin.GOOGLE,
     ).update(is_active=False)
 
 
@@ -314,8 +318,11 @@ def sync_google_events_to_availability_blocks(user, connection):
         for kind, specs in specs_by_kind.items():
             handler = SPEC_HANDLERS[kind]
             rows_by_event_id = defaultdict(list)
+            # Only Google-imported rows — never MANUAL outbound-synced rows.
             imported_rows = handler.model.objects.filter(
-                associate=associate, is_active=True
+                associate=associate,
+                is_active=True,
+                origin=AvailabilityOrigin.GOOGLE,
             ).exclude(google_event_id="")
             for row in imported_rows:
                 rows_by_event_id[row.google_event_id].append(row)

@@ -142,9 +142,16 @@ def create_outbox_message(
             skip_reason=skip_reason,
         )
     except IntegrityError:
-        if appointment is None:
+        if appointment is not None:
+            existing = existing_terminal_outbox(appointment, event_type, channel)
+            if existing is not None:
+                return existing
             raise
-        existing = existing_terminal_outbox(appointment, event_type, channel)
+        existing = existing_open_google_availability_outbox(
+            associate_availability_block=associate_availability_block,
+            associate_leave=associate_leave,
+            availability_series_id=availability_series_id,
+        )
         if existing is not None:
             return existing
         raise
