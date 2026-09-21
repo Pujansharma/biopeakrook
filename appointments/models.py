@@ -115,6 +115,16 @@ class AssociateAvailabilityBlock(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            # Two concurrent Google syncs must not both import the same event
+            models.UniqueConstraint(
+                fields=["associate", "center", "google_event_id", "day_of_week"],
+                condition=models.Q(is_active=True, origin=AvailabilityOrigin.GOOGLE)
+                & ~models.Q(google_event_id=""),
+                nulls_distinct=False,
+                name="uniq_active_google_block_per_event",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"
@@ -156,6 +166,14 @@ class AssociateLeave(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["associate", "google_event_id"],
+                condition=models.Q(is_active=True, origin=AvailabilityOrigin.GOOGLE)
+                & ~models.Q(google_event_id=""),
+                name="uniq_active_google_leave_per_event",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"

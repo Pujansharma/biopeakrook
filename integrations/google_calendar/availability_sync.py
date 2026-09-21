@@ -3,7 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, time, timedelta
 from typing import NamedTuple
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -14,7 +14,9 @@ from appointments.utils.constants import AvailabilityOrigin, ExceptionSourceType
 from appointments.utils.exceptions import (
     apply_availability_exception_hooks,
     pick_exception_scan_status,
+    trigger_exception_resolution,
 )
+from appointments.utils.operations import invalidate_operations_cache
 from core.utils.log import logger
 from integrations.google_calendar import calendar_api
 from integrations.google_calendar.tokens import get_valid_access_token
@@ -178,7 +180,7 @@ def _run_exception_hooks(center, instance, source_type):
 
 def _block_state(rows: list):
     first = rows[0]
-    center_ids = frozenset(row.center_id for row in rows)
+    center_ids = frozenset(row.center.pk for row in rows)
     if first.is_recurring:
         return center_ids, (
             True, frozenset(row.day_of_week for row in rows),
@@ -204,26 +206,57 @@ def _block_is_live(block, time_min):
     return block.is_recurring or block.end_datetime > time_min
 
 
-def _create_blocks(centers, associate, user, spec: dict):
+class WantedRow(NamedTuple):
+    center: object  # None for all-centers leave
+    day_of_week: str | None
+    fields: dict  # every editable column of the new row
+    hook_centers: list  # centers whose exception scan must run for this row
+
+
+def _block_wanted_rows(spec: dict, centers: list):
+    if spec["is_recurring"]:
+        fields = {
+            "is_recurring": True,
+            "start_datetime": None,
+            "end_datetime": None,
+            "recurring_start_time": spec["recurring_start_time"],
+            "recurring_end_time": spec["recurring_end_time"],
+            "effective_from": spec["effective_from"],
+            "effective_until": spec["effective_until"],
+            "reason": spec["reason"],
+        }
+        days_of_week = spec["days_of_week"]
+    else:
+        fields = {
+            "is_recurring": False,
+            "start_datetime": spec["start_datetime"],
+            "end_datetime": spec["end_datetime"],
+            "recurring_start_time": None,
+            "recurring_end_time": None,
+            "effective_from": None,
+            "effective_until": None,
+            "reason": spec["reason"],
+        }
+        days_of_week = [None]
+    return {
+        (center.pk, day_of_week): WantedRow(center, day_of_week, fields, [center])
+        for center in centers
+        for day_of_week in days_of_week
+    }
+
+
+def _create_block_row(centers, associate, user, spec: dict, wanted: WantedRow):
     # No overlap check - Biopeak allows overlapping availability blocks.
-    is_recurring = spec["is_recurring"]
-    days_of_week = spec["days_of_week"] if is_recurring else [None]
-    scan_results = []
-    for center in centers:
-        for day_of_week in days_of_week:
-            block = create_associate_availability_block(
-                center, associate, user, is_recurring,
-                spec.get("start_datetime"), spec.get("end_datetime"), day_of_week,
-                spec.get("recurring_start_time"), spec.get("recurring_end_time"),
-                spec.get("effective_from"), spec.get("effective_until"),
-                spec["reason"], True,
-                google_event_id=spec["google_event_id"],
-                origin=AvailabilityOrigin.GOOGLE,
-            )
-            scan_results.append(
-                _run_exception_hooks(center, block, ExceptionSourceType.ASSOCIATE_BLOCK)
-            )
-    return scan_results
+    return create_associate_availability_block(
+        center=wanted.center,
+        associate=associate,
+        created_by=user,
+        day_of_week=wanted.day_of_week,
+        is_active=True,
+        google_event_id=spec["google_event_id"],
+        origin=AvailabilityOrigin.GOOGLE,
+        **wanted.fields,
+    )
 
 
 def _leave_state(rows: list):
@@ -239,53 +272,156 @@ def _leave_is_live(leave, time_min):
     return leave.end_datetime > time_min
 
 
-def _create_leave(centers, associate, user, spec: dict):
-    leave = AssociateLeave.objects.create(
+def _leave_wanted_rows(spec: dict, centers: list):
+    fields = {
+        "start_datetime": spec["start_datetime"],
+        "end_datetime": spec["end_datetime"],
+        "reason": spec["reason"],
+    }
+    return {(None, None): WantedRow(None, None, fields, centers)}
+
+
+def _create_leave_row(centers, associate, user, spec: dict, wanted: WantedRow):
+    return AssociateLeave.objects.create(
         associate=associate,
         scope=LeaveScope.ALL_CENTERS,
         center=None,
-        start_datetime=spec["start_datetime"],
-        end_datetime=spec["end_datetime"],
-        reason=spec["reason"],
         created_by=user,
         google_event_id=spec["google_event_id"],
         origin=AvailabilityOrigin.GOOGLE,
+        **wanted.fields,
     )
-    return [
-        _run_exception_hooks(center, leave, ExceptionSourceType.ASSOCIATE_LEAVE)
-        for center in centers
-    ]
 
 
 class SpecHandler(NamedTuple):
     model: type
+    source_type: str
     state: Callable
     wanted_state: Callable
     is_live: Callable
-    create: Callable
+    wanted_rows: Callable
+    create_row: Callable
 
 
 SPEC_HANDLERS = {
     "block": SpecHandler(
-        AssociateAvailabilityBlock, _block_state, _block_wanted_state,
-        _block_is_live, _create_blocks,
+        AssociateAvailabilityBlock, ExceptionSourceType.ASSOCIATE_BLOCK, _block_state,
+        _block_wanted_state, _block_is_live, _block_wanted_rows,
+        _create_block_row,
     ),
     "leave": SpecHandler(
-        AssociateLeave, _leave_state, _leave_wanted_state,
-        _leave_is_live, _create_leave,
+        AssociateLeave, ExceptionSourceType.ASSOCIATE_LEAVE, _leave_state,
+        _leave_wanted_state, _leave_is_live, _leave_wanted_rows,
+        _create_leave_row,
     ),
 }
 
 
-def _deactivate(model, associate, event_ids: list):
+def _deactivate_rows(handler, row_pks: list):
+    handler.model.objects.filter(pk__in=row_pks).update(
+        is_active=False, updated_at=timezone.localtime(timezone.now())
+    )
+    return row_pks
+
+
+def _deactivate_event_rows(handler, associate, event_ids: list):
+    # Soft-off (never hard-delete): the same thing a manual is_active=false does.
     if not event_ids:
-        return 0
-    return model.objects.filter(
-        associate=associate,
-        google_event_id__in=event_ids,
-        is_active=True,
-        origin=AvailabilityOrigin.GOOGLE,
-    ).update(is_active=False)
+        return []
+    row_pks = list(
+        handler.model.objects.filter(
+            associate=associate,
+            google_event_id__in=event_ids,
+            is_active=True,
+            origin=AvailabilityOrigin.GOOGLE,
+        ).values_list("pk", flat=True)
+    )
+    return _deactivate_rows(handler, row_pks)
+
+
+def _resolve_deactivated(handler, centers: list, row_pks: list):
+    # Same follow-up the manual "is_active=false" PATCH runs.
+    for row_pk in row_pks:
+        trigger_exception_resolution(handler.source_type, row_pk)
+    if row_pks:
+        for center in centers:
+            invalidate_operations_cache(center.pk)
+
+
+class EventChanges(NamedTuple):
+    deactivated_pks: list
+    created: list  # (center, row) pairs needing an exception scan
+
+
+def _apply_event(handler, associate, user, centers, spec: dict, rows: list):
+    # Edited event: old rows go inactive, fresh rows are created. One event = one
+    # short transaction, so a failure never rolls back other events.
+    try:
+        with transaction.atomic():
+            deactivated_pks = _deactivate_rows(handler, [row.pk for row in rows])
+            created = []
+            for wanted in handler.wanted_rows(spec, centers).values():
+                row = handler.create_row(centers, associate, user, spec, wanted)
+                created.extend((center, row) for center in wanted.hook_centers)
+    except IntegrityError:
+        logger.info(
+            f"Google Calendar sync: event {spec['google_event_id']} was written "
+            f"by a concurrent sync; skipping."
+        )
+        return None
+    return EventChanges(deactivated_pks, created)
+
+
+def _imported_rows_by_event_id(handler, associate):
+    rows_by_event_id = defaultdict(list)
+    # Only Google-imported rows - never MANUAL outbound-synced rows.
+    imported_rows = (
+        handler.model.objects.filter(
+            associate=associate,
+            is_active=True,
+            origin=AvailabilityOrigin.GOOGLE,
+        )
+        .exclude(google_event_id="")
+        .select_related("center")
+    )
+    for row in imported_rows:
+        rows_by_event_id[row.google_event_id].append(row)
+    return rows_by_event_id
+
+
+def _sync_kind(handler, associate, user, centers, specs: dict, time_min):
+    rows_by_event_id = _imported_rows_by_event_id(handler, associate)
+    created = replaced = 0
+    scan_results = []
+
+    gone_event_ids = [
+        event_id
+        for event_id, rows in rows_by_event_id.items()
+        if event_id not in specs
+        and any(handler.is_live(row, time_min) for row in rows)
+    ]
+    gone_pks = _deactivate_event_rows(handler, associate, gone_event_ids)
+    _resolve_deactivated(handler, centers, gone_pks)
+    removed = len(gone_pks)
+
+    for event_id, spec in specs.items():
+        rows = rows_by_event_id.get(event_id)
+        if rows and handler.state(rows) == handler.wanted_state(spec, centers):
+            continue
+        changes = _apply_event(handler, associate, user, centers, spec, rows or [])
+        if changes is None:
+            continue
+        # Exception scans run after the event's transaction has committed.
+        _resolve_deactivated(handler, centers, changes.deactivated_pks)
+        scan_results.extend(
+            _run_exception_hooks(center, row, handler.source_type)
+            for center, row in changes.created
+        )
+        if rows:
+            replaced += 1
+        else:
+            created += 1
+    return created, replaced, removed, scan_results
 
 
 def sync_google_events_to_availability_blocks(user, connection):
@@ -314,37 +450,14 @@ def sync_google_events_to_availability_blocks(user, connection):
 
     created = replaced = removed = 0
     scan_results = []
-    with transaction.atomic():
-        for kind, specs in specs_by_kind.items():
-            handler = SPEC_HANDLERS[kind]
-            rows_by_event_id = defaultdict(list)
-            # Only Google-imported rows — never MANUAL outbound-synced rows.
-            imported_rows = handler.model.objects.filter(
-                associate=associate,
-                is_active=True,
-                origin=AvailabilityOrigin.GOOGLE,
-            ).exclude(google_event_id="")
-            for row in imported_rows:
-                rows_by_event_id[row.google_event_id].append(row)
-
-            gone_event_ids = [
-                event_id
-                for event_id, rows in rows_by_event_id.items()
-                if event_id not in specs
-                and any(handler.is_live(row, time_min) for row in rows)
-            ]
-            removed += _deactivate(handler.model, associate, gone_event_ids)
-
-            for event_id, spec in specs.items():
-                rows = rows_by_event_id.get(event_id)
-                if rows:
-                    if handler.state(rows) == handler.wanted_state(spec, centers):
-                        continue
-                    _deactivate(handler.model, associate, [event_id])
-                    replaced += 1
-                else:
-                    created += 1
-                scan_results.extend(handler.create(centers, associate, user, spec))
+    for kind, specs in specs_by_kind.items():
+        kind_created, kind_replaced, kind_removed, kind_scans = _sync_kind(
+            SPEC_HANDLERS[kind], associate, user, centers, specs, time_min
+        )
+        created += kind_created
+        replaced += kind_replaced
+        removed += kind_removed
+        scan_results.extend(kind_scans)
 
     connection.last_synced_at = timezone.localtime(timezone.now())
     connection.save(update_fields=["last_synced_at", "updated_at"])

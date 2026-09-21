@@ -41,7 +41,7 @@ from integrations.google_calendar.utils import (
     ensure_encryption_configured,
 )
 from integrations.google_calendar.webhook_channel import (
-    ensure_watch_channel_active,
+    ensure_watch_channel_active_or_log,
     find_connection_for_watch_channel,
     stop_watch_channel,
 )
@@ -173,14 +173,7 @@ def _persist_connection(user, google_email, tokens):
 
 
 def _start_personal_watch_channel(user):
-    connection = get_google_calendar_connection_for_user(user)
-    try:
-        ensure_watch_channel_active(connection)
-    except GOOGLE_SYNC_ERRORS as error:
-        logger.warning(
-            f"Google Calendar watch: failed to register a notification "
-            f"channel for user {user.pk}: {error}"
-        )
+    ensure_watch_channel_active_or_log(get_google_calendar_connection_for_user(user))
 
 
 def _complete_shared_connection(google_email: str):
@@ -302,13 +295,7 @@ class GoogleCalendarSyncView(BaseGenericAPIView):
         if not google_calendar_connection_is_connected(connection):
             self.raise_bad_request("Connect Google Calendar before syncing.")
 
-        try:
-            ensure_watch_channel_active(connection)
-        except GOOGLE_SYNC_ERRORS as error:
-            logger.warning(
-                f"Google Calendar watch: failed to (re)register a "
-                f"notification channel for user {request.user.pk}: {error}"
-            )
+        ensure_watch_channel_active_or_log(connection)
 
         try:
             summary = sync_google_events_to_availability_blocks(request.user, connection)

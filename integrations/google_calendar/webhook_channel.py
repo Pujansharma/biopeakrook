@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from core.utils.log import logger
@@ -39,21 +40,25 @@ def find_connection_for_watch_channel(channel_id: str | None, resource_id: str |
     ).first()
 
 
-def stop_watch_channel(connection):
+def stop_channel_at_google(connection, channel_id, resource_id):
     # Best-effort: disconnect/reconnect must succeed even if Google can't be
     # reached - a channel that's never stopped just expires on its own.
-    if not connection.watch_channel_id or not connection.watch_resource_id:
+    if not channel_id or not resource_id:
         return
     try:
         access_token = get_valid_access_token(connection)
-        calendar_api.stop_channel(
-            access_token, connection.watch_channel_id, connection.watch_resource_id
-        )
+        calendar_api.stop_channel(access_token, channel_id, resource_id)
     except GOOGLE_SYNC_ERRORS as error:
         logger.warning(
             f"Google Calendar watch: failed to stop channel "
-            f"{connection.watch_channel_id} for user {connection.pk}: {error}"
+            f"{channel_id} for user {connection.pk}: {error}"
         )
+
+
+def stop_watch_channel(connection):
+    stop_channel_at_google(
+        connection, connection.watch_channel_id, connection.watch_resource_id
+    )
     clear_google_calendar_watch_channel(connection)
 
 
@@ -78,16 +83,30 @@ def personal_connections_needing_watch_renewal():
     ).exclude(google_refresh_token__isnull=True).exclude(google_refresh_token="")
     if calendar_id:
         queryset = queryset.exclude(google_email__iexact=calendar_id)
-    return (
-        queryset.exclude(watch_channel_id__isnull=True)
-        .exclude(watch_channel_id="")
-        .filter(watch_expires_at__lte=timezone.now() + RENEWAL_THRESHOLD)
+
+    return queryset.filter(
+        Q(watch_channel_id__isnull=True)
+        | Q(watch_channel_id="")
+        | Q(watch_expires_at__isnull=True)
+        | Q(watch_expires_at__lte=timezone.now() + RENEWAL_THRESHOLD)
     )
 
 
 def ensure_watch_channel_active(connection):
     if not watch_channel_expires_soon(connection):
         return
-    if connection.watch_channel_id:
-        stop_watch_channel(connection)
+    old_channel_id = connection.watch_channel_id
+    old_resource_id = connection.watch_resource_id
+
     start_watch_channel(connection)
+    stop_channel_at_google(connection, old_channel_id, old_resource_id)
+
+
+def ensure_watch_channel_active_or_log(connection):
+    try:
+        ensure_watch_channel_active(connection)
+    except GOOGLE_SYNC_ERRORS as error:
+        logger.warning(
+            f"Google Calendar watch: failed to (re)register a notification "
+            f"channel for user {connection.pk}: {error}"
+        )

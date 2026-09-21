@@ -151,6 +151,29 @@ def delete_google_event(appointment, organizer, access_token):
     )
 
 
+def upsert_event_with_fallback(
+    access_token, stored_event_id, insert_event_id, patch_kwargs, insert_kwargs
+):
+    # patch stored id -> (stale) insert with deterministic id -> (conflict) patch it.
+    if stored_event_id:
+        try:
+            return calendar_api.patch_event(
+                access_token, stored_event_id, **patch_kwargs
+            )
+        except requests.HTTPError as error:
+            if not is_stale_google_event_error(error):
+                raise
+    try:
+        return calendar_api.insert_event(
+            access_token, event_id=insert_event_id, **insert_kwargs
+        )
+    except requests.HTTPError as error:
+        if not is_google_event_conflict_error(error):
+            raise
+        event = calendar_api.get_event(access_token, insert_event_id)
+        return calendar_api.patch_event(access_token, event["id"], **patch_kwargs)
+
+
 def upsert_google_event(appointment, organizer, access_token):
     associates = associates_for_appointment(appointment)
     has_reschedule_history = appointment_has_reschedule_history(appointment)
@@ -170,56 +193,32 @@ def upsert_google_event(appointment, organizer, access_token):
         appointment.modality != AppointmentModes.VIRTUAL
         and bool(appointment.google_meet_link)
     )
-    stored_event_id = appointment.google_event_id
-    if stored_event_id:
-        try:
-            event = calendar_api.patch_event(
-                access_token,
-                stored_event_id,
-                title=title,
-                start=appointment.start_datetime,
-                end=appointment.end_datetime,
-                location=None,
-                notes=notes,
-                add_meet_link=needs_new_meet_link,
-                clear_meet_link=needs_clear_meet_link,
-                participant_emails=attendee_emails,
-            )
-            persist_google_event(
-                appointment, event["id"], calendar_api.extract_meet_link(event)
-            )
-            return
-        except requests.HTTPError as error:
-            if not is_stale_google_event_error(error):
-                raise
-    try:
-        event = calendar_api.insert_event(
-            access_token,
-            title=title,
-            start=appointment.start_datetime,
-            end=appointment.end_datetime,
-            location=None,
-            notes=notes,
-            need_meet_link=appointment.modality == AppointmentModes.VIRTUAL,
-            participant_emails=attendee_emails,
-            event_id=deterministic_id,
-        )
-    except requests.HTTPError as error:
-        if not is_google_event_conflict_error(error):
-            raise
-        event = calendar_api.get_event(access_token, deterministic_id)
-        event = calendar_api.patch_event(
-            access_token,
-            event["id"],
-            title=title,
-            start=appointment.start_datetime,
-            end=appointment.end_datetime,
-            location=None,
-            notes=notes,
-            add_meet_link=needs_new_meet_link,
-            clear_meet_link=needs_clear_meet_link,
-            participant_emails=attendee_emails,
-        )
+    patch_kwargs = {
+        "title": title,
+        "start": appointment.start_datetime,
+        "end": appointment.end_datetime,
+        "location": None,
+        "notes": notes,
+        "add_meet_link": needs_new_meet_link,
+        "clear_meet_link": needs_clear_meet_link,
+        "participant_emails": attendee_emails,
+    }
+    insert_kwargs = {
+        "title": title,
+        "start": appointment.start_datetime,
+        "end": appointment.end_datetime,
+        "location": None,
+        "notes": notes,
+        "need_meet_link": appointment.modality == AppointmentModes.VIRTUAL,
+        "participant_emails": attendee_emails,
+    }
+    event = upsert_event_with_fallback(
+        access_token,
+        appointment.google_event_id,
+        deterministic_id,
+        patch_kwargs,
+        insert_kwargs,
+    )
     persist_google_event(
         appointment, event["id"], calendar_api.extract_meet_link(event)
     )
@@ -274,50 +273,16 @@ def send_google_calendar_outbound_event(
     or when a stored event_id is already known.
     """
     access_token = get_valid_access_token(connection)
-    stored_event_id = event_id
-    if stored_event_id:
-        try:
-            event = calendar_api.patch_event(
-                access_token,
-                stored_event_id,
-                title=title,
-                start=start,
-                end=end,
-                notes=notes,
-                all_day=all_day,
-                recurrence=recurrence,
-                biopeak_outbound=True,
-            )
-            return event["id"]
-        except requests.HTTPError as error:
-            if not is_stale_google_event_error(error):
-                raise
-    try:
-        event = calendar_api.insert_event(
-            access_token,
-            title=title,
-            start=start,
-            end=end,
-            notes=notes,
-            event_id=stored_event_id,
-            all_day=all_day,
-            recurrence=recurrence,
-            biopeak_outbound=True,
-        )
-        return event["id"]
-    except requests.HTTPError as error:
-        if not is_google_event_conflict_error(error):
-            raise
-        event = calendar_api.get_event(access_token, stored_event_id)
-        event = calendar_api.patch_event(
-            access_token,
-            event["id"],
-            title=title,
-            start=start,
-            end=end,
-            notes=notes,
-            all_day=all_day,
-            recurrence=recurrence,
-            biopeak_outbound=True,
-        )
-        return event["id"]
+    event_kwargs = {
+        "title": title,
+        "start": start,
+        "end": end,
+        "notes": notes,
+        "all_day": all_day,
+        "recurrence": recurrence,
+        "biopeak_outbound": True,
+    }
+    event = upsert_event_with_fallback(
+        access_token, event_id, event_id, event_kwargs, event_kwargs
+    )
+    return event["id"]

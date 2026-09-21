@@ -576,15 +576,15 @@ only imports if `parse_supported_rrule()` can map its RRULE onto the recurring
 block payload (`days_of_week`, `recurring_start_time`/`recurring_end_time`,
 `effective_from`, `effective_until`):
 
-| Google repeat option                           | RRULE                              | Biopeak recurring block                            |
-| ---------------------------------------------- | ---------------------------------- | -------------------------------------------------- |
-| Daily                                          | `FREQ=DAILY`                       | `days_of_week` = all 7 (`"0"`..`"6"`, Mon=`"0"`)    |
-| Weekly on Thursday                             | `FREQ=WEEKLY;BYDAY=TH`             | `days_of_week=["3"]`                               |
-| Every weekday                                  | `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` | `days_of_week=["0","1","2","3","4"]`               |
-| Custom, every 1 week, chosen days              | `FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,SA` | matching `days_of_week`                            |
-| Ends "On date"                                 | `UNTIL=...` added                  | `effective_until` = last date an occurrence starts |
-| Ends "After N occurrences"                     | `COUNT=N`                          | **skipped** (no equivalent)                        |
-| Every N > 1 days/weeks, monthly, annually      | `INTERVAL>1`, `FREQ=MONTHLY/YEARLY` | **skipped**                                       |
+| Google repeat option                      | RRULE                               | Biopeak recurring block                            |
+| ----------------------------------------- | ----------------------------------- | -------------------------------------------------- |
+| Daily                                     | `FREQ=DAILY`                        | `days_of_week` = all 7 (`"0"`..`"6"`, Mon=`"0"`)   |
+| Weekly on Thursday                        | `FREQ=WEEKLY;BYDAY=TH`              | `days_of_week=["3"]`                               |
+| Every weekday                             | `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR`  | `days_of_week=["0","1","2","3","4"]`               |
+| Custom, every 1 week, chosen days         | `FREQ=WEEKLY;BYDAY=SU,MO,TU,TH,SA`  | matching `days_of_week`                            |
+| Ends "On date"                            | `UNTIL=...` added                   | `effective_until` = last date an occurrence starts |
+| Ends "After N occurrences"                | `COUNT=N`                           | **skipped** (no equivalent)                        |
+| Every N > 1 days/weeks, monthly, annually | `INTERVAL>1`, `FREQ=MONTHLY/YEARLY` | **skipped**                                        |
 
 Skipped means never approximated - the event is simply not imported.
 `EXDATE` (deleted single occurrences) is ignored, so the block still covers
@@ -621,12 +621,15 @@ events against their previously-imported rows, per Google event id:
 - **Unchanged** (same center set, same time/day/reason as last sync) - left
   alone entirely, no write, no re-run of the exception scan.
 - **New or edited** - any previously-imported rows for that event id are
-  deactivated and fresh ones created. There's no overlap check here (see
-  above), so this never fails partway through a center - every event's
-  write is unconditional.
-- **Gone** - its previously-imported rows are deactivated (soft-off,
-  `is_active=false`), never hard-deleted - same convention as every other
-  soft-delete in this codebase. This only fires when the event is actually
+  made inactive (`is_active=false`, never hard-deleted), their open exceptions
+  are resolved, and fresh rows are created for every center and repeat day,
+  all in one short transaction per event. Exception scans run after it
+  commits. There's no overlap check here (see above). If two syncs race on the
+  same event, a partial unique constraint (active rows only) stops the second
+  write and that event is skipped.
+- **Gone** - its previously-imported `origin=google` rows are made inactive
+  (soft-off, same convention as every other soft-delete in this codebase) and
+  their open exceptions resolved. This only fires when the event is actually
   gone from Google's side (deleted, marked free, or declined by the
   associate) - not merely absent from one fetch. A block created directly
   in Biopeak (`google_event_id=""`) is excluded from this check entirely
@@ -658,9 +661,9 @@ the associate's **personal** calendar through
 
 **Loop fence (two layers).** `AssociateAvailabilityBlock.origin` /
 `AssociateLeave.origin` is `manual` (API) or `google` (inbound sync). Only
-`manual` rows enqueue or write back. Inbound reconcile and `_deactivate` only
+`manual` rows enqueue or write back. Inbound reconcile and `_remove_rows` only
 touch `origin=google` rows (so MANUAL rows that carry a `google_event_id` after
-outbound are never replaced or soft-off'd by import). Outbound insert/patch also
+outbound are never replaced or removed by import). Outbound insert/patch also
 stamps private `extendedProperties.private.biopeakOutbound=1`; inbound
 `build_spec_from_event` skips those events so Biopeak-written busy never
 re-imports even if the webhook races ahead of persisting `google_event_id`.
@@ -692,7 +695,7 @@ moments - not whenever that person (or a scheduled job) next happens to hit
 
 **Registering a channel.** Right after a personal connect succeeds
 (`GoogleCalendarCallbackView.get()`, `flow == FLOW_PERSONAL`), and again on
-every `POST /google-calendar/sync/` call as a self-heal,
+every sync call (self `POST /google-calendar/sync/` and the admin per-associate sync) as a self-heal,
 `ensure_watch_channel_active()` (`integrations/google_calendar/webhook_channel.py`)
 checks whether the connection's channel is missing or expiring within
 `RENEWAL_THRESHOLD` (1 day) and, if so, calls `events.watch` on Google's
@@ -714,10 +717,10 @@ explicitly excludes whichever connection holds that email.
 
 **Renewal.** Google Calendar watch channels aren't renewable in place - a
 new channel has to be created and the old one stopped. `uv run manage.py
-renew_google_calendar_watch_channels` (same style as
+process_google_calendar_channel_expiry_renewal` (same style as
 `process_communication_outbox`) should run on a daily schedule; it calls
 `ensure_watch_channel_active()` for every personal connection whose channel
-is missing or expires within a day. Even without that command running, a
+is missing (no channel or no expiry) or expires within a day. A renewal creates the new channel first and only then stops the old one, so a failed start keeps the old channel. Even without that command running, a
 channel gets renewed lazily the next time that user hits `POST /sync/` -
 the scheduled command just means it happens without anyone needing to.
 

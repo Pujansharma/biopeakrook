@@ -61,6 +61,9 @@ from integrations.google_calendar.connections import (
     google_calendar_connection_is_connected,
 )
 from integrations.google_calendar.google_sync import GOOGLE_SYNC_ERRORS
+from integrations.google_calendar.webhook_channel import (
+    ensure_watch_channel_active_or_log,
+)
 from inventory.models import Equipment, Room
 
 
@@ -281,6 +284,8 @@ class AssociateGoogleCalendarSyncView(CenterAvailabilityMixin, BaseGenericAPIVie
             self.raise_bad_request(
                 "This associate hasn't connected a personal Google Calendar."
             )
+
+        ensure_watch_channel_active_or_log(connection)
 
         try:
             summary = sync_google_events_to_availability_blocks(

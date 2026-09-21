@@ -11,6 +11,7 @@ from integrations.google_calendar.views import GoogleCalendarWebhookView
 from integrations.google_calendar.webhook_channel import (
     ensure_watch_channel_active,
     find_connection_for_watch_channel,
+    personal_connections_needing_watch_renewal,
     start_watch_channel,
     stop_watch_channel,
     watch_channel_expires_soon,
@@ -140,17 +141,72 @@ class EnsureWatchChannelActiveTests(TestCase):
 
         mock_start.assert_not_called()
 
-    @patch("integrations.google_calendar.webhook_channel.stop_watch_channel")
+    @patch("integrations.google_calendar.webhook_channel.stop_channel_at_google")
     @patch("integrations.google_calendar.webhook_channel.start_watch_channel")
-    def test_replaces_an_expiring_channel(self, mock_start, mock_stop):
+    def test_replaces_an_expiring_channel_starting_new_before_stopping_old(
+        self, mock_start, mock_stop
+    ):
         self.connection.watch_channel_id = "chan-1"
+        self.connection.watch_resource_id = "res-1"
         self.connection.watch_expires_at = timezone.now() - timedelta(hours=1)
         self.connection.save()
+        calls = []
+        mock_start.side_effect = lambda connection: calls.append("start")
+        mock_stop.side_effect = lambda *args: calls.append("stop")
 
         ensure_watch_channel_active(self.connection)
 
-        mock_stop.assert_called_once_with(self.connection)
-        mock_start.assert_called_once_with(self.connection)
+        self.assertEqual(calls, ["start", "stop"])
+        mock_stop.assert_called_once_with(self.connection, "chan-1", "res-1")
+
+    @patch("integrations.google_calendar.webhook_channel.stop_channel_at_google")
+    @patch("integrations.google_calendar.webhook_channel.start_watch_channel")
+    def test_keeps_old_channel_when_starting_new_one_fails(self, mock_start, mock_stop):
+        self.connection.watch_channel_id = "chan-1"
+        self.connection.watch_resource_id = "res-1"
+        self.connection.watch_expires_at = timezone.now() - timedelta(hours=1)
+        self.connection.save()
+        mock_start.side_effect = requests.RequestException("boom")
+
+        with self.assertRaises(requests.RequestException):
+            ensure_watch_channel_active(self.connection)
+
+        mock_stop.assert_not_called()
+        self.connection.refresh_from_db()
+        self.assertEqual(self.connection.watch_channel_id, "chan-1")
+
+
+class PersonalConnectionsNeedingRenewalTests(TestCase):
+    def renewal_pks(self):
+        return {c.pk for c in personal_connections_needing_watch_renewal()}
+
+    def test_includes_connected_rows_with_no_channel(self):
+        connection = create_connection(email="nochannel@example.com")
+        self.assertIn(connection.pk, self.renewal_pks())
+
+    def test_includes_channel_without_expiry(self):
+        connection = create_connection(
+            email="noexpiry@example.com", watch_channel_id="chan-1"
+        )
+        self.assertIn(connection.pk, self.renewal_pks())
+
+    def test_includes_expiring_channel_and_skips_healthy_one(self):
+        expiring = create_connection(
+            email="expiring@example.com",
+            watch_channel_id="chan-1",
+            watch_expires_at=timezone.now() + timedelta(hours=1),
+        )
+        healthy = create_connection(
+            email="healthy@example.com",
+            watch_channel_id="chan-2",
+            watch_expires_at=timezone.now() + timedelta(days=10),
+        )
+        self.assertIn(expiring.pk, self.renewal_pks())
+        self.assertNotIn(healthy.pk, self.renewal_pks())
+
+    def test_skips_disconnected_rows(self):
+        connection = create_connection(email="off@example.com", is_active=False)
+        self.assertNotIn(connection.pk, self.renewal_pks())
 
 
 class GoogleCalendarWebhookViewTests(TestCase):

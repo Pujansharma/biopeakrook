@@ -96,8 +96,9 @@ class AssociateGoogleCalendarSyncViewTests(TestCase):
         response = self.post_sync()
         self.assertEqual(response.status_code, 400)
 
+    @patch("appointments.views.ensure_watch_channel_active_or_log")
     @patch("appointments.views.sync_google_events_to_availability_blocks")
-    def test_admin_can_sync_associates_own_connection(self, mock_sync):
+    def test_admin_can_sync_associates_own_connection(self, mock_sync, mock_ensure_watch):
         mock_sync.return_value = {"synced": True, "created": 2}
         GoogleCalendarConnection.objects.create(
             user=self.associate.user,
@@ -109,6 +110,7 @@ class AssociateGoogleCalendarSyncViewTests(TestCase):
         response = self.post_sync()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"], {"synced": True, "created": 2})
+        mock_ensure_watch.assert_called_once()
         mock_sync.assert_called_once()
         called_user, called_connection = mock_sync.call_args[0]
         self.assertEqual(called_user.pk, self.associate.pk)

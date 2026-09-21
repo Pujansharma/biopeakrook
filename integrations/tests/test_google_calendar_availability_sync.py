@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+from django.db import IntegrityError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
@@ -306,6 +307,28 @@ class SyncDatabaseTests(TestCase):
         self.assertEqual(timezone.localtime(block.start_datetime).strftime("%H:%M"), "15:00")
         self.assertFalse(AssociateAvailabilityBlock.objects.get(pk=old_pk).is_active)
 
+    def test_new_center_replaces_rows_for_all_centers(self):
+        self.run_sync([timed_event("Test one-off")])
+        old_pk = self.active_blocks("Test one-off").get().pk
+        self.add_second_center()
+        self.assertEqual(self.counts([timed_event("Test one-off")]), (0, 1, 0))
+        self.assertEqual(self.active_blocks("Test one-off").count(), 2)
+        self.assertFalse(AssociateAvailabilityBlock.objects.get(pk=old_pk).is_active)
+
+    def test_removed_center_leaves_only_remaining_center(self):
+        second = self.add_second_center()
+        self.run_sync([timed_event("Test one-off")])
+        AssociateCenterAssignment.objects.filter(associate=self.associate, center=second).update(is_active=False)
+        self.assertEqual(self.counts([timed_event("Test one-off")]), (0, 1, 0))
+        self.assertEqual(self.active_blocks("Test one-off").get().center, self.center)
+
+    def test_one_off_turning_recurring_replaces_the_row(self):
+        self.run_sync([timed_event("Test flip")])
+        self.assertEqual(self.counts([timed_event("Test flip", recurrence=rrule("FREQ=WEEKLY;BYDAY=MO"))]), (0, 1, 0))
+        block = self.active_blocks("Test flip").get()
+        self.assertTrue(block.is_recurring)
+        self.assertIsNone(block.start_datetime)
+
     def test_changed_repeat_days_replaces_block(self):
         self.run_sync([timed_event("Test rec", recurrence=rrule("FREQ=WEEKLY;BYDAY=MO"))])
         self.assertEqual(self.counts([timed_event("Test rec", recurrence=rrule("FREQ=WEEKLY;BYDAY=TU,WE"))]), (0, 1, 0))
@@ -324,23 +347,55 @@ class SyncDatabaseTests(TestCase):
 
     def test_edited_leave_is_replaced(self):
         self.run_sync([all_day_event("Test leave", START_DAY, START_DAY)])
+        old_leave_pk = self.active_leaves().get().pk
         edited = all_day_event("Test leave", START_DAY, START_DAY + timedelta(days=2))
         self.assertEqual(self.counts([edited]), (0, 1, 0))
-        self.assertEqual(self.active_leaves().count(), 1)
+        self.assertNotEqual(self.active_leaves().get().pk, old_leave_pk)
         self.assertEqual(AssociateLeave.objects.filter(associate=self.associate).count(), 2)
 
-    def test_deleted_events_are_deactivated_not_deleted(self):
+    def test_deleted_events_are_deactivated_and_exceptions_resolved(self):
         events = [
             timed_event("Test one-off"),
             timed_event("Test daily", recurrence=rrule("FREQ=DAILY")),
             all_day_event("Test leave", START_DAY, START_DAY),
         ]
         self.run_sync(events)
-        self.assertEqual(self.counts([]), (0, 0, 1 + 7 + 1))
+        with patch(f"{MODULE}.trigger_exception_resolution") as mock_resolve:
+            self.assertEqual(self.counts([]), (0, 0, 1 + 7 + 1))
+        self.assertEqual(mock_resolve.call_count, 1 + 7 + 1)
         self.assertEqual(self.active_blocks().count(), 0)
         self.assertEqual(self.active_leaves().count(), 0)
         self.assertEqual(AssociateAvailabilityBlock.objects.filter(associate=self.associate).count(), 8)
         self.assertEqual(AssociateLeave.objects.filter(associate=self.associate).count(), 1)
+
+    def test_concurrent_duplicate_is_skipped_not_raised(self):
+        with patch.dict(
+            sync.SPEC_HANDLERS,
+            {"block": sync.SPEC_HANDLERS["block"]._replace(
+                create_row=MagicMock(side_effect=IntegrityError("duplicate"))
+            )},
+        ):
+            self.assertEqual(self.counts([timed_event("Test one-off")]), (0, 0, 0))
+        self.assertEqual(self.active_blocks().count(), 0)
+
+    def test_one_failing_event_does_not_roll_back_others(self):
+        real_create = sync.SPEC_HANDLERS["block"].create_row
+        create = MagicMock(
+            side_effect=lambda centers, associate, user, spec, wanted: (
+                real_create(centers, associate, user, spec, wanted)
+                if spec["reason"] != "Test bad"
+                else (_ for _ in ()).throw(IntegrityError("duplicate"))
+            )
+        )
+        with patch.dict(
+            sync.SPEC_HANDLERS,
+            {"block": sync.SPEC_HANDLERS["block"]._replace(create_row=create)},
+        ):
+            self.assertEqual(
+                self.counts([timed_event("Test good"), timed_event("Test bad")]),
+                (1, 0, 0),
+            )
+        self.assertEqual(self.active_blocks("Test good").count(), 1)
 
     def test_event_turning_into_all_day_moves_from_block_to_leave(self):
         self.run_sync([timed_event("Test flip")])
