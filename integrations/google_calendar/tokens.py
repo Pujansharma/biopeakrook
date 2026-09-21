@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from integrations.google_calendar import google_oauth
 from integrations.google_calendar.db import (
-    clear_google_calendar_tokens,
+    deactivate_google_calendar_connection,
     update_google_calendar_tokens,
 )
 from integrations.google_calendar.utils import decrypt, encrypt
@@ -40,7 +40,7 @@ def retry_or_clear_invalid_google_grant(
     ):
         return get_valid_access_token(connection, retry_rotated_grant=False)
     if stored_refresh_token == encrypted_refresh_token:
-        clear_google_calendar_tokens(connection)
+        deactivate_google_calendar_connection(connection)
     raise error
 
 

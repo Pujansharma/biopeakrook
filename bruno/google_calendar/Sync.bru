@@ -1,0 +1,53 @@
+meta {
+  name: Sync
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseURL}}/google-calendar/sync/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Pulls the signed-in caller's own connected Google Calendar events (next 30
+  days) and desired-states them onto their AssociateAvailabilityBlock rows -
+  same create_associate_availability_block()/assert_associate_block_no_overlap()
+  path the manual Associate Blocks API uses (see availability/Blocks.bru),
+  so an imported block still respects overlap rules and still runs exception
+  detection against existing appointments.
+
+  Only "busy" events count: events marked "free" (transparency=transparent),
+  cancelled events, and events the caller declined are skipped. An all-day
+  event (e.g. leave/out-of-office) is imported as a one-off block spanning
+  the full day(s) it covers. A recurring Google event only
+  imports as a recurring Biopeak block if its RRULE is a plain never-ending
+  weekly pattern (FREQ=WEEKLY, no UNTIL/COUNT) - anything else (daily,
+  monthly, a recurrence with an end) is skipped rather than approximated,
+  since Biopeak recurring blocks can't express an end date.
+
+  The caller must have an active Associate profile with at least one active
+  center assignment - a block is imported once per active center they're
+  assigned to (an associate's real-world "busy" applies everywhere they
+  work, not just one location). Re-running this is idempotent: unchanged
+  events are left alone, edited events replace their old block(s), and
+  events removed from Google deactivate their previously-imported block(s).
+  400s with "Connect Google Calendar before syncing." if not connected.
+
+  Method: POST
+  Path: /google-calendar/sync/
+  Source: integrations.google_calendar.views.GoogleCalendarSyncView
+  Auth: Admin or Associate (JWT).
+
+  Success: {"detail": "Google Calendar sync completed.", "data": {"synced": true, "created": 0, "replaced": 0, "removed": 0, "skipped_conflicts": 0, "exception_scan": null}}
+  No-op (nothing to sync into): {"data": {"synced": false, "reason": "..."}}
+}

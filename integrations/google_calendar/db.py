@@ -33,15 +33,39 @@ def update_google_calendar_tokens(
     connection.save(update_fields=update_fields)
 
 
-def clear_google_calendar_tokens(connection):
-    connection.google_access_token = None
-    connection.google_refresh_token = None
-    connection.google_access_token_expires_at = None
+def deactivate_google_calendar_connection(connection):
+    connection.is_active = False
+    connection.save(update_fields=["is_active", "updated_at"])
+
+
+def persist_google_calendar_watch_channel(
+    connection,
+    channel_id: str,
+    resource_id: str,
+    expires_at: datetime,
+):
+    connection.watch_channel_id = channel_id
+    connection.watch_resource_id = resource_id
+    connection.watch_expires_at = expires_at
     connection.save(
         update_fields=[
-            "google_access_token",
-            "google_refresh_token",
-            "google_access_token_expires_at",
+            "watch_channel_id",
+            "watch_resource_id",
+            "watch_expires_at",
+            "updated_at",
+        ]
+    )
+
+
+def clear_google_calendar_watch_channel(connection):
+    connection.watch_channel_id = None
+    connection.watch_resource_id = None
+    connection.watch_expires_at = None
+    connection.save(
+        update_fields=[
+            "watch_channel_id",
+            "watch_resource_id",
+            "watch_expires_at",
             "updated_at",
         ]
     )
@@ -87,6 +111,9 @@ def evict_google_calendar_email(google_email, exclude_pk):
         google_access_token=None,
         google_refresh_token=None,
         google_access_token_expires_at=None,
+        watch_channel_id=None,
+        watch_resource_id=None,
+        watch_expires_at=None,
     )
 
 

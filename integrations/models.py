@@ -25,6 +25,10 @@ class GoogleCalendarConnection(BaseModel):
     google_access_token = models.TextField(null=True, blank=True)
     google_refresh_token = models.TextField(null=True, blank=True)
     google_access_token_expires_at = models.DateTimeField(null=True, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    watch_channel_id = models.CharField(null=True, blank=True, db_index=True)
+    watch_resource_id = models.CharField(null=True, blank=True)
+    watch_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -44,7 +48,24 @@ class CommunicationOutbox(BaseUUIDModel):
         "appointments.Appointment",
         on_delete=models.CASCADE,
         related_name="communication_messages",
+        null=True,
+        blank=True,
     )
+    associate_availability_block = models.ForeignKey(
+        "appointments.AssociateAvailabilityBlock",
+        on_delete=models.CASCADE,
+        related_name="communication_messages",
+        null=True,
+        blank=True,
+    )
+    associate_leave = models.ForeignKey(
+        "appointments.AssociateLeave",
+        on_delete=models.CASCADE,
+        related_name="communication_messages",
+        null=True,
+        blank=True,
+    )
+    availability_series_id = models.UUIDField(null=True, blank=True, db_index=True)
     channel = models.CharField(
         max_length=32,
         choices=CommunicationChannel,
@@ -101,6 +122,68 @@ class CommunicationOutbox(BaseUUIDModel):
                     ],
                 ),
                 name="uniq_comm_outbox_appointment_channel_terminal_event",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        appointment__isnull=False,
+                        associate_availability_block__isnull=True,
+                        associate_leave__isnull=True,
+                        availability_series_id__isnull=True,
+                    )
+                    | Q(
+                        appointment__isnull=True,
+                        associate_availability_block__isnull=False,
+                        associate_leave__isnull=True,
+                        availability_series_id__isnull=True,
+                    )
+                    | Q(
+                        appointment__isnull=True,
+                        associate_availability_block__isnull=True,
+                        associate_leave__isnull=False,
+                        availability_series_id__isnull=True,
+                    )
+                    | Q(
+                        appointment__isnull=True,
+                        associate_availability_block__isnull=True,
+                        associate_leave__isnull=True,
+                        availability_series_id__isnull=False,
+                    )
+                ),
+                name="comm_outbox_exactly_one_target",
+            ),
+            models.UniqueConstraint(
+                fields=["availability_series_id", "channel"],
+                condition=Q(
+                    availability_series_id__isnull=False,
+                    status__in=[
+                        CommunicationOutboxStatus.PENDING,
+                        CommunicationOutboxStatus.FAILED,
+                    ],
+                ),
+                name="uniq_comm_outbox_series_google_open",
+            ),
+            models.UniqueConstraint(
+                fields=["associate_availability_block", "channel"],
+                condition=Q(
+                    associate_availability_block__isnull=False,
+                    status__in=[
+                        CommunicationOutboxStatus.PENDING,
+                        CommunicationOutboxStatus.FAILED,
+                    ],
+                ),
+                name="uniq_comm_outbox_block_google_open",
+            ),
+            models.UniqueConstraint(
+                fields=["associate_leave", "channel"],
+                condition=Q(
+                    associate_leave__isnull=False,
+                    status__in=[
+                        CommunicationOutboxStatus.PENDING,
+                        CommunicationOutboxStatus.FAILED,
+                    ],
+                ),
+                name="uniq_comm_outbox_leave_google_open",
             ),
         ]
 

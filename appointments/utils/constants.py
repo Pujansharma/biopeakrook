@@ -73,6 +73,11 @@ class LeaveScope(models.TextChoices):
     ALL_CENTERS = "all_centers", "All Centers"
 
 
+class AvailabilityOrigin(models.TextChoices):
+    MANUAL = "manual", "Manual"
+    GOOGLE = "google", "Google"
+
+
 ROSTER_HOURS_ERROR = "Roster must fall within center operating hours."
 OPERATING_HOURS_ROSTER_ERROR = "Operating hours conflict with existing staff roster."
 

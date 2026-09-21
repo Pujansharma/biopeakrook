@@ -46,11 +46,23 @@ from appointments.utils.exceptions import (
     trigger_roster_exception_detection,
 )
 from core.utils.exceptions import get_object_or_404
+from core.utils.log import logger
 from core.utils.views.main import (
     BaseGenericAPIView,
     BaseListAPIView,
     BaseListCreateAPIView,
     BaseRetrieveUpdateAPIView,
+)
+from integrations.google_calendar.availability_sync import (
+    sync_google_events_to_availability_blocks,
+)
+from integrations.google_calendar.connections import (
+    get_google_calendar_connection_for_user,
+    google_calendar_connection_is_connected,
+)
+from integrations.google_calendar.google_sync import GOOGLE_SYNC_ERRORS
+from integrations.google_calendar.webhook_channel import (
+    ensure_watch_channel_active_or_log,
 )
 from inventory.models import Equipment, Room
 
@@ -243,6 +255,53 @@ class AssociateRosterBulkUpsertView(CenterAvailabilityMixin, BaseGenericAPIView)
         if exception_scan is not None:
             response.data["exception_scan"] = exception_scan
         return response
+
+
+class AssociateGoogleCalendarStatusView(CenterAvailabilityMixin, BaseGenericAPIView):
+    # For now Admin or associate also, will change as per product decision, lookup of one associate's personal Google Calendar connection.
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get(self, request, *args, **kwargs):
+        associate = self.get_associate()
+        connection = get_google_calendar_connection_for_user(associate.user)
+        return self.send_response(
+            "Associate Google Calendar connection status.",
+            data={
+                "is_connected": google_calendar_connection_is_connected(connection),
+                "last_synced_at": connection.last_synced_at if connection else None,
+            },
+        )
+
+
+class AssociateGoogleCalendarSyncView(CenterAvailabilityMixin, BaseGenericAPIView):
+    # For now Admin or associate also, will change as per product decision
+    permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def post(self, request, *args, **kwargs):
+        associate = self.get_associate()
+        connection = get_google_calendar_connection_for_user(associate.user)
+        if not google_calendar_connection_is_connected(connection):
+            self.raise_bad_request(
+                "This associate hasn't connected a personal Google Calendar."
+            )
+
+        ensure_watch_channel_active_or_log(connection)
+
+        try:
+            summary = sync_google_events_to_availability_blocks(
+                associate.user, connection
+            )
+        except GOOGLE_SYNC_ERRORS as error:
+            logger.warning(
+                f"Google Calendar availability sync failed for associate "
+                f"{associate.pk} (triggered by admin {request.user.pk}): {error}"
+            )
+            self.raise_bad_request(
+                "Failed to sync this associate's Google Calendar. If this "
+                "keeps happening, ask them to disconnect and reconnect it."
+            )
+
+        return self.send_response("Google Calendar sync completed.", data=summary)
 
 
 class AssociateAvailabilityBlockListCreateView(

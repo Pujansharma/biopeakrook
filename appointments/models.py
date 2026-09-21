@@ -10,6 +10,7 @@ from accounts.utils import get_user_model
 from appointments.utils.constants import (
     AppointmentAuditAction,
     AppointmentStatus,
+    AvailabilityOrigin,
     ExceptionResolution,
     ExceptionScanJobStatus,
     ExceptionSourceType,
@@ -96,6 +97,14 @@ class AssociateAvailabilityBlock(BaseUUIDModel):
     effective_from = models.DateField(null=True, blank=True)
     effective_until = models.DateField(null=True, blank=True)
     reason = models.CharField(max_length=255, blank=True)
+    google_event_id = models.CharField(max_length=1024, blank=True, db_index=True)
+    series_id = models.UUIDField(null=True, blank=True, db_index=True)
+    origin = models.CharField(
+        max_length=16,
+        choices=AvailabilityOrigin,
+        default=AvailabilityOrigin.MANUAL,
+        db_index=True,
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -106,6 +115,16 @@ class AssociateAvailabilityBlock(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            # Two concurrent Google syncs must not both import the same event
+            models.UniqueConstraint(
+                fields=["associate", "center", "google_event_id", "day_of_week"],
+                condition=models.Q(is_active=True, origin=AvailabilityOrigin.GOOGLE)
+                & ~models.Q(google_event_id=""),
+                nulls_distinct=False,
+                name="uniq_active_google_block_per_event",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"
@@ -130,6 +149,13 @@ class AssociateLeave(BaseUUIDModel):
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
     reason = models.CharField(max_length=255, blank=True)
+    google_event_id = models.CharField(max_length=1024, blank=True, db_index=True)
+    origin = models.CharField(
+        max_length=16,
+        choices=AvailabilityOrigin,
+        default=AvailabilityOrigin.MANUAL,
+        db_index=True,
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -140,6 +166,14 @@ class AssociateLeave(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["associate", "google_event_id"],
+                condition=models.Q(is_active=True, origin=AvailabilityOrigin.GOOGLE)
+                & ~models.Q(google_event_id=""),
+                name="uniq_active_google_leave_per_event",
+            )
+        ]
 
     def __str__(self):
         return f"{self.pk}"

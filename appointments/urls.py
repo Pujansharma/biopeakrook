@@ -9,6 +9,14 @@ urlpatterns = [
         views.AssociateRosterBulkUpsertView.as_view(),
     ),
     path(
+        "associates/<uuid:associate_id>/google-calendar/",
+        views.AssociateGoogleCalendarStatusView.as_view(),
+    ),
+    path(
+        "associates/<uuid:associate_id>/google-calendar/sync/",
+        views.AssociateGoogleCalendarSyncView.as_view(),
+    ),
+    path(
         "associates/<uuid:associate_id>/blocks/",
         views.AssociateAvailabilityBlockListCreateView.as_view(),
     ),

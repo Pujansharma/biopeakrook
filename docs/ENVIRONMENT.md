@@ -342,10 +342,10 @@ Same keys with `STG_` / `PRD_` prefixes.
 Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language.
 Templates use **named** body variables. Backend sends `parameter_name` + `text`.
 
-| Template | Named params |
-|---|---|
+| Template                | Named params                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
 | confirmed / rescheduled | `patient_name`, `appointment_date`, `appointment_time`, `service_name`, `clinic_address` |
-| cancelled | `patient_name`, `appointment_date`, `appointment_time`, `service_name` |
+| cancelled               | `patient_name`, `appointment_date`, `appointment_time`, `service_name`                   |
 
 `clinic_address` value format: `{center.name}, {address lines/city/state/pincode}`.
 
@@ -364,10 +364,10 @@ Staging / production: `STG_` / `PRD_` prefix on the queue URL. Set `AWS_REGION` 
 
 Not in `deploy-aws.yml` (image/service only).
 
-| Trigger | Command | Purpose |
-|---|---|---|
-| SQS wake (on outbox insert) | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync |
-| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh` | Retry outbox (attempt 2) + drain exception scans |
+| Trigger                        | Command                                         | Purpose                                          |
+| ------------------------------ | ----------------------------------------------- | ------------------------------------------------ |
+| SQS wake (on outbox insert)    | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync   |
+| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh`                  | Retry outbox (attempt 2) + drain exception scans |
 
 Cap concurrent ECS RunTasks at 1 for the wake consumer. Sweep script:
 

@@ -36,16 +36,19 @@ class GoogleCalendarTokenRefreshTests(TestCase):
 
     @patch("integrations.google_calendar.tokens.decrypt", side_effect=lambda value: value)
     @patch("integrations.google_calendar.tokens.google_oauth.refresh_access_token")
-    def test_invalid_grant_clears_when_refresh_token_unchanged(
+    def test_invalid_grant_deactivates_when_refresh_token_unchanged(
         self, mock_refresh, _mock_decrypt
     ):
         mock_refresh.side_effect = invalid_grant_http_error()
         with self.assertRaises(requests.HTTPError):
             get_valid_access_token(self.connection)
         self.connection.refresh_from_db()
-        self.assertIsNone(self.connection.google_refresh_token)
-        self.assertIsNone(self.connection.google_access_token)
-        self.assertIsNone(self.connection.google_access_token_expires_at)
+        self.assertFalse(self.connection.is_active)
+        self.assertEqual(self.connection.google_refresh_token, "enc:refresh-a")
+        self.assertEqual(self.connection.google_access_token, "enc:access-a")
+        self.assertEqual(
+            self.connection.google_access_token_expires_at, self.expired_at
+        )
 
     @patch("integrations.google_calendar.tokens.decrypt", side_effect=lambda value: value)
     @patch("integrations.google_calendar.tokens.google_oauth.refresh_access_token")

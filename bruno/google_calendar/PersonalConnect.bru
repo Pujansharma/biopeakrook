@@ -1,0 +1,60 @@
+meta {
+  name: PersonalConnect
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseURL}}/google-calendar/personal/connect/
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Starts a per-user "connect your own Google Calendar" flow - unlike
+  Connect.bru (the one shared organizer account used for appointment sync),
+  any signed-in Admin or Associate can use this to connect their own
+  personal Google account, so its busy events can be imported into Biopeak
+  as availability blocks (see Sync.bru).
+
+  Requests the same scope as Connect.bru (calendar.events - read/write, plus
+  userinfo.email). The current sync code (see Sync.bru) only ever reads with
+  it - nothing writes to a staff member's personal calendar yet - it's
+  granted upfront so a later write-back feature won't need everyone who's
+  already connected to reconnect for more scope.
+
+  Returns Google's consent-screen URL as JSON ({"data": {"auth_url": "..."}}).
+  The auth_url carries a signed state=<blob> (google_oauth.sign_oauth_state,
+  flow="personal", user_id=<your own id, from this request's JWT>) - Google
+  echoes it back verbatim to /callback/, which is how that one view knows
+  both which flow this is AND which Biopeak user to save the tokens onto,
+  since its own request (Google's redirect) carries no JWT of its own.
+  Being signed, a tampered state - e.g. someone editing user_id in the URL
+  to try to attach their Google account to a different Biopeak login - is
+  rejected outright.
+
+  Method: POST
+  Path: /google-calendar/personal/connect/
+  Source: integrations.google_calendar.views.GoogleCalendarPersonalConnectView
+  Auth: Admin or Associate (JWT).
+
+  Manual end-to-end flow (no real frontend running locally):
+  1. Run this request. Copy data.auth_url from the response.
+  2. Paste auth_url into a real browser, signed in as your own personal
+     Google account. Approve consent.
+  3. Google redirects to DEV_GOOGLE_REDIRECT_URI - our own /callback/
+     endpoint (see Callback.bru) - which exchanges the code, saves the
+     tokens onto your own GoogleCalendarConnection row, and redirects again
+     to ADMIN_FRONTEND_URL/#gcal_connected=1 (or #gcal_error=<message> on
+     failure, e.g. if you approved with the reserved shared-calendar
+     account instead). One browser round trip, nothing to copy-paste back.
+  4. Confirm it worked with Status.bru, then run Sync.bru.
+}
