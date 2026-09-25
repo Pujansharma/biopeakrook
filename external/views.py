@@ -8,12 +8,12 @@ from django.db.models import (
     Q,
     Subquery,
     Sum,
+    FilteredRelation,
     Value,
 )
 from django.db.models.functions import Coalesce, Concat
 from django.utils import timezone
 
-from accounts.associates.utils.roles import associate_center_assignments_prefetch
 from accounts.customers.models import (
     Customer,
     CustomerProfile,
@@ -47,6 +47,7 @@ from programs.models import (
 )
 from programs.serializers import ProgramServiceRedemptionHistorySerializer
 from programs.services.models import CenterServiceAssignment
+from programs.utils.constants import ProgramType
 
 
 class ExternalUserProgramView(BaseListAPIView):
@@ -107,7 +108,10 @@ class ExternalUserProgramSummaryView(BaseRetrieveAPIView):
 
     def get_queryset(self):
         customer_profile = self.get_customer_profile()
-        programs_base = Program.objects.filter(customer_profile=OuterRef("pk")).values(
+        programs_base = Program.objects.filter(
+            customer_profile=OuterRef("pk"),
+            program_type=ProgramType.THERAPY
+        ).values(
             "customer_profile"
         )
         return CustomerProfile.objects.filter(pk=customer_profile.pk).annotate(
@@ -307,7 +311,7 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
         phone_formatter = PhoneNumberFormat(phone_query)
         phone_cleaned = phone_formatter.clean(raise_exception=False)
         qs = (
-            CustomerAssociateAssignment.objects            .annotate(
+            CustomerAssociateAssignment.objects.annotate(
                 full_name=Concat(
                     F("associate__user__first_name"),
                     Value(" "),
@@ -320,12 +324,20 @@ class ExternalCustomerAssociateListView(BaseListAPIView):
                 associate__user__is_active=True,
                 **filter_kwargs,
             )
-            .select_related("associate__user")
-            .prefetch_related(
-                "center",
-                "created_by",
-                associate_center_assignments_prefetch(),
+            .annotate(
+                current_center_assignment=FilteredRelation(
+                    "associate__center_assignments",
+                    condition=Q(
+                        associate__center_assignments__center_id=F("center_id")
+                    ),
+                )
             )
+            .select_related(
+                "associate__user",
+                "current_center_assignment",
+            )
+            .prefetch_related("current_center_assignment__role_links__role")
+            .prefetch_related("center", "created_by")
             .order_by("-created_at")
         )
         return qs
