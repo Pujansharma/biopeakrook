@@ -23,4 +23,6 @@ class PreConsultationSessionListItemSerializer(serializers.Serializer):
     last_name = serializers.CharField(allow_null=True)
     gender = serializers.CharField(allow_null=True)
     date_of_birth = serializers.DateField(allow_null=True)
+    height = serializers.FloatField(allow_null=True)
+    weight = serializers.FloatField(allow_null=True)
     status = serializers.ChoiceField(choices=["In Progress", "Completed"])

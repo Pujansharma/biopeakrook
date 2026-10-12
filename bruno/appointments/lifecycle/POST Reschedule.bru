@@ -20,6 +20,7 @@ body:json {
     "end": "2026-09-05T05:40:00Z",
     "customer_profile_id": "{{customer_profile_id}}",
     "service_id": "{{service_id}}",
+    "program_service_id": "{{program_service_id}}",
     "modality": "in_person",
     "room_id": "{{room_id}}",
     "equipment_id": "{{equipment_id}}",
@@ -36,7 +37,7 @@ script:pre-request {
     body = JSON.parse(body);
   }
   body = body || {};
-  const resourceKeys = ['doctor_id', 'specialty_id', 'care_team_id', 'room_id', 'equipment_id'];
+  const resourceKeys = ['doctor_id', 'care_team_id', 'room_id', 'equipment_id', 'program_service_id'];
   for (const key of resourceKeys) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) {
       continue;
@@ -46,6 +47,20 @@ script:pre-request {
       body[key] = value;
     } else {
       delete body[key];
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'specialty_id')) {
+    const specialty = body.specialty_id;
+    if (Array.isArray(specialty)) {
+      const cleaned = specialty
+        .map((item) => String(item || '').trim())
+        .filter(Boolean);
+      if (cleaned.length) body.specialty_id = cleaned;
+      else delete body.specialty_id;
+    } else {
+      const value = String(specialty || '').trim();
+      if (value) body.specialty_id = value;
+      else delete body.specialty_id;
     }
   }
   if (body.care_team_id) {
@@ -62,10 +77,20 @@ settings {
 
 docs {
   Allowed from confirmed or checked_in. Lands confirmed. Not from in_progress.
+  Auth: staff or customer JWT. Customer may only reschedule their own profile's appointments (else 404).
+  Customer JWT: same rolling window as book/slots — local date of start must be
+  tomorrow … today+7 (e.g. reschedule on 7 Oct → 8–14 Oct). Outside → 400
+  "Date must be between tomorrow and 7 days from today."
   Same flattened contract as POST Book Appointment (full body, not PATCH).
   Staff XOR + room/equipment rules. Empty resource UUIDs stripped in pre-request.
-  specialty_id must hold a live non-doctor role mapped to this service.
+  specialty_id = UUID | UUID[] (same as book). Each id stamps a distinct
+  live non-doctor role mapped to this service.
   Cannot change customer_profile_id or service_id.
+  program_service_id: customer required and must match the appointment's existing
+  program_service_id (mismatch → 400). Does not re-check redeemability / open-apt,
+  but new start local date must be on/before package expires_at (same message as book).
+  Staff/admin must omit (present → 400). Therapy-linked staff reschedule still checks
+  expiry against the appointment's program. FK is never rewritten on reschedule.
   Body lists every allowed key. Empty resource UUIDs stripped in pre-request.
   If care_team_id is set, pre-request drops doctor_id/specialty_id (XOR).
   People path: blank care_team_id in env.

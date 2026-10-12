@@ -178,6 +178,13 @@ class ResultRequest(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["program_service"],
+                condition=models.Q(data__metsights_submission=True),
+                name="unique_metsights_submission",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.pk}"

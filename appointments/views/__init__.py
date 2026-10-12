@@ -57,6 +57,7 @@ from integrations.google_calendar.availability_sync import (
     sync_google_events_to_availability_blocks,
 )
 from integrations.google_calendar.connections import (
+    connection_is_shared_organizer,
     get_google_calendar_connection_for_user,
     google_calendar_connection_is_connected,
 )
@@ -283,6 +284,11 @@ class AssociateGoogleCalendarSyncView(CenterAvailabilityMixin, BaseGenericAPIVie
         if not google_calendar_connection_is_connected(connection):
             self.raise_bad_request(
                 "This associate hasn't connected a personal Google Calendar."
+            )
+        if connection_is_shared_organizer(connection):
+            self.raise_bad_request(
+                "This associate's Google account is the shared appointment "
+                "calendar. It cannot also be used for personal calendar sync."
             )
 
         ensure_watch_channel_active_or_log(connection)

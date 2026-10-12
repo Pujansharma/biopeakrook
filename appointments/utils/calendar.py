@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import models
@@ -42,6 +43,14 @@ def get_center_timezone_name(center):
     # ponytail: Center has no timezone field yet; use project default.
     del center
     return settings.TIME_ZONE
+
+
+def center_local_date(center, when=None):
+    """Calendar date in the center's timezone (falls back to settings.TIME_ZONE)."""
+    moment = when if when is not None else timezone.now()
+    if timezone.is_naive(moment):
+        moment = timezone.make_aware(moment, timezone.get_current_timezone())
+    return moment.astimezone(ZoneInfo(get_center_timezone_name(center))).date()
 
 
 def recurring_block_in_query_range(query_start, query_end):

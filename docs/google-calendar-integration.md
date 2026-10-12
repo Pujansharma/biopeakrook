@@ -71,7 +71,7 @@ not organizers - see "Picking which calendar hosts the event" below).
    a toast and re-fetch its status query.
 6. **When an appointment is created/rescheduled/cancelled**, after the DB
    write commits we enqueue a Google Calendar row on `CommunicationOutbox`
-   (same hook as WhatsApp). A wake worker / 10-minute sweep calls
+   (same hook as WhatsApp). A wake worker / 15-minute sweep calls
    `insert_event()` / `patch_event()` / `delete_event()` and saves the
    Google event's ID + Meet link on `Appointment.google_event_id` /
    `google_meet_link` - see "Event sync" below. The book/cancel/reschedule
@@ -332,7 +332,7 @@ WhatsApp + Google Calendar rows on `CommunicationOutbox` via
 appointment operation in Biopeak Nexus.**
 
 Worker: `uv run manage.py process_communication_outbox` (wake on insert +
-10-minute sweep). `process_google_outbox_message` calls
+15-minute sweep). `process_google_outbox_message` calls
 `sync_appointment_with_google()` in `integrations/google_calendar/google_sync.py`.
 That function **desired-states** from the live appointment (not a replay of
 queued event types): cancelled → `delete_event`; otherwise insert/patch.
@@ -677,6 +677,27 @@ outbound are never replaced or removed by import). Outbound insert/patch also
 stamps private `extendedProperties.private.biopeakOutbound=1`; inbound
 `build_spec_from_event` skips those events so Biopeak-written busy never
 re-imports even if the webhook races ahead of persisting `google_event_id`.
+
+Appointment events carry the shared key
+`extendedProperties.shared.isAppointment=1` (`upsert_google_event` in
+`google_sync.py`, checked via `event_is_appointment` in `calendar_api.py`).
+Google copies `shared` properties onto every attendee's copy, and the
+associate's personal calendar (which inbound sync reads) holds the attendee
+copy. `biopeakOutbound` is `private` because personal outbound events live on
+the associate's own calendar.
+
+Inbound sync also skips any event whose `organizer.email` equals
+`GOOGLE_CALENDAR_ID`, since every appointment is organized by the shared
+calendar. Both checks sit in `should_skip_inbound` (split into
+`_google_marks_free` and `_is_biopeak_event`). A skipped event takes the
+"gone" path, so rows imported from it before (e.g. an old invite that became a
+duplicate) are removed.
+
+**Shared organizer is never synced inbound.** `sync_google_events_to_availability_blocks`
+returns `synced: false` for the `GOOGLE_CALENDAR_ID` connection, and
+`ensure_watch_channel_active` never opens a watch channel for it. This covers
+every caller (manual sync, admin sync of an associate, webhook, watch renewal,
+first sync after connect). Both sync views return 400 for it.
 
 **Recurring.** A multi-day create shares one `series_id`; one outbox target +
 one Google master with `RRULE:FREQ=WEEKLY;BYDAY=...`. Soft-off / edit of any

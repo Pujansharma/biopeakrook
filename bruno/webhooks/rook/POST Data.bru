@@ -1,0 +1,38 @@
+meta {
+  name: POST Data
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseURL}}/webhooks/rook/data/
+  body: json
+  auth: none
+}
+
+headers {
+  X-ROOK-HASH: {{rook_webhook_hash}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "client_uuid": "replace-with-rook-client-uuid",
+    "user_id": "{{rook_user_id}}",
+    "datetime": "2026-10-08T00:00:00+00:00",
+    "data_structure": "sleep_health_summary",
+    "document_version": 1,
+    "sleep_health": {
+      "summary": {
+        "duration": {
+          "sleep_duration_seconds_int": 25200
+        }
+      }
+    }
+  }
+}
+
+docs {
+  HMAC input is the exact client_uuid + user_id + datetime concatenation, with
+  the dedicated webhook hash key. Signed v2 deliveries contain one document.
+}

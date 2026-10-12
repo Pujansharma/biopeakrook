@@ -1,0 +1,31 @@
+meta {
+  name: POST Notification
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/webhooks/rook/notification/
+  body: json
+  auth: none
+}
+
+headers {
+  X-ROOK-HASH: {{rook_webhook_hash}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "client_uuid": "replace-with-rook-client-uuid",
+    "user_id": "{{rook_user_id}}",
+    "datetime": "2026-10-08T00:00:00+00:00",
+    "data_source": "Garmin",
+    "event_type": "authorization_completed"
+  }
+}
+
+docs {
+  Updates the durable provider connection/import state and queues downstream
+  work. Notification event names are normalized defensively by the backend.
+}

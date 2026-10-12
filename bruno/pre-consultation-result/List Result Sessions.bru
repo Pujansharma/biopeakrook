@@ -67,6 +67,8 @@ docs {
   - contact_email — Customer.contact_email
   - phone — User.phone
   - first_name, last_name, gender, date_of_birth — main CustomerProfile (falls back to User)
+  - height — CustomerProfile.height_cm (cm), null if missing / no main profile
+  - weight — CustomerProfile.weight_kg (kg), null if missing / no main profile
   - status — In Progress | Completed (PreConsultationSession.status)
   
   Sets customer_user_id from first row when present.

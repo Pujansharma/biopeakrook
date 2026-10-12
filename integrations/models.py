@@ -5,9 +5,14 @@ from django.db.models.functions import Lower
 from accounts.utils import get_user_model
 from core.utils.models import BaseModel, BaseUUIDModel
 from integrations.utils.constants import (
+    APP_DOWNLOAD_USER_AGENT_MAX_LENGTH,
+    AppDownloadEntry,
+    AppDownloadPlatform,
     CommunicationChannel,
     CommunicationEventType,
     CommunicationOutboxStatus,
+    TERMINAL_APPOINTMENT_EVENT_TYPES,
+    TERMINAL_OUTBOX_BLOCKING_STATUSES,
 )
 
 User = get_user_model()
@@ -108,18 +113,8 @@ class CommunicationOutbox(BaseUUIDModel):
             models.UniqueConstraint(
                 fields=["appointment", "channel", "event_type"],
                 condition=Q(
-                    event_type__in=[
-                        CommunicationEventType.APPOINTMENT_CONFIRMED,
-                        CommunicationEventType.APPOINTMENT_CANCELLED,
-                    ],
-                    status__in=[
-                        CommunicationOutboxStatus.PENDING,
-                        CommunicationOutboxStatus.SENDING,
-                        CommunicationOutboxStatus.ACCEPTED,
-                        CommunicationOutboxStatus.SENT,
-                        CommunicationOutboxStatus.DELIVERED,
-                        CommunicationOutboxStatus.READ,
-                    ],
+                    event_type__in=TERMINAL_APPOINTMENT_EVENT_TYPES,
+                    status__in=TERMINAL_OUTBOX_BLOCKING_STATUSES,
                 ),
                 name="uniq_comm_outbox_appointment_channel_terminal_event",
             ),
@@ -201,6 +196,35 @@ class CommunicationWebhookEvent(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.pk}"
+
+
+class AppDownloadClick(BaseUUIDModel):
+    """Append-only QR / deep-link hit for app store redirect."""
+
+    platform = models.CharField(max_length=16, choices=AppDownloadPlatform, db_index=True)
+    entry = models.CharField(
+        max_length=32,
+        choices=AppDownloadEntry,
+        default=AppDownloadEntry.UA,
+        db_index=True,
+    )
+    destination_url = models.URLField(max_length=512, blank=True)
+    user_agent = models.CharField(max_length=APP_DOWNLOAD_USER_AGENT_MAX_LENGTH, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    source = models.CharField(max_length=128, blank=True, db_index=True)
+    campaign = models.CharField(max_length=128, blank=True, db_index=True)
+    referer = models.CharField(max_length=512, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["platform", "created_at"]),
+            models.Index(fields=["entry", "created_at"]),
+            models.Index(fields=["source", "created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.pk}"

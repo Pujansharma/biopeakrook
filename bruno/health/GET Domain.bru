@@ -1,0 +1,20 @@
+meta {
+  name: GET Domain
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/health/sleep/?days=90
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+}
+
+docs {
+  Replace sleep with activity, heart, recovery, body, or workouts. days must be
+  between 1 and 365.
+}

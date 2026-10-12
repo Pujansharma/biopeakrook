@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from accounts.associates.models import AssociateCenterAssignment
 from accounts.associates.utils.roles import (
     assignment_active_roles,
     assignment_holds_role,
@@ -92,6 +93,29 @@ MISSING_SPECIALTY_ROLE_MESSAGE = (
 )
 AMBIGUOUS_DOCTOR_ROLE_MESSAGE = (
     "doctor_id matches more than one live doctor role."
+)
+AUTO_ASSIGN_NO_ROLE_REQUIREMENTS_MESSAGE = (
+    "Service has no active role requirements for auto-assign. "
+    "Use preferred slots or map roles on the service."
+)
+AUTO_ASSIGN_TOO_MANY_DOCTOR_ROLES_MESSAGE = (
+    "Auto-assign supports at most one doctor role on the service. "
+    "Use preferred slots or reduce service role requirements."
+)
+AUTO_ASSIGN_NO_ROOM_TYPE_REQUIREMENTS_MESSAGE = (
+    "Service has no active room type requirements for auto-assign. "
+    "Use preferred slots or map room types on the service."
+)
+AUTO_ASSIGN_NO_ELIGIBLE_STAFF_MESSAGE = (
+    "No eligible associates for this service's role requirements."
+)
+AUTO_ASSIGN_NO_ELIGIBLE_ROOMS_MESSAGE = (
+    "No eligible rooms for this service's room type requirements."
+)
+SPECIALTY_ID_EMPTY_MESSAGE = "specialty_id must not be empty."
+SPECIALTY_ID_DUPLICATE_MESSAGE = "specialty_id must not contain duplicate associates."
+SPECIALTY_ID_TYPE_MESSAGE = (
+    "specialty_id must be a UUID or a non-empty array of UUIDs."
 )
 
 
@@ -259,12 +283,17 @@ def role_pk_sort_key(role):
     return str(role.pk)
 
 
-def pick_specialty_role(roles, service_assignment=None):
+def pick_specialty_role(roles, service_assignment=None, excluded_role_ids=None):
     mapped_role_ids = mapped_service_role_ids(service_assignment)
+    excluded = {str(role_id) for role_id in (excluded_role_ids or set())}
     matching_roles = [
         role
         for role in roles
-        if not role_is_doctor(role) and role.pk in mapped_role_ids
+        if (
+            not role_is_doctor(role)
+            and role.pk in mapped_role_ids
+            and str(role.pk) not in excluded
+        )
     ]
     if not matching_roles:
         raise ValidationError(MISSING_SPECIALTY_ROLE_MESSAGE)
@@ -272,12 +301,57 @@ def pick_specialty_role(roles, service_assignment=None):
     return matching_roles[0]
 
 
-def pick_preferred_person_role(preferred_key, live_roles, service_assignment):
+def pick_preferred_person_role(
+    preferred_key, live_roles, service_assignment, excluded_role_ids=None
+):
     if preferred_key == "specialty_id":
-        return pick_specialty_role(live_roles, service_assignment)
+        return pick_specialty_role(
+            live_roles, service_assignment, excluded_role_ids=excluded_role_ids
+        )
     if preferred_key == "doctor_id":
         return pick_doctor_role(live_roles)
     raise ValidationError(f"Unknown preferred person key: {preferred_key}")
+
+
+def specialty_ids_from_preferred(preferred):
+    if not preferred:
+        return []
+    value = preferred.get("specialty_id")
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value if item is not None]
+    return [str(value)]
+
+
+def normalize_specialty_id_value(value):
+    """Accept one UUID or a list of UUIDs; return list[str] or None."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            raise ValidationError({"specialty_id": SPECIALTY_ID_EMPTY_MESSAGE})
+        specialty_ids = []
+        for item in value:
+            if item is None:
+                raise ValidationError({"specialty_id": SPECIALTY_ID_TYPE_MESSAGE})
+            specialty_ids.append(str(item))
+        if len(specialty_ids) != len(set(specialty_ids)):
+            raise ValidationError({"specialty_id": SPECIALTY_ID_DUPLICATE_MESSAGE})
+        return specialty_ids
+    return [str(value)]
+
+
+def serialize_specialty_payload(entries):
+    if not entries:
+        return None
+    serialized = [
+        serialize_slot_specialty(entry["associate"], entry["role"])
+        for entry in entries
+    ]
+    if len(serialized) == 1:
+        return serialized[0]
+    return serialized
 
 
 def required_room_types_for_assignment(assignment):
@@ -317,6 +391,193 @@ def validate_room_for_assignment(room, center, assignment=None):
         raise ValidationError(ROOM_TYPE_NOT_MAPPED_MESSAGE)
 
 
+def active_role_requirements_for_assignment(assignment):
+    requirements = []
+    for requirement in assignment.role_requirements.all():
+        if not requirement.is_active:
+            continue
+        if not requirement.role.is_active:
+            continue
+        requirements.append(requirement)
+    return requirements
+
+
+def busy_load_count(busy_map, resource_id):
+    return len(busy_map.get(str(resource_id), []))
+
+
+def pick_associate_by_load(associates, associate_busy_map):
+    return min(
+        associates,
+        key=lambda associate: (
+            busy_load_count(associate_busy_map, associate.pk),
+            associate.created_at,
+            str(associate.pk),
+        ),
+    )
+
+
+def pick_room_by_load(rooms, room_busy_map):
+    return min(
+        rooms,
+        key=lambda room: (
+            busy_load_count(room_busy_map, room.pk),
+            room.code or "",
+            str(room.pk),
+        ),
+    )
+
+
+def pick_equipment_by_load(equipment_list, equipment_busy_map):
+    return min(
+        equipment_list,
+        key=lambda equipment: (
+            busy_load_count(equipment_busy_map, equipment.pk),
+            equipment.code or "",
+            str(equipment.pk),
+        ),
+    )
+
+
+def get_eligible_associates_by_roles(center, roles, modality):
+    by_role = {str(role.pk): [] for role in roles}
+    if not roles:
+        return by_role
+    role_ids = [role.pk for role in roles]
+    assignments = (
+        AssociateCenterAssignment.objects.filter(
+            center=center,
+            is_active=True,
+            associate__user__is_active=True,
+            role_links__role__pk__in=role_ids,
+            role_links__is_active=True,
+            role_links__role__is_active=True,
+        )
+        .select_related("associate", "associate__user")
+        .prefetch_related("role_links__role")
+        .order_by("associate__created_at", "associate__pk")
+        .distinct()
+    )
+    seen_by_role = {str(role.pk): set() for role in roles}
+    for assignment in assignments:
+        if not associate_modality_compatible(assignment.mode, modality):
+            continue
+        live_roles = assignment_active_roles(assignment)
+        for role in live_roles:
+            role_key = str(role.pk)
+            if role_key not in by_role:
+                continue
+            if assignment.associate.pk in seen_by_role[role_key]:
+                continue
+            seen_by_role[role_key].add(assignment.associate.pk)
+            by_role[role_key].append(assignment.associate)
+    return by_role
+
+
+def rooms_for_assignment_types(center, assignment):
+    required_room_types = required_room_types_for_assignment(assignment)
+    if not required_room_types:
+        return []
+    return list(
+        Room.objects.filter_active(
+            center=center,
+            room_type_ref__in=required_room_types,
+        )
+        .select_related("room_type_ref")
+        .order_by("code", "pk")
+    )
+
+
+def bookable_equipment_queryset(center, rooms):
+    return (
+        Equipment.objects.filter(
+            center=center,
+            room__in=rooms,
+            is_active=True,
+            equipment_type__isnull=False,
+            equipment_type__is_active=True,
+        )
+        .select_related("equipment_type", "room")
+        .order_by("room_id", "code", "pk")
+    )
+
+
+def bookable_equipment_by_room_ids(center, rooms):
+    equipment_by_room_id = {str(room.pk): [] for room in rooms}
+    if not rooms:
+        return equipment_by_room_id
+    for equipment in bookable_equipment_queryset(center, rooms):
+        room_key = str(equipment.room_id)
+        equipment_by_room_id[room_key].append(equipment)
+    return equipment_by_room_id
+
+
+def validate_service_auto_assignable(assignment, modality):
+    requirements = active_role_requirements_for_assignment(assignment)
+    if not requirements:
+        raise ValidationError(AUTO_ASSIGN_NO_ROLE_REQUIREMENTS_MESSAGE)
+    doctor_roles = []
+    specialty_roles = []
+    for requirement in requirements:
+        if role_is_doctor(requirement.role):
+            doctor_roles.append(requirement.role)
+        else:
+            specialty_roles.append(requirement.role)
+    if len(doctor_roles) > 1:
+        raise ValidationError(AUTO_ASSIGN_TOO_MANY_DOCTOR_ROLES_MESSAGE)
+    if modality == AppointmentModes.IN_PERSON:
+        if not required_room_types_for_assignment(assignment):
+            raise ValidationError(AUTO_ASSIGN_NO_ROOM_TYPE_REQUIREMENTS_MESSAGE)
+    return {
+        "doctor_role": doctor_roles[0] if doctor_roles else None,
+        "specialty_roles": specialty_roles,
+        "requirements": requirements,
+    }
+
+
+def build_service_resource_pools(center, assignment, modality):
+    auto_assign = validate_service_auto_assignable(assignment, modality)
+    roles = [requirement.role for requirement in auto_assign["requirements"]]
+    associates_by_role = get_eligible_associates_by_roles(center, roles, modality)
+    role_pools = []
+    for requirement in auto_assign["requirements"]:
+        role = requirement.role
+        role_pools.append(
+            {
+                "role_id": str(role.pk),
+                "role": role,
+                "associates": associates_by_role.get(str(role.pk), []),
+            }
+        )
+    if not any(role_pool["associates"] for role_pool in role_pools):
+        raise ValidationError(AUTO_ASSIGN_NO_ELIGIBLE_STAFF_MESSAGE)
+    for role_pool in role_pools:
+        if not role_pool["associates"]:
+            raise ValidationError(
+                f"No eligible associates for role {role_pool['role'].name}."
+            )
+    rooms = []
+    equipment = []
+    equipment_by_room_id = {}
+    if modality == AppointmentModes.IN_PERSON:
+        rooms = rooms_for_assignment_types(center, assignment)
+        if not rooms:
+            raise ValidationError(AUTO_ASSIGN_NO_ELIGIBLE_ROOMS_MESSAGE)
+        equipment_by_room_id = bookable_equipment_by_room_ids(center, rooms)
+        for room_equipment in equipment_by_room_id.values():
+            equipment.extend(room_equipment)
+    return {
+        "roles": role_pools,
+        "rooms": rooms,
+        "equipment": equipment,
+        "equipment_by_room_id": equipment_by_room_id,
+        "extra_associates": [],
+        "care_team": None,
+        "preferred_entries": [],
+        "auto_assign": auto_assign,
+    }
+
+
 def reject_health_coach_id(preferred):
     if preferred and "health_coach_id" in preferred:
         raise ValidationError({"health_coach_id": HEALTH_COACH_ID_REJECT_MESSAGE})
@@ -327,9 +588,9 @@ def validate_preferred_combo(preferred, modality):
     preferred = preferred or {}
     care_team_id = preferred.get("care_team_id")
     doctor_id = preferred.get("doctor_id")
-    specialty_id = preferred.get("specialty_id")
+    specialty_ids = specialty_ids_from_preferred(preferred)
     room_id = preferred.get("room_id")
-    has_person = bool(care_team_id or doctor_id or specialty_id)
+    has_person = bool(care_team_id or doctor_id or specialty_ids)
     if not has_person:
         raise ValidationError(
             {
@@ -338,7 +599,7 @@ def validate_preferred_combo(preferred, modality):
                 "specialty_id": STAFF_REQUIRED_MESSAGE,
             }
         )
-    if care_team_id and (doctor_id or specialty_id):
+    if care_team_id and (doctor_id or specialty_ids):
         raise ValidationError({"care_team_id": CARE_TEAM_XOR_MESSAGE})
     equipment_id = preferred.get("equipment_id")
     if modality == AppointmentModes.IN_PERSON:
@@ -351,13 +612,15 @@ def validate_preferred_combo(preferred, modality):
             raise ValidationError(
                 {"equipment_id": EQUIPMENT_NOT_ALLOWED_VIRTUAL_MESSAGE}
             )
-    if doctor_id and specialty_id and str(doctor_id) == str(specialty_id):
+    if doctor_id and specialty_ids and str(doctor_id) in specialty_ids:
         raise ValidationError(
             {
                 "doctor_id": SAME_DOCTOR_AND_SPECIALTY_MESSAGE,
                 "specialty_id": SAME_DOCTOR_AND_SPECIALTY_MESSAGE,
             }
         )
+    if specialty_ids and len(specialty_ids) != len(set(specialty_ids)):
+        raise ValidationError({"specialty_id": SPECIALTY_ID_DUPLICATE_MESSAGE})
 
 
 def compute_associate_free_windows(
@@ -663,22 +926,30 @@ def collect_preferred_person_ids(preferred):
     if not preferred:
         return []
     person_ids = []
-    for key in ("doctor_id", "specialty_id"):
-        value = preferred.get(key)
-        if value:
-            person_ids.append(str(value))
+    doctor_id = preferred.get("doctor_id")
+    if doctor_id:
+        person_ids.append(str(doctor_id))
+    person_ids.extend(specialty_ids_from_preferred(preferred))
     return person_ids
 
 
 def resolve_preferred_person_entry(
-    center, preferred_key, associate_id, modality, service_assignment=None
+    center,
+    preferred_key,
+    associate_id,
+    modality,
+    service_assignment=None,
+    excluded_role_ids=None,
 ):
     center_assignment = get_live_assignment_for_associate(
         center, associate_id, modality
     )
     live_roles = assignment_active_roles(center_assignment)
     role = pick_preferred_person_role(
-        preferred_key, live_roles, service_assignment
+        preferred_key,
+        live_roles,
+        service_assignment,
+        excluded_role_ids=excluded_role_ids,
     )
     return {
         "role_id": str(role.pk),
@@ -686,6 +957,25 @@ def resolve_preferred_person_entry(
         "associate": center_assignment.associate,
         "role": role,
     }
+
+
+def resolve_specialty_preferred_entries(
+    center, specialty_ids, modality, service_assignment
+):
+    entries = []
+    used_role_ids = set()
+    for associate_id in specialty_ids:
+        entry = resolve_preferred_person_entry(
+            center,
+            "specialty_id",
+            associate_id,
+            modality,
+            service_assignment=service_assignment,
+            excluded_role_ids=used_role_ids,
+        )
+        used_role_ids.add(entry["role_id"])
+        entries.append(entry)
+    return entries
 
 
 def build_resolve_resource_pools(center, assignment, modality, preferred):
@@ -727,16 +1017,14 @@ def build_resolve_resource_pools(center, assignment, modality, preferred):
         )
         resource_pools["extra_associates"].append(entry["associate"])
         resource_pools["preferred_entries"].append(entry)
-    if preferred.get("specialty_id"):
-        entry = resolve_preferred_person_entry(
-            center,
-            "specialty_id",
-            preferred["specialty_id"],
-            modality,
-            service_assignment=assignment,
+    specialty_ids = specialty_ids_from_preferred(preferred)
+    if specialty_ids:
+        specialty_entries = resolve_specialty_preferred_entries(
+            center, specialty_ids, modality, assignment
         )
-        resource_pools["extra_associates"].append(entry["associate"])
-        resource_pools["preferred_entries"].append(entry)
+        for entry in specialty_entries:
+            resource_pools["extra_associates"].append(entry["associate"])
+            resource_pools["preferred_entries"].append(entry)
 
     seen_associate_ids = set()
     unique_associates = []
@@ -1106,6 +1394,271 @@ def find_appointment_slots(
         if combo is None:
             continue
         slots.append(serialize_pinned_slot(slot_start, slot_end, combo, preferred))
+        if len(slots) >= SLOT_CAP_PER_DAY:
+            if len(candidate_slots) > len(slots):
+                truncated = True
+            break
+
+    return {
+        "date": slot_date.isoformat(),
+        "timezone": timezone_name,
+        "duration_minutes": duration_minutes,
+        "buffer_before_minutes": buffer_before,
+        "buffer_after_minutes": buffer_after,
+        "slots": slots,
+        "truncated": truncated,
+    }
+
+
+def resolve_appointment_combo_auto(
+    center,
+    assignment,
+    modality,
+    exclusive_start,
+    exclusive_end,
+    free_window_cache,
+    appointment_busy_map,
+    resource_pools,
+    query_start=None,
+    query_end=None,
+    timezone_name=None,
+    soft=False,
+):
+    if query_start is not None and timezone_name is not None:
+        ensure_free_windows_for_pools(
+            center,
+            resource_pools,
+            query_start,
+            query_end,
+            timezone_name,
+            appointment_busy_map,
+            free_window_cache,
+        )
+
+    filled_by_role = {}
+    used_associate_ids = set()
+    preferred_entries = []
+
+    for role_pool in resource_pools["roles"]:
+        role_id = role_pool["role_id"]
+        free_associates = []
+        for associate in role_pool["associates"]:
+            associate_key = str(associate.pk)
+            if associate_key in used_associate_ids:
+                continue
+            if resource_is_free(
+                "associate",
+                associate.pk,
+                exclusive_start,
+                exclusive_end,
+                free_window_cache,
+            ):
+                free_associates.append(associate)
+        if not free_associates:
+            if soft:
+                return None
+            raise ValidationError(
+                f"No available associate for role {role_pool['role'].name}."
+            )
+        chosen = pick_associate_by_load(
+            free_associates, appointment_busy_map["associate"]
+        )
+        filled_by_role[role_id] = chosen
+        used_associate_ids.add(str(chosen.pk))
+        preferred_entries.append(
+            {
+                "role_id": role_id,
+                "associate_id": chosen.pk,
+                "associate": chosen,
+                "role": role_pool["role"],
+            }
+        )
+
+    room = None
+    equipment = None
+    if modality == AppointmentModes.IN_PERSON:
+        free_rooms = []
+        for candidate in resource_pools["rooms"]:
+            if resource_is_free(
+                "room",
+                candidate.pk,
+                exclusive_start,
+                exclusive_end,
+                free_window_cache,
+            ):
+                free_rooms.append(candidate)
+        if not free_rooms:
+            if soft:
+                return None
+            raise ValidationError(
+                "A room is required for in-person appointments."
+            )
+        room = pick_room_by_load(free_rooms, appointment_busy_map["room"])
+        room_equipment = (
+            resource_pools.get("equipment_by_room_id") or {}
+        ).get(str(room.pk), [])
+        if room_equipment:
+            free_equipment = [
+                candidate
+                for candidate in room_equipment
+                if resource_is_free(
+                    "equipment",
+                    candidate.pk,
+                    exclusive_start,
+                    exclusive_end,
+                    free_window_cache,
+                )
+            ]
+            if not free_equipment:
+                if soft:
+                    return None
+                raise ValidationError("Selected equipment is not available.")
+            equipment = pick_equipment_by_load(
+                free_equipment, appointment_busy_map["equipment"]
+            )
+
+    associates_payload = [
+        {
+            "role_id": entry["role_id"],
+            "associate_id": entry["associate_id"],
+        }
+        for entry in preferred_entries
+    ]
+    if not associates_payload:
+        if soft:
+            return None
+        raise ValidationError(ASSOCIATES_REQUIRED_FOR_BOOKING)
+    return {
+        "associates": associates_payload,
+        "room": room,
+        "equipment": equipment,
+        "care_team": None,
+        "preferred_entries": preferred_entries,
+    }
+
+
+def serialize_auto_slot(slot_start, slot_end, combo, auto_assign):
+    payload = {
+        "start": slot_start.isoformat(),
+        "end": slot_end.isoformat(),
+    }
+    entries = combo.get("preferred_entries") or []
+    doctor_role = auto_assign.get("doctor_role")
+    specialty_role_ids = {
+        str(role.pk) for role in (auto_assign.get("specialty_roles") or [])
+    }
+    specialty_entries = []
+    for entry in entries:
+        role = entry["role"]
+        if doctor_role is not None and role.pk == doctor_role.pk:
+            payload["doctor"] = serialize_slot_person(entry["associate"])
+        elif str(role.pk) in specialty_role_ids:
+            specialty_entries.append(entry)
+    specialty_payload = serialize_specialty_payload(specialty_entries)
+    if specialty_payload is not None:
+        payload["specialty"] = specialty_payload
+    room = combo.get("room")
+    if room is not None:
+        payload["room"] = serialize_named_resource(room)
+    equipment = combo.get("equipment")
+    if equipment is not None:
+        payload["equipment"] = serialize_named_resource(equipment)
+    return payload
+
+
+def find_appointment_slots_v2(
+    center,
+    customer_profile,
+    service,
+    modality,
+    slot_date,
+):
+    """Find slots without preferred IDs; least-busy auto-assign from service maps."""
+    validate_customer_profile_for_center(customer_profile, center)
+    assignment = get_center_service_assignment(center, service)
+    if assignment is None:
+        raise ValidationError("Service is not available at this center.")
+    if not modality_compatible(assignment.modality, modality):
+        raise ValidationError("Modality is not supported for this service.")
+    if not assignment.duration:
+        raise ValidationError("Service duration is not configured for this center.")
+
+    resource_pools = build_service_resource_pools(center, assignment, modality)
+    auto_assign = resource_pools["auto_assign"]
+
+    timezone_name = get_center_timezone_name(center)
+    query_start = slot_date
+    query_end = slot_date
+    range_start, range_end = datetime_range_for_dates(
+        query_start, query_end, timezone_name
+    )
+    busy_maps = load_busy_interval_maps(center, range_start, range_end)
+    customer_busy = load_customer_busy_intervals(
+        customer_profile, range_start, range_end
+    )
+
+    free_window_cache = build_resource_free_window_cache(
+        center,
+        resource_pools,
+        query_start,
+        query_end,
+        timezone_name,
+        busy_maps,
+    )
+
+    center_hours = expand_center_operating_hours(
+        center, query_start, query_end, timezone_name
+    )
+    closure_intervals, _ = collect_closure_events(
+        center, query_start, query_end, timezone_name
+    )
+    base_windows = subtract_intervals(center_hours, closure_intervals)
+
+    duration_minutes = assignment.duration
+    buffer_before = assignment.buffer_before
+    buffer_after = assignment.buffer_after
+    step_minutes = duration_minutes + buffer_before + buffer_after
+    candidate_slots = split_into_slots(
+        base_windows, duration_minutes, step_minutes
+    )
+
+    now = timezone.now()
+    slots = []
+    truncated = False
+    for slot_start, slot_end in candidate_slots:
+        if slot_start < now:
+            continue
+        exclusive_start, exclusive_end = compute_exclusive_bounds(
+            slot_start,
+            slot_end,
+            buffer_before,
+            buffer_after,
+        )
+        if interval_overlaps_any(exclusive_start, exclusive_end, customer_busy):
+            continue
+        if not is_interval_contained_in_windows(
+            exclusive_start, exclusive_end, base_windows
+        ):
+            continue
+        combo = resolve_appointment_combo_auto(
+            center,
+            assignment,
+            modality,
+            exclusive_start,
+            exclusive_end,
+            free_window_cache,
+            busy_maps,
+            resource_pools=resource_pools,
+            query_start=query_start,
+            query_end=query_end,
+            timezone_name=timezone_name,
+            soft=True,
+        )
+        if combo is None:
+            continue
+        slots.append(
+            serialize_auto_slot(slot_start, slot_end, combo, auto_assign)
+        )
         if len(slots) >= SLOT_CAP_PER_DAY:
             if len(candidate_slots) > len(slots):
                 truncated = True

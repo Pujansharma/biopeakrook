@@ -68,7 +68,7 @@ class AdminUserDetailView(BaseRetrieveUpdateDestroyAPIView):
             self.raise_permission_denied("You are not allowed to perform this action")
         try:
             user.delete()
-        except RestrictedError, ProtectedError:
+        except (RestrictedError, ProtectedError):
             self.raise_bad_request(f"This admin cannot be deleted")
 
 

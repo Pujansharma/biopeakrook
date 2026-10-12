@@ -4,6 +4,8 @@ from django.db import IntegrityError
 from django.db.models import F
 from django.utils import timezone
 
+from appointments.models import Appointment
+from core.utils.constants import AppointmentModes
 from core.utils.log import logger
 from integrations.communications.wake import publish_outbox_wake
 from integrations.communications.whatsapp.sdk import (
@@ -31,6 +33,8 @@ from integrations.utils.constants import (
     CommunicationChannel,
     CommunicationEventType,
     CommunicationOutboxStatus,
+    TERMINAL_APPOINTMENT_EVENT_TYPES,
+    TERMINAL_OUTBOX_BLOCKING_STATUSES,
 )
 
 STATUS_RANK = {
@@ -53,18 +57,8 @@ WEBHOOK_STATUS_MAP = {
 
 MAX_OUTBOX_ATTEMPTS = 2
 STALE_SENDING_MINUTES = 5
-TERMINAL_EVENT_TYPES = (
-    CommunicationEventType.APPOINTMENT_CONFIRMED,
-    CommunicationEventType.APPOINTMENT_CANCELLED,
-)
-ACTIVE_OUTBOX_STATUSES = (
-    CommunicationOutboxStatus.PENDING,
-    CommunicationOutboxStatus.SENDING,
-    CommunicationOutboxStatus.ACCEPTED,
-    CommunicationOutboxStatus.SENT,
-    CommunicationOutboxStatus.DELIVERED,
-    CommunicationOutboxStatus.READ,
-)
+TERMINAL_EVENT_TYPES = TERMINAL_APPOINTMENT_EVENT_TYPES
+ACTIVE_OUTBOX_STATUSES = TERMINAL_OUTBOX_BLOCKING_STATUSES
 OPEN_GOOGLE_OUTBOX_STATUSES = (
     CommunicationOutboxStatus.PENDING,
     CommunicationOutboxStatus.FAILED,
@@ -92,6 +86,19 @@ def existing_terminal_outbox(appointment, event_type, channel):
             channel=channel,
             event_type=event_type,
             status__in=ACTIVE_OUTBOX_STATUSES,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def existing_outbox_any_status(appointment, event_type, channel):
+    """Any prior row for this terminal WhatsApp event (incl. SKIPPED)."""
+    return (
+        CommunicationOutbox.objects.filter(
+            appointment=appointment,
+            channel=channel,
+            event_type=event_type,
         )
         .order_by("-created_at")
         .first()
@@ -240,6 +247,14 @@ def enqueue_associate_leave_sync(leave):
     )
 
 
+ONCE_PER_APPOINTMENT_WHATSAPP_EVENTS = frozenset(
+    {
+        CommunicationEventType.APPOINTMENT_REMINDER,
+        CommunicationEventType.APPOINTMENT_NO_SHOW,
+    }
+)
+
+
 def enqueue_whatsapp_message(
     appointment,
     event_type,
@@ -254,6 +269,14 @@ def enqueue_whatsapp_message(
         appointment,
         previous_start_datetime=previous_start_datetime,
     )
+
+    # Reminder / no-show: one row forever (incl. SKIPPED) — check before early skips.
+    if event_type in ONCE_PER_APPOINTMENT_WHATSAPP_EVENTS:
+        existing_any = existing_outbox_any_status(
+            appointment, event_type, CommunicationChannel.WHATSAPP
+        )
+        if existing_any is not None:
+            return existing_any
 
     if not is_whatsapp_configured():
         return create_outbox_message(
@@ -329,6 +352,31 @@ def enqueue_google_calendar_message(appointment, event_type):
     )
 
 
+def enqueue_whatsapp_only_message(
+    appointment,
+    event_type,
+    *,
+    previous_start_datetime=None,
+    wake=True,
+):
+    """
+    Persist WhatsApp outbox only (no Google Calendar). Used for reminder /
+    no-show. wake=False when sweep enqueues reminders (same job drains).
+    """
+    whatsapp_message = enqueue_whatsapp_message(
+        appointment,
+        event_type,
+        previous_start_datetime=previous_start_datetime,
+    )
+    pending_statuses = {
+        CommunicationOutboxStatus.PENDING,
+        CommunicationOutboxStatus.FAILED,
+    }
+    if wake and whatsapp_message.status in pending_statuses:
+        publish_outbox_wake()
+    return whatsapp_message
+
+
 def enqueue_appointment_message(
     appointment,
     event_type,
@@ -336,16 +384,16 @@ def enqueue_appointment_message(
     previous_start_datetime=None,
 ):
     """
-    Persist WhatsApp + Google Calendar outbox rows. Worker sends / syncs.
-    Call via schedule_queue_* (transaction.on_commit) so outbox failures
-    do not roll back booking/cancel/reschedule.
+    Persist Google Calendar then WhatsApp outbox rows. Worker syncs Meet
+    before WA send when virtual. Call via schedule_queue_* (on_commit) so
+    outbox failures do not roll back booking/cancel/reschedule.
     """
+    google_message = enqueue_google_calendar_message(appointment, event_type)
     whatsapp_message = enqueue_whatsapp_message(
         appointment,
         event_type,
         previous_start_datetime=previous_start_datetime,
     )
-    google_message = enqueue_google_calendar_message(appointment, event_type)
     pending_statuses = {
         CommunicationOutboxStatus.PENDING,
         CommunicationOutboxStatus.FAILED,
@@ -515,6 +563,82 @@ def has_in_flight_google_sync_for_message(message):
     ).exists()
 
 
+def has_open_appointment_google_work(appointment_id):
+    """PENDING/FAILED (retryable) or SENDING Google rows for this appointment."""
+    if has_in_flight_google_sync(appointment_id):
+        return True
+    return CommunicationOutbox.objects.filter(
+        appointment_id=appointment_id,
+        channel=CommunicationChannel.GOOGLE_CALENDAR,
+        status__in=OPEN_GOOGLE_OUTBOX_STATUSES,
+        attempt_count__lt=MAX_OUTBOX_ATTEMPTS,
+    ).exists()
+
+
+def appointment_has_pending_whatsapp(appointment_id):
+    return CommunicationOutbox.objects.filter(
+        appointment_id=appointment_id,
+        channel=CommunicationChannel.WHATSAPP,
+        status__in=[
+            CommunicationOutboxStatus.PENDING,
+            CommunicationOutboxStatus.FAILED,
+        ],
+        attempt_count__lt=MAX_OUTBOX_ATTEMPTS,
+    ).exists()
+
+
+LOCATION_WHATSAPP_EVENT_TYPES = frozenset(
+    {
+        CommunicationEventType.APPOINTMENT_CONFIRMED,
+        CommunicationEventType.APPOINTMENT_RESCHEDULED,
+    }
+)
+
+
+def should_defer_whatsapp_until_google_meet(message):
+    """
+    Confirm/reschedule virtual WA: hold only while Meet still missing and
+    same-appointment Google work is open. Skip if Meet already on apt
+    (e.g. reschedule) or event has no address/Meet slot (cancel).
+    """
+    if message.channel != CommunicationChannel.WHATSAPP:
+        return False
+    if message.appointment_id is None:
+        return False
+    if message.event_type not in LOCATION_WHATSAPP_EVENT_TYPES:
+        return False
+    appointment_row = (
+        Appointment.objects.filter(pk=message.appointment_id)
+        .values("modality", "google_meet_link")
+        .first()
+    )
+    if appointment_row is None:
+        return False
+    if appointment_row["modality"] != AppointmentModes.VIRTUAL:
+        return False
+    if (appointment_row["google_meet_link"] or "").strip():
+        return False
+    return has_open_appointment_google_work(message.appointment_id)
+
+
+def refresh_whatsapp_template_parameters(message):
+    """Rebuild Meta body params from live appointment (Meet link after GC)."""
+    if message.appointment_id is None:
+        return message.template_parameters or []
+    appointment = (
+        Appointment.objects.filter(pk=message.appointment_id)
+        .select_related("center", "service", "customer_profile")
+        .first()
+    )
+    if appointment is None:
+        return message.template_parameters or []
+    parameters = build_template_parameters(message.event_type, appointment)
+    if parameters != (message.template_parameters or []):
+        message.template_parameters = parameters
+        message.save(update_fields=["template_parameters", "updated_at"])
+    return parameters
+
+
 def remaining_google_outbox_work(appointment_id, exclude_message_id):
     return (
         CommunicationOutbox.objects.filter(
@@ -547,6 +671,19 @@ def remaining_google_outbox_work_for_message(message):
 def finish_google_outbox_message(message, result):
     if remaining_google_outbox_work_for_message(message):
         publish_outbox_wake()
+        return result
+    # After apt GC settles, wake so deferred virtual WA can send with Meet.
+    if (
+        message.appointment_id is not None
+        and result is not None
+        and result.status
+        in (
+            CommunicationOutboxStatus.ACCEPTED,
+            CommunicationOutboxStatus.SKIPPED,
+        )
+        and appointment_has_pending_whatsapp(message.appointment_id)
+    ):
+        publish_outbox_wake()
     return result
 
 
@@ -556,11 +693,12 @@ def process_whatsapp_outbox_message(message):
     if not message.to_phone:
         return mark_outbox_skipped(message, "Customer phone is missing")
 
+    body_parameters = refresh_whatsapp_template_parameters(message)
     status_code, body = send_template(
         to_phone=message.to_phone,
         template_name=message.template_name,
         language_code=message.template_language,
-        body_parameters=message.template_parameters or [],
+        body_parameters=body_parameters,
     )
     if status_code < 300:
         return mark_outbox_accepted(
@@ -663,6 +801,8 @@ def process_outbox_message(message_id):
         message.channel == CommunicationChannel.GOOGLE_CALENDAR
         and has_in_flight_google_sync_for_message(message)
     ):
+        return message
+    if should_defer_whatsapp_until_google_meet(message):
         return message
 
     claimed = claim_outbox_message(message_id)

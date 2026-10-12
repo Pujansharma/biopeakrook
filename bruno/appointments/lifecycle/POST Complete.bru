@@ -22,3 +22,10 @@ settings {
   encodeUrl: true
   timeout: 30000
 }
+
+docs {
+  Allowed from in_progress only (staff lifecycle). Completes appointment and, when
+  linked to a therapy program_service, marks RedemptionHistory scheduled→redeem
+  and increments sessions_used by 1. QR redeem of the line's redeem_code can also
+  force-complete from confirmed/checked_in/in_progress.
+}

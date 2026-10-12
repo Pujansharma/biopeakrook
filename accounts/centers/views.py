@@ -108,7 +108,7 @@ class CenterDetailView(BaseRetrieveUpdateDestroyAPIView, CenterViewMeta):
                 update_center_associate_centers_count(instance.pk)
                 super().perform_destroy(instance)
                 decrement_organization_centers_count()
-        except ProtectedError, RestrictedError:
+        except (ProtectedError, RestrictedError):
             logger.exception(msg="Error in Center DELETE", exc_info=True)
             self.raise_bad_request(
                 "This center cannot be deleted since some objects are dependant on it"
@@ -201,6 +201,11 @@ class CenterAssociateListView(BaseListCreateAPIView, CenterViewMeta):
 class CenterAssociateRolesListView(BaseListCreateAPIView, CenterViewMeta):
     serializer_class = AssociateRoleSerializer
     permission_classes = [IsAdminUser | IsAssociateUser]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["center"] = self.get_center()
+        return context
 
     def get_queryset(self):
         center = self.get_center()

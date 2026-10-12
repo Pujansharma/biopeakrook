@@ -5,14 +5,19 @@ import time
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
-from django.db.models import F, Q, Value
+from django.db.models import Case, F, Q, Value, When
 from django.db.models.functions import Concat
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
+from accounts.customers.models import CustomerProfile
+from accounts.utils.permissions import IsCustomerUser
 from appointments.mixins import CenterAppointmentsMixin
-from appointments.models import AppointmentIdempotencyKey
-from appointments.permissions import CenterAppointmentPermission
+from appointments.models import Appointment, AppointmentIdempotencyKey
+from appointments.permissions import (
+    CenterAppointmentPermission,
+    StaffOrCustomerCenterAppointmentPermission,
+)
 from appointments.serializers.booking import (
     AppointmentBookSerializer,
     AppointmentCancelSerializer,
@@ -24,7 +29,11 @@ from appointments.serializers.booking import (
     AppointmentSlotFindSerializer,
 )
 from appointments.utils.calendar import get_center_timezone_name, parse_calendar_query_params
-from appointments.utils.constants import AppointmentStatus, AvailabilityGranularity
+from appointments.utils.constants import (
+    AppointmentStatus,
+    AvailabilityGranularity,
+    CUSTOMER_APPOINTMENT_STATUS_SORT_ORDER,
+)
 from appointments.utils.operations import invalidate_operations_cache
 from appointments.utils.intervals import datetime_range_for_dates, resolve_query_date_range
 from appointments.utils.metrics import (
@@ -33,8 +42,10 @@ from appointments.utils.metrics import (
     record_lifecycle,
     record_slots_duration,
 )
+from appointments.utils.redemption import OPEN_APPOINTMENT_EXISTS_MESSAGE
 from appointments.utils.scheduling import (
     find_appointment_slots,
+    find_appointment_slots_v2,
     resolve_booking_combo,
 )
 from core.utils.db.functions import ExtractPartText
@@ -44,6 +55,7 @@ from core.utils.views.main import BaseGenericAPIView, BaseListAPIView, BaseRetri
 LIST_CAP = 500
 APPOINTMENT_CODE_CONSTRAINT = "uniq_appointment_code_per_center"
 IDEMPOTENCY_KEY_CONSTRAINT = "uniq_appointment_idempotency_key_per_center"
+OPEN_APPOINTMENT_PER_PROGRAM_SERVICE_CONSTRAINT = "uniq_open_appt_per_ps"
 UUID_QUERY_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
@@ -185,6 +197,10 @@ def integrity_error_matches_constraint(error, constraint_name):
 def appointment_write_integrity_detail(error):
     if integrity_error_matches_constraint(error, APPOINTMENT_CODE_CONSTRAINT):
         return "Appointment code already exists."
+    if integrity_error_matches_constraint(
+        error, OPEN_APPOINTMENT_PER_PROGRAM_SERVICE_CONSTRAINT
+    ):
+        return OPEN_APPOINTMENT_EXISTS_MESSAGE
     return "Slot no longer available."
 
 
@@ -219,6 +235,11 @@ def dispatch_to_view(view_class, request, *args, **kwargs):
 class AppointmentCollectionView(AppointmentBookingMixin, BaseGenericAPIView):
     """GET list + POST book at /appointments/."""
 
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [StaffOrCustomerCenterAppointmentPermission()]
+        return [CenterAppointmentPermission()]
+
     def get(self, request, *args, **kwargs):
         return dispatch_to_view(AppointmentListView, request, *args, **kwargs)
 
@@ -227,6 +248,8 @@ class AppointmentCollectionView(AppointmentBookingMixin, BaseGenericAPIView):
 
 
 class AppointmentSlotFindView(AppointmentBookingMixin, BaseGenericAPIView):
+    permission_classes = [StaffOrCustomerCenterAppointmentPermission]
+
     def post(self, request, *args, **kwargs):
         started = time.monotonic()
         center = self.get_center()
@@ -237,14 +260,23 @@ class AppointmentSlotFindView(AppointmentBookingMixin, BaseGenericAPIView):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
         try:
-            data = find_appointment_slots(
-                center=center,
-                customer_profile=validated["customer_profile"],
-                service=validated["service"],
-                modality=validated["modality"],
-                slot_date=validated["date"],
-                preferred=validated.get("preferred"),
-            )
+            if validated.get("auto_assign"):
+                data = find_appointment_slots_v2(
+                    center=center,
+                    customer_profile=validated["customer_profile"],
+                    service=validated["service"],
+                    modality=validated["modality"],
+                    slot_date=validated["date"],
+                )
+            else:
+                data = find_appointment_slots(
+                    center=center,
+                    customer_profile=validated["customer_profile"],
+                    service=validated["service"],
+                    modality=validated["modality"],
+                    slot_date=validated["date"],
+                    preferred=validated.get("preferred"),
+                )
         except DjangoValidationError as exc:
             self.raise_bad_request(exc.messages[0])
         duration_seconds = time.monotonic() - started
@@ -253,6 +285,8 @@ class AppointmentSlotFindView(AppointmentBookingMixin, BaseGenericAPIView):
 
 
 class AppointmentBookView(AppointmentBookingMixin, BaseGenericAPIView):
+    permission_classes = [StaffOrCustomerCenterAppointmentPermission]
+
     def post(self, request, *args, **kwargs):
         started = time.monotonic()
         center = self.get_center()
@@ -408,6 +442,90 @@ class AppointmentListView(AppointmentBookingMixin, BaseListAPIView):
         return self.send_response("Appointments retrieved.", data)
 
 
+def customer_appointment_status_sort():
+    whens = [
+        When(status=status, then=Value(rank))
+        for rank, status in enumerate(CUSTOMER_APPOINTMENT_STATUS_SORT_ORDER)
+    ]
+    return Case(*whens, default=Value(len(CUSTOMER_APPOINTMENT_STATUS_SORT_ORDER)))
+
+
+THERAPY_SERVICE_PROGRAM_FILTERS = {
+    "1": Q(program_service__isnull=False),
+    "0": Q(program_service__isnull=True),
+}
+
+
+class AppointmentCustomerAppointmentsListView(BaseListAPIView):
+    """Customer-only list of appointments for one owned customer profile."""
+
+    permission_classes = [IsCustomerUser]
+    serializer_class = AppointmentListSerializer
+    pagination_class = None
+
+    def get_customer_profile(self):
+        return get_object_or_404(
+            CustomerProfile.objects.filter(
+                pk=self.kwargs["customer_profile_id"],
+                customer_id=self.request.user.pk,
+                is_active=True,
+            ),
+            "Customer profile not found.",
+        )
+
+    def get_queryset(self):
+        customer_profile = self.get_customer_profile()
+        therapy_service_program = self.request.query_params.get(
+            "therapy_service_program"
+        )
+        therapy_service_program_filter = THERAPY_SERVICE_PROGRAM_FILTERS.get(
+            therapy_service_program,
+            Q(),
+        )
+        return (
+            Appointment.objects.filter(
+                therapy_service_program_filter,
+                customer_profile=customer_profile,
+            )
+            .select_related(
+                "customer_profile",
+                "service",
+                "room",
+                "equipment",
+                "center",
+                "care_team",
+            )
+            .prefetch_related(
+                "associate_links__associate__user",
+                "associate_links__role",
+            )
+            .annotate(status_sort=customer_appointment_status_sort())
+            .order_by("status_sort", "start_datetime")
+        )
+
+    def get(self, request, *args, **kwargs):
+        started = time.monotonic()
+        queryset = self.get_queryset()
+        page = list(queryset[: LIST_CAP + 1])
+        truncated = len(page) > LIST_CAP
+        page = page[:LIST_CAP]
+        serializer = self.get_serializer(page, many=True)
+        data = {
+            "appointments": serializer.data,
+            "truncated": truncated,
+            "total_count": len(page),
+        }
+        duration_ms = int((time.monotonic() - started) * 1000)
+        log_appointment_event(
+            "info",
+            center_id=None,
+            actor_id=request.user.pk,
+            action="customer_list",
+            duration_ms=duration_ms,
+        )
+        return self.send_response("Appointments retrieved.", data)
+
+
 class AppointmentDetailView(AppointmentBookingMixin, BaseRetrieveAPIView):
     serializer_class = AppointmentDetailSerializer
 
@@ -519,10 +637,12 @@ class AppointmentMarkLateView(AppointmentBookingMixin, BaseGenericAPIView):
 
 
 class AppointmentCancelView(AppointmentBookingMixin, BaseGenericAPIView):
+    permission_classes = [StaffOrCustomerCenterAppointmentPermission]
+
     def post(self, request, *args, **kwargs):
         started = time.monotonic()
         appointment = get_object_or_404(
-            self.get_appointment_queryset(),
+            self.get_customer_owned_appointment_queryset(),
             "Appointment not found.",
             pk=self.kwargs["pk"],
         )
@@ -551,10 +671,12 @@ class AppointmentCancelView(AppointmentBookingMixin, BaseGenericAPIView):
 
 
 class AppointmentRescheduleView(AppointmentBookingMixin, BaseGenericAPIView):
+    permission_classes = [StaffOrCustomerCenterAppointmentPermission]
+
     def post(self, request, *args, **kwargs):
         started = time.monotonic()
         appointment = get_object_or_404(
-            self.get_appointment_queryset(),
+            self.get_customer_owned_appointment_queryset(),
             "Appointment not found.",
             pk=self.kwargs["pk"],
         )

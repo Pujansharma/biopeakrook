@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "webhooks.strand_genomics",
     "webhooks.orange_labs",
     "webhooks.whatsapp",
+    "wearables",
     "pre_consultation",
 ]
 
@@ -135,6 +136,10 @@ REST_FRAMEWORK = {
         "pre_consultation_get": "120/min",
         "pre_consultation_put": "30/min",
         "pre_consultation_post": "30/min",
+        "app_download": "60/min",
+        "wearable_connect": "20/min",
+        "wearable_status": "60/min",
+        "health_read": "120/min",
     },
 }
 

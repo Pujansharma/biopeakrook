@@ -1,0 +1,20 @@
+meta {
+  name: GET Dashboard
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/health/dashboard/
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+}
+
+docs {
+  Returns all six cards in fixed order: sleep, activity, heart, recovery, body,
+  workouts. Missing measurements are null and are never converted to zero.
+}

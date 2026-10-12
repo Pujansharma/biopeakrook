@@ -202,6 +202,7 @@ def upsert_google_event(appointment, organizer, access_token):
         "add_meet_link": needs_new_meet_link,
         "clear_meet_link": needs_clear_meet_link,
         "participant_emails": attendee_emails,
+        "is_appointment": True,
     }
     insert_kwargs = {
         "title": title,
@@ -211,6 +212,7 @@ def upsert_google_event(appointment, organizer, access_token):
         "notes": notes,
         "need_meet_link": appointment.modality == AppointmentModes.VIRTUAL,
         "participant_emails": attendee_emails,
+        "is_appointment": True,
     }
     event = upsert_event_with_fallback(
         access_token,

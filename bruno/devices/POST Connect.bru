@@ -1,0 +1,33 @@
+meta {
+  name: POST Connect
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/devices/connect/
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+  X-Correlation-ID: {{$uuid}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "data_source": "Garmin",
+    "consent_accepted": true,
+    "consent_version": "v1",
+    "historical_days": 29,
+    "timezone_name": "Asia/Kolkata",
+    "preferred_units": "metric"
+  }
+}
+
+docs {
+  Initiates ROOK authorizer flow for API sources or returns SDK instructions for
+  Apple Health, Health Connect, and Samsung Health. Stores Biopeak consent audit.
+}

@@ -1,7 +1,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -67,15 +67,24 @@ class AssociateGoogleCalendarStatusViewTests(TestCase):
         self.assertTrue(response.data["data"]["is_connected"])
         self.assertEqual(response.data["data"]["last_synced_at"], synced_at)
 
-    def test_associate_cannot_view_another_associates_status(self):
+    def get_status_as_associate(self, **headers):
         factory = APIRequestFactory()
         request = factory.get(
-            f"/centers/{self.center.pk}/availability/associates/{self.associate.pk}/google-calendar/"
+            f"/centers/{self.center.pk}/availability/associates/{self.associate.pk}/google-calendar/",
+            **headers,
         )
         force_authenticate(request, user=self.associate.user)
         view = AssociateGoogleCalendarStatusView.as_view()
-        response = view(request, center_id=self.center.pk, associate_id=self.associate.pk)
-        self.assertEqual(response.status_code, 403)
+        return view(request, center_id=self.center.pk, associate_id=self.associate.pk)
+
+    def test_associate_can_view_status_with_matching_center_header(self):
+        response = self.get_status_as_associate(HTTP_X_CENTER_ID=str(self.center.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["data"]["is_connected"])
+
+    def test_associate_without_center_header_is_rejected(self):
+        response = self.get_status_as_associate()
+        self.assertEqual(response.status_code, 400)
 
 
 class AssociateGoogleCalendarSyncViewTests(TestCase):
@@ -116,7 +125,22 @@ class AssociateGoogleCalendarSyncViewTests(TestCase):
         self.assertEqual(called_user.pk, self.associate.pk)
         self.assertEqual(called_connection.pk, self.associate.pk)
 
-    def test_associate_cannot_sync_via_admin_only_endpoint(self):
+    @override_settings(GOOGLE_CALENDAR_ID="care@biopeak.health")
+    @patch("appointments.views.ensure_watch_channel_active_or_log")
+    @patch("appointments.views.sync_google_events_to_availability_blocks")
+    def test_sync_rejected_for_shared_organizer_connection(self, mock_sync, mock_ensure_watch):
+        GoogleCalendarConnection.objects.create(
+            user=self.associate.user,
+            google_email="care@biopeak.health",
+            google_refresh_token="enc:refresh",
+            is_active=True,
+        )
+        response = self.post_sync()
+        self.assertEqual(response.status_code, 400)
+        mock_ensure_watch.assert_not_called()
+        mock_sync.assert_not_called()
+
+    def post_sync_as_associate(self, **headers):
         GoogleCalendarConnection.objects.create(
             user=self.associate.user,
             google_email="associate@personal.example.com",
@@ -125,9 +149,23 @@ class AssociateGoogleCalendarSyncViewTests(TestCase):
         )
         factory = APIRequestFactory()
         request = factory.post(
-            f"/centers/{self.center.pk}/availability/associates/{self.associate.pk}/google-calendar/sync/"
+            f"/centers/{self.center.pk}/availability/associates/{self.associate.pk}/google-calendar/sync/",
+            **headers,
         )
         force_authenticate(request, user=self.associate.user)
         view = AssociateGoogleCalendarSyncView.as_view()
-        response = view(request, center_id=self.center.pk, associate_id=self.associate.pk)
-        self.assertEqual(response.status_code, 403)
+        return view(request, center_id=self.center.pk, associate_id=self.associate.pk)
+
+    @patch("appointments.views.ensure_watch_channel_active_or_log")
+    @patch("appointments.views.sync_google_events_to_availability_blocks")
+    def test_associate_can_sync_with_matching_center_header(self, mock_sync, mock_ensure_watch):
+        mock_sync.return_value = {"synced": True, "created": 1}
+        response = self.post_sync_as_associate(HTTP_X_CENTER_ID=str(self.center.pk))
+        self.assertEqual(response.status_code, 200)
+        mock_sync.assert_called_once()
+
+    @patch("appointments.views.sync_google_events_to_availability_blocks")
+    def test_associate_without_center_header_is_rejected(self, mock_sync):
+        response = self.post_sync_as_associate()
+        self.assertEqual(response.status_code, 400)
+        mock_sync.assert_not_called()

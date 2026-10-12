@@ -423,6 +423,13 @@ class Appointment(BaseUUIDModel):
     service = models.ForeignKey(
         Service, on_delete=models.PROTECT, related_name="appointments"
     )
+    program_service = models.ForeignKey(
+        "programs.ProgramService",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="appointments",
+    )
     modality = models.CharField(choices=AppointmentModes)
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
@@ -479,11 +486,27 @@ class Appointment(BaseUUIDModel):
             models.Index(fields=["center", "start_datetime"]),
             models.Index(fields=["center", "status", "start_datetime"]),
             models.Index(fields=["customer_profile", "start_datetime"]),
+            models.Index(
+                fields=["status", "start_datetime"],
+                name="appointment_status_start_idx",
+            ),
+            models.Index(
+                fields=["program_service", "status"],
+                name="appt_ps_status_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["center", "code"],
                 name="uniq_appointment_code_per_center",
+            ),
+            models.UniqueConstraint(
+                fields=["program_service"],
+                condition=Q(
+                    program_service__isnull=False,
+                    status__in=_BUSY_STATUS_VALUES,
+                ),
+                name="uniq_open_appt_per_ps",
             ),
             models.CheckConstraint(
                 condition=Q(end_datetime__gt=F("start_datetime")),

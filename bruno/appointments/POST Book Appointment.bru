@@ -21,6 +21,7 @@ body:json {
     "end": "2026-09-09T04:30:00Z",
     "customer_profile_id": "{{customer_profile_id}}",
     "service_id": "{{service_id}}",
+    "program_service_id": "{{program_service_id}}",
     "modality": "in_person",
     "room_id": "{{room_id}}",
     "equipment_id": "{{equipment_id}}",
@@ -40,7 +41,7 @@ script:pre-request {
     body = JSON.parse(body);
   }
   body = body || {};
-  const resourceKeys = ['doctor_id', 'specialty_id', 'care_team_id', 'room_id', 'equipment_id'];
+  const resourceKeys = ['doctor_id', 'care_team_id', 'room_id', 'equipment_id', 'program_service_id'];
   for (const key of resourceKeys) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) {
       continue;
@@ -50,6 +51,20 @@ script:pre-request {
       body[key] = value;
     } else {
       delete body[key];
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'specialty_id')) {
+    const specialty = body.specialty_id;
+    if (Array.isArray(specialty)) {
+      const cleaned = specialty
+        .map((item) => String(item || '').trim())
+        .filter(Boolean);
+      if (cleaned.length) body.specialty_id = cleaned;
+      else delete body.specialty_id;
+    } else {
+      const value = String(specialty || '').trim();
+      if (value) body.specialty_id = value;
+      else delete body.specialty_id;
     }
   }
   if (body.care_team_id) {
@@ -65,17 +80,34 @@ settings {
 }
 
 docs {
-  Books a confirmed appointment. Use Idempotency-Key for safe retries.
+  Books a confirmed appointment. Staff or customer JWT.
+  Customer may only book their own customer_profile_id (else 400).
+  Use Idempotency-Key for safe retries.
   Same key + same body → 200 existing appointment (slot is not re-checked).
   Same key + different body → 409.
   start in the past → 400 "Date cannot be in the past."
+  Customer JWT: local date of start must be tomorrow … today+7 → else 400
+  "Date must be between tomorrow and 7 days from today." Staff: no upper window.
   Flattened body (no preferred nest, no associates[] pin). Echo Find Slots
   nested resource `id`s as top-level IDs plus slot start/end.
   Body lists every allowed key. Empty resource UUIDs stripped in pre-request.
+  Optional program_service_id links the booking to a therapy program service
+  line (id from GET .../therapy-programs/<id>/services/). When set (customer only):
+  - validates ownership, service match, redeemable center, remaining sessions
+  - rejects if an open apt already exists for that line
+  - creates RedemptionHistory type=scheduled (sessions_used unchanged)
+  - QR redeem of that line's redeem_code completes this apt + burns 1 session
+  Customer JWT: program_service_id required (omit/null → 400).
+  Staff/admin: must omit program_service_id (present → 400). Walk-in only.
+  Therapy package expiry: appointment local date must be on/before program.expires_at
+  (null expiry = open-ended). After expiry → 400
+  "This package expires on <D Mon YYYY>. Please choose a date on or before it."
+
   If care_team_id is set, pre-request drops doctor_id/specialty_id (XOR) so
   a filled env still sends. People path: blank care_team_id in env.
   Staff: care_team_id XOR doctor_id/specialty_id (doctor+specialty OK; not same person).
-  specialty_id must hold a live non-doctor role mapped to this service (many hats OK).
+  specialty_id = UUID | UUID[] (one specialty or many). Each id stamps a distinct
+  live non-doctor role mapped to this service. Empty array → 400. Dup ids → 400.
   Service with 0 role reqs: omit specialty_id; doctor_id / care_team_id still OK.
   health_coach_id → 400 "Use specialty_id instead of health_coach_id."
   modality virtual | in_person (not both).

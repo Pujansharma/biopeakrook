@@ -49,6 +49,8 @@
 | `last_name` | string \| null |
 | `gender` | string \| null (`Male`, `Female`, `Other`) |
 | `date_of_birth` | date \| null |
+| `height` | float \| null (cm from main `CustomerProfile.height_cm`) |
+| `weight` | float \| null (kg from main `CustomerProfile.weight_kg`) |
 | `status` | `In Progress` \| `Completed` |
 
 ---
@@ -190,7 +192,7 @@ Flattened layer answers for export.
 
 | Field | Type |
 |---|---|
-| `patient_baseline` | `{ "name", "sex", "age", "city" }` |
+| `patient_baseline` | `{ "name", "sex", "age", "city", "height", "weight" }` — height cm / weight kg (`null` until set) |
 | `patient_category` | string[] |
 | `patient_concern` | `{ "concern": { "label", "health_system" } }[]` |
 | `patient_symptom` | string[] |

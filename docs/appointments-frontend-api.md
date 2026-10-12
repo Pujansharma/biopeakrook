@@ -1,14 +1,23 @@
 # Appointments — Frontend API
 
-Staff-only (admin or associate JWT). Center is always in the URL path.
+Center is in the URL path for staff booking/ops/availability. Exception:
+customer appointment list is top-level `/appointments/…` (no center).
 
 | Area | Base path |
 |---|---|
 | Booking + lifecycle + exceptions + ops | `/centers/<center_id>/appointments/` |
+| Customer appointment list | `/appointments/customer-appointments/<customer_profile_id>/` |
 | Care teams | `/centers/<center_id>/care-teams/` |
 | Availability (hours, calendar, roster, blocks…) | `/centers/<center_id>/availability/` |
 
 **Auth:** `Authorization: Bearer <access_token>`
+
+| Caller | Allowed |
+|---|---|
+| Admin / associate | Calendar list, v1 preferred slots, book, lifecycle, cancel, reschedule, detail, exceptions, ops, care teams, availability |
+| Customer | `POST …/slots/` (no preferred → auto-assign) · `POST …/appointments/` (book own profile) · `POST …/cancel/` · `POST …/reschedule/` · `GET /appointments/customer-appointments/<customer_profile_id>/` |
+
+Customer ownership: `customer_profile` must belong to the authenticated customer. Cancel/reschedule of another profile’s appointment → 404. Book/slots/cancel/reschedule still require the profile assigned to the URL center.
 
 **Headers**
 
@@ -69,7 +78,7 @@ available = base − blocks − leaves/downtimes − closures − busy appointme
 | Associate | Center hours ∩ roster | Blocks, leaves, closures |
 | Room / equipment | Center hours | Blocks, downtimes, closures |
 
-Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated: true` if more). Slots with `start` before request time are omitted (today’s past windows). Past calendar dates → 400 `"Date cannot be in the past."`
+Slots are computed on demand (not pre-stored). Cap **200 slots/day** (`truncated: true` if more). Slots with `start` before request time are omitted (today’s past windows). Past calendar dates → 400 `"Date cannot be in the past."` Customer JWT: `date` / book `start` local day must be tomorrow … today+7.
 
 ### Preferred (slots) vs flattened book
 
@@ -121,16 +130,20 @@ Values: `queued` | `completed` | `resolved` | `skipped`. FE can ignore or show �
   "has_open_exception": false,
   "customer": { "id": "uuid", "name": "…" },
   "service": { "id": "uuid", "name": "…" },
+  "program_service_id": null,
   "care_team": { "id": "uuid", "name": "…" },
   "associates": [
     { "id": "uuid", "name": "…", "role": { "id": "uuid", "name": "…" } }
   ],
   "room": { "id": "uuid", "name": "…" },
-  "equipment": { "id": "uuid", "name": "…" }
+  "equipment": { "id": "uuid", "name": "…" },
+  "center": { "id": "uuid", "code": "…", "name": "…" },
+  "notes": null,
+  "google_meet_link": null
 }
 ```
 
-`care_team` / `room` / `equipment` may be `null`.
+`care_team` / `room` / `equipment` may be `null`. `center` is the booked center (`id` / `code` / `name`).
 
 ### Detail (list fields +)
 
@@ -158,18 +171,25 @@ Base: `/centers/<center_id>/appointments/`
 
 ### POST `…/slots/` — Find slots
 
-**Purpose:** One calendar day of bookable pinned combos for a customer + service. Past calendar dates → 400. Past starts today (`start` < now) are omitted.
+**Auth:** staff **or** customer.
 
-**Body (required)**
+| Caller | `preferred` |
+|---|---|
+| Staff (admin/associate) | **Required** — omit/empty → 400 |
+| Customer | **Forbidden** — key present → 400; server least-busy auto-assign |
+
+**Purpose:** One calendar day of bookable combos for a customer + service. Past calendar dates → 400. Past starts today (`start` < now) are omitted. Customer JWT also rejects today and dates after today+7.
+
+**Body (always required)**
 
 | Field | Type | Notes |
 |---|---|---|
-| `customer_profile_id` | UUID | Active profile assigned to this center |
+| `customer_profile_id` | UUID | Active profile assigned to this center. Customer JWT: must own profile. |
 | `service_id` | UUID | Active service assigned to this center |
 | `modality` | `"virtual"` \| `"in_person"` | Not `"both"` |
-| `date` | `YYYY-MM-DD` | Today or future in `settings.TIME_ZONE` (`Asia/Kolkata`). Past → 400 `"Date cannot be in the past."` |
+| `date` | `YYYY-MM-DD` | Staff: today or future in `settings.TIME_ZONE` (`Asia/Kolkata`). Past → 400 `"Date cannot be in the past."` Customer: **tomorrow through today+7** inclusive (rolling; e.g. today 6 Oct → 7–13 Oct). Outside → 400 `"Date must be between tomorrow and 7 days from today."` |
 
-**Body (`preferred` required)**
+#### Staff mode — `preferred` required
 
 ```json
 "preferred": {
@@ -187,7 +207,7 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 
 `preferred.room_id` required for `in_person`. `preferred.equipment_id` required when that room has ≥1 bookable equipment; omit when the room has none.
 
-**Example payloads**
+**Staff examples**
 
 ```json
 {
@@ -203,23 +223,44 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 {
   "customer_profile_id": "…",
   "service_id": "…",
-  "modality": "in_person",
-  "date": "2026-09-05",
-  "preferred": { "care_team_id": "…", "room_id": "…" }
-}
-```
-
-```json
-{
-  "customer_profile_id": "…",
-  "service_id": "…",
   "modality": "virtual",
   "date": "2026-09-05",
   "preferred": { "doctor_id": "…", "specialty_id": "…" }
 }
 ```
 
-**Response `data`**
+Engine: `find_appointment_slots`. Preferred `specialty_id` stays a single UUID.
+
+#### Customer mode — no `preferred` (auto-assign)
+
+Body = four fields only. Do not send `preferred` (even `null`/`{}`).
+
+Server picks least-busy free staff / room / equipment from service mappings (`find_appointment_slots_v2`).
+
+**Booking window (customer only, rolling):** `date` must be tomorrow … today+7 (center local). Same window on book / reschedule `start` local date. Reschedule-day example: apt booked for 7 Oct; on 7 Oct Find Slots / reschedule only allow 8–14 Oct.
+
+**Therapy package expiry (customer slots):** optional `program_service_id`. When set, that line’s `expires_at` must be on/after `date`. When omitted, matching active therapy lines for customer+service are checked — blocked only if every line expires before `date`. Same error string as book.
+
+| Resource | Pool | Pick |
+|---|---|---|
+| Staff | Active role requirements → live associates at center | Per role: free for exclusive window, then least busy that day; tie `created_at`, `pk` |
+| Room (`in_person`) | Active rooms whose type ∈ service room-type reqs (OR) | Least-busy free; tie `code`, `pk` |
+| Equipment (`in_person`) | Bookable units on chosen room | Least-busy free; omit when room has none |
+
+**Limits:** ≥1 role req · ≤1 doctor-named role · specialty nest object when 1 / array when 2+ · `in_person` needs ≥1 room-type req · no care-team auto-pick.
+
+**Customer example**
+
+```json
+{
+  "customer_profile_id": "…",
+  "service_id": "…",
+  "modality": "in_person",
+  "date": "2026-09-28"
+}
+```
+
+#### Response `data` (both modes)
 
 ```json
 {
@@ -247,13 +288,15 @@ Omit empty preferred keys (blank UUID → 400). Never send `care_team_id` with d
 }
 ```
 
-Each slot = one combo. Nested keys only when present (virtual: no room/equipment; care-team XOR people; no equipment when room has none). FE book: extract `id` from nested objects into flattened `doctor_id` / `specialty_id` / `care_team_id` / `room_id` / `equipment_id`.
+Each slot = one combo. Nested keys only when present. Auto-assign: no `care_team`; `specialty` may be an array. FE book: extract `id`s into flattened body (`specialty_id` = UUID | UUID[] from auto-assign).
 
-**Common 400:** invalid customer/service for center · modality not supported · room required for in_person · equipment_id required when room has bookable units · care_team XOR people · service duration missing · no staff (`care_team_id` / `doctor_id` / `specialty_id`) · start in the past.
+**Common 400:** preferred missing (staff) · preferred sent (customer) · profile not owned · invalid customer/service · modality · room/equipment rules · care_team XOR · no staff · auto-assign mapping failures · start in the past · customer outside tomorrow…today+7 window.
 
 ---
 
 ### POST `…/` — Book
+
+**Auth:** staff **or** customer (own `customer_profile_id` only).
 
 **Purpose:** Create confirmed appointment.
 
@@ -265,12 +308,13 @@ Each slot = one combo. Nested keys only when present (virtual: no room/equipment
 |---|---|---|
 | `customer_profile_id` | yes | |
 | `service_id` | yes | |
+| `program_service_id` | customer yes; staff forbidden | Therapy `ProgramService` line. Customer omit/null → 400. Admin/associate present → 400 (walk-in only). Customer when set: ownership + service match + redeemable center + sessions left; one open apt per line; appointment local date must be on/before `program.expires_at` (null = open-ended). After expiry → 400 `"This package expires on <D Mon YYYY>. Please choose a date on or before it."` |
 | `modality` | yes | `virtual` \| `in_person` |
-| `start` | yes | ISO datetime (from slot). Must be in the future. `end` must equal `start` + assignment duration. Past → 400 `"Date cannot be in the past."` |
+| `start` | yes | ISO datetime (from slot). Must be in the future. `end` must equal `start` + assignment duration. Past → 400 `"Date cannot be in the past."` Customer JWT: local date of `start` must be tomorrow … today+7 → else 400 `"Date must be between tomorrow and 7 days from today."` Staff: no upper window. |
 | `end` | yes | |
 | `room_id` | in_person | Forbidden for virtual |
 | `equipment_id` | if room has bookable equipment | null when room has none; forbidden for virtual |
-| `doctor_id` / `specialty_id` | XOR care_team | Doctor + specialty OK together |
+| `doctor_id` / `specialty_id` | XOR care_team | Doctor + specialty OK together. `specialty_id` = UUID \| UUID[] (one or many specialties). Each specialty stamps a distinct service-mapped non-doctor role. |
 | `care_team_id` | XOR people | |
 | `notes` | no | omit/`null` on reschedule keeps existing; `""` clears |
 
@@ -280,10 +324,21 @@ Each slot = one combo. Nested keys only when present (virtual: no room/equipment
 {
   "customer_profile_id": "…",
   "service_id": "…",
+  "program_service_id": "…",
   "modality": "in_person",
   "start": "2026-09-05T04:00:00Z",
   "end": "2026-09-05T04:40:00Z",
   "specialty_id": "…",
+  "room_id": "…",
+  "equipment_id": "…"
+}
+```
+
+Multi-specialty (from Slots V2 array):
+
+```json
+{
+  "specialty_id": ["…coach…", "…nutritionist…"],
   "room_id": "…",
   "equipment_id": "…"
 }
@@ -296,6 +351,8 @@ Each slot = one combo. Nested keys only when present (virtual: no room/equipment
 ---
 
 ### GET `…/` — List (calendar)
+
+**Auth:** staff only. Customers use `GET /appointments/customer-appointments/<customer_profile_id>/`.
 
 **Purpose:** Appointments overlapping a day/week/month window. With `search` and no `start`, matching appointments for this center across all dates.
 
@@ -344,9 +401,30 @@ Week/month and unscoped `search` (no `start`) hard-cap **500** via `LIMIT 501` (
 
 ---
 
+### GET `/appointments/customer-appointments/<customer_profile_id>/` — Customer list
+
+**Auth:** customer JWT only. Path `customer_profile_id` must be owned by the caller → else 404. Staff → 403.
+
+**Purpose:** Appointments for that profile (every center).
+
+**Query:** optional `therapy_service_program=0|1`
+| Value | Result |
+|---|---|
+| `1` | only rows with `program_service_id` set (therapy program) |
+| `0` | only rows without `program_service_id` (walk-in / non-program) |
+| omit / junk | all appointments |
+
+**Sort:** `in_progress` → `confirmed` → `checked_in` → `completed` → `cancelled` → `no_show`, then `start_datetime` ascending.
+
+**Response `data`:** `{ "appointments": [...], "truncated": false, "total_count": N }` — same list item shape as staff calendar list.
+
+Bruno: `bruno/appointments/calendar/GET Customer Appointments.bru`.
+
+---
+
 ### GET `…/<appointment_id>/` — Detail
 
-**Purpose:** Full appointment.  
+**Purpose:** Full appointment. Staff only.  
 **Response `data`:** detail shape.
 
 ---
@@ -355,17 +433,21 @@ Week/month and unscoped `search` (no `start`) hard-cap **500** via `LIMIT 501` (
 
 All return appointment **detail** in `data`. Empty body unless noted.
 
-| Method | Path | Body | Allowed from |
-|---|---|---|---|
-| POST | `…/<id>/check-in/` | — | `confirmed` |
-| POST | `…/<id>/start/` | — | `checked_in` |
-| POST | `…/<id>/complete/` | — | `in_progress` |
-| POST | `…/<id>/no-show/` | — | `confirmed` |
-| POST | `…/<id>/mark-late/` | `{ "late_by": <int ≥1> }` | `in_progress` |
-| POST | `…/<id>/cancel/` | `{ "reason": "<string max 500>" }` | `confirmed` \| `checked_in` |
-| POST | `…/<id>/reschedule/` | same as **Book** body | `confirmed` \| `checked_in` |
+| Method | Path | Body | Allowed from | Auth |
+|---|---|---|---|---|
+| POST | `…/<id>/check-in/` | — | `confirmed` | staff |
+| POST | `…/<id>/start/` | — | `checked_in` | staff |
+| POST | `…/<id>/complete/` | — | `in_progress` | staff |
+| POST | `…/<id>/no-show/` | — | `confirmed` | staff |
+| POST | `…/<id>/mark-late/` | `{ "late_by": <int ≥1> }` | `in_progress` | staff |
+| POST | `…/<id>/cancel/` | `{ "reason": "<string max 500>" }` | `confirmed` \| `checked_in` | staff **or** customer (own) |
+| POST | `…/<id>/reschedule/` | same as **Book** body | `confirmed` \| `checked_in` | staff **or** customer (own) |
 
 Reschedule lands `confirmed`. Same flattened body as book. Cannot change `customer_profile_id` or `service_id`. Overlap → `"Slot no longer available."`
+
+`program_service_id` on reschedule:
+- **Customer:** required; must equal the appointment’s existing `program_service_id` (mismatch → 400). Does **not** re-run book redeemability / open-apt checks; FK unchanged. New `start` local date must still be on/before package `expires_at`. Customer surfaces only therapy-linked appts — staff walk-ins are not shown.
+- **Staff:** forbidden (same as book). Walk-in appts keep `program_service_id` null. Therapy-linked staff reschedule still enforces package expiry vs new `start`.
 
 Illegal transition → validation error (`Cannot perform '…' from status '…'`).
 
@@ -769,11 +851,12 @@ Same contracts as rooms:
 
 ## 9. FE flows (short)
 
-1. **Book:** Find Slots → pick slot → Book with `id`s from nested `doctor` / `specialty` / `care_team` / `room` / `equipment` flattened (+ optional Idempotency-Key).
-2. **Day-of:** check-in → start → (optional mark-late) → complete. Or no-show from confirmed. Cancel/reschedule only before start.
-3. **Exception badge:** `GET exceptions/count/` → list open → cancel / reschedule / acknowledge.
-4. **Setup schedule:** PATCH operating-hours → roster → calendars to verify → blocks/leaves/downtimes as needed.
-5. **Ops board:** overview + capacity + bottlenecks for selected range.
+1. **Staff book:** Find Slots (`…/slots/` + preferred) → pick slot → Book.
+2. **Customer book:** Find Slots (`…/slots/` no preferred → auto-assign) → pick slot → Book with nested IDs flattened (+ optional Idempotency-Key). List via `GET /appointments/customer-appointments/<profile_id>/`. Cancel/reschedule own appts only.
+3. **Day-of (staff):** check-in → start → (optional mark-late) → complete. Or no-show from confirmed. Cancel/reschedule only before start.
+4. **Exception badge:** `GET exceptions/count/` → list open → cancel / reschedule / acknowledge.
+5. **Setup schedule:** PATCH operating-hours → roster → calendars to verify → blocks/leaves/downtimes as needed.
+6. **Ops board:** overview + capacity + bottlenecks for selected range.
 
 ---
 
@@ -781,6 +864,9 @@ Same contracts as rooms:
 
 | Message / situation | When |
 |---|---|
+| `Customers cannot send preferred. Slots are auto-assigned.` | Customer JWT sent `preferred` on Find Slots |
+| `preferred is required.` | Staff JWT omitted `preferred` on Find Slots |
+| `Customer profile does not belong to this account.` | Customer JWT booked/slots with another account’s profile |
 | `Invalid customer profile for this center.` | Profile missing / inactive / other center |
 | `Invalid service for this center.` | Same for service |
 | `A room is required for in-person appointments.` | Slots without room path |
@@ -793,6 +879,8 @@ Same contracts as rooms:
 | `doctor_id matches more than one live doctor role.` | Person has two+ live `"doctor"`-in-name hats |
 | `Slot no longer available.` | Overlap / race on book/reschedule |
 | `Date cannot be in the past.` | Find Slots past `date`, or book/reschedule `start` before now |
+| `Date must be between tomorrow and 7 days from today.` | Customer Find Slots / book / reschedule outside tomorrow…today+7 (rolling local date) |
+| `This package expires on <D Mon YYYY>. Please choose a date on or before it.` | Therapy slots / book / reschedule / complete when appointment day is after `program.expires_at` |
 | `Invalid start date. Use YYYY-MM-DD.` | Operations `start` junk |
 | `Invalid end date. Use YYYY-MM-DD.` | Operations `end` junk |
 | `End date cannot be before start date.` | Operations `end` < `start` |

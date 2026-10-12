@@ -9,7 +9,7 @@ from accounts.customers.models import CustomerProfile
 from accounts.users.utils.helper import calculate_age
 from core.utils.db.functions import ExtractPartText
 from pre_consultation.models import PreConsultationSession
-from pre_consultation.layers.patient_baseline import customer_profile_to_payload
+from pre_consultation.layers.patient_baseline import customer_profile_to_payload_v2
 from pre_consultation.layers.patient_medical_history_context import (
     get_customer_profile_gender_and_age,
 )
@@ -825,15 +825,19 @@ def build_raw_data_payload(context: ResultSessionContext) -> dict:
         "sex": None,
         "age": None,
         "city": "",
+        "height": None,
+        "weight": None,
     }
     if context.customer_profile is not None:
-        profile_payload = customer_profile_to_payload(context.customer_profile)
+        profile_payload = customer_profile_to_payload_v2(context.customer_profile)
         address = profile_payload["address"]
         baseline_payload = {
             "name": f"{profile_payload['first_name']} {profile_payload['last_name']}".strip(),
             "sex": profile_payload["gender"],
             "age": calculate_age(context.customer_profile.date_of_birth),
             "city": address.get("city", ""),
+            "height": profile_payload["height"],
+            "weight": profile_payload["weight"],
         }
 
     patient_category = [
@@ -1006,6 +1010,8 @@ def _session_list_profile_fields(
             "last_name": profile.last_name,
             "gender": profile.get_gender_display() if profile.gender else None,
             "date_of_birth": profile.date_of_birth,
+            "height": profile.height_cm,
+            "weight": profile.weight_kg,
         }
 
     user = session.user
@@ -1014,6 +1020,8 @@ def _session_list_profile_fields(
         "last_name": user.last_name,
         "gender": user.get_gender_display() if user.gender else None,
         "date_of_birth": user.date_of_birth,
+        "height": None,
+        "weight": None,
     }
 
 

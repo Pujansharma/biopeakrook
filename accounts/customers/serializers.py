@@ -537,7 +537,7 @@ class CenterCustomerProfileDetailSerializer(BaseModelSerializer):
         source='customer_profile.is_onboarding_sent', required=False
     )
     is_onboarding_completed = serializers.BooleanField(
-        source='customer_profile.is_onboarding_completed', read_only=True
+        source='customer_profile.is_onboarding_completed', required=False
     )
     home_center = serializers.SerializerMethodField(read_only=True)
 

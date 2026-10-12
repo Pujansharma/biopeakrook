@@ -1,8 +1,19 @@
 from accounts.associates.models import AssociateCenterAssignment
+from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
-from accounts.utils.permissions import IsAdminUser, IsAssociateUser
+from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerUser
 from rest_framework.permissions import BasePermission
+
+
+def customer_has_center_access(user, center_id):
+    if not hasattr(user, "customer"):
+        return False
+    return CustomerCenterAssignment.objects.filter(
+        customer_profile__customer=user.customer,
+        center_id=center_id,
+        is_active=True,
+    ).exists()
 
 
 class CenterAppointmentPermission(BasePermission):
@@ -43,3 +54,24 @@ class CenterAppointmentPermission(BasePermission):
             is_active=True,
             center=center_id,
         ).exists()
+
+
+class CustomerCenterAppointmentPermission(BasePermission):
+    """Customer access when they have an active profile assignment at URL center."""
+
+    def has_permission(self, request, view):
+        if not IsCustomerUser().has_permission(request, view):
+            return False
+        center_id = view.kwargs.get("center_id")
+        if center_id is None:
+            return False
+        return customer_has_center_access(request.user, center_id)
+
+
+class StaffOrCustomerCenterAppointmentPermission(BasePermission):
+    """Staff (admin/associate) or customer with center assignment."""
+
+    def has_permission(self, request, view):
+        if CenterAppointmentPermission().has_permission(request, view):
+            return True
+        return CustomerCenterAppointmentPermission().has_permission(request, view)

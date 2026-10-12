@@ -1,39 +1,43 @@
 from django.conf import settings
 from django.utils import timezone
 
-from integrations.utils.constants import CommunicationEventType
-
-EVENT_TEMPLATE_SETTING = {
-    CommunicationEventType.APPOINTMENT_CONFIRMED: "WHATSAPP_TEMPLATE_CONFIRMED",
-    CommunicationEventType.APPOINTMENT_CANCELLED: "WHATSAPP_TEMPLATE_CANCELLED",
-    CommunicationEventType.APPOINTMENT_RESCHEDULED: "WHATSAPP_TEMPLATE_RESCHEDULED",
-}
+from core.utils.constants import AppointmentModes
+from integrations.utils.constants import (
+    CommunicationEventType,
+    WHATSAPP_TEMPLATE_BY_EVENT,
+)
 
 
-def template_language():
+def template_language() -> str:
     return getattr(settings, "WHATSAPP_TEMPLATE_LANGUAGE", None) or "en"
 
 
-def template_name_for_event(event_type):
-    setting_name = EVENT_TEMPLATE_SETTING[event_type]
-    return getattr(settings, setting_name)
+def template_name_for_event(event_type: str) -> str:
+    return WHATSAPP_TEMPLATE_BY_EVENT[event_type]
 
 
-def format_appointment_date(value):
+def format_appointment_date(value) -> str:
     if value is None:
         return ""
     local_value = timezone.localtime(value)
     return local_value.strftime("%d %b %Y")
 
 
-def format_appointment_time(value):
+def format_appointment_time(value) -> str:
     if value is None:
         return ""
     local_value = timezone.localtime(value)
     return local_value.strftime("%I:%M %p")
 
 
-def customer_display_name(customer_profile):
+def format_appointment_start_datetime(value) -> str:
+    if value is None:
+        return ""
+    local_value = timezone.localtime(value)
+    return local_value.strftime("%d %b %Y, %I:%M %p")
+
+
+def customer_display_name(customer_profile) -> str:
     parts = [
         customer_profile.first_name or "",
         customer_profile.last_name or "",
@@ -41,7 +45,7 @@ def customer_display_name(customer_profile):
     return " ".join(part for part in parts if part).strip() or "Customer"
 
 
-def center_address_text(center):
+def center_address_text(center) -> str:
     if center is None:
         return ""
     parts = []
@@ -60,7 +64,7 @@ def center_address_text(center):
     return ", ".join(parts)
 
 
-def clinic_address_display(center):
+def clinic_address_display(center) -> str:
     """Meta {{clinic_address}}: 'Clinic name, Clinic address'."""
     if center is None:
         return "Center"
@@ -71,31 +75,47 @@ def clinic_address_display(center):
     return name
 
 
-def named_text_parameter(parameter_name, text):
+VIRTUAL_MEET_LINK_FALLBACK = "Check your calendar invite for the Google Meet link"
+
+
+def location_or_meet_link(appointment) -> str:
+    if appointment.modality == AppointmentModes.VIRTUAL:
+        meet_link = (appointment.google_meet_link or "").strip()
+        if meet_link:
+            return meet_link
+        return VIRTUAL_MEET_LINK_FALLBACK
+    center = appointment.center if appointment.center_id else None
+    return clinic_address_display(center)
+
+
+def named_text_parameter(parameter_name: str, text) -> dict:
     return {"parameter_name": parameter_name, "text": str(text)}
 
 
-def build_template_parameters(
-    event_type,
-    appointment,
-    *,
-    previous_start_datetime=None,
-):
+def build_positional_session_parameters(appointment) -> list:
     """
-    Named body params matching approved Meta templates:
-    patient_name, appointment_date, appointment_time, service_name,
-    clinic_address (confirmed / rescheduled only).
+    Positional Meta body params {{1}}…{{4}} for reminder / no-show:
+    name, start datetime, service name, address or Meet link.
     """
-    _ = previous_start_datetime  # Meta reschedule template shows new slot only
+    profile = appointment.customer_profile
+    service_name = appointment.service.name if appointment.service_id else "Service"
+    return [
+        customer_display_name(profile),
+        format_appointment_start_datetime(appointment.start_datetime),
+        service_name,
+        location_or_meet_link(appointment),
+    ]
+
+
+def build_named_lifecycle_parameters(appointment) -> dict:
     profile = appointment.customer_profile
     patient_name = customer_display_name(profile)
     service_name = appointment.service.name if appointment.service_id else "Service"
-    center = appointment.center if appointment.center_id else None
     start = appointment.start_datetime
     appointment_date = format_appointment_date(start)
     appointment_time = format_appointment_time(start)
-    clinic_address = clinic_address_display(center)
-
+    # Meta param name stays clinic_address; virtual fills Meet link.
+    clinic_address = location_or_meet_link(appointment)
     confirmed_or_rescheduled = [
         named_text_parameter("patient_name", patient_name),
         named_text_parameter("appointment_date", appointment_date),
@@ -109,9 +129,35 @@ def build_template_parameters(
         named_text_parameter("appointment_time", appointment_time),
         named_text_parameter("service_name", service_name),
     ]
-    builders = {
+    return {
         CommunicationEventType.APPOINTMENT_CONFIRMED: confirmed_or_rescheduled,
         CommunicationEventType.APPOINTMENT_CANCELLED: cancelled,
         CommunicationEventType.APPOINTMENT_RESCHEDULED: confirmed_or_rescheduled,
     }
-    return builders[event_type]
+
+
+POSITIONAL_SESSION_EVENT_TYPES = frozenset(
+    {
+        CommunicationEventType.APPOINTMENT_REMINDER,
+        CommunicationEventType.APPOINTMENT_NO_SHOW,
+    }
+)
+
+
+def build_template_parameters(
+    event_type,
+    appointment,
+    *,
+    previous_start_datetime=None,
+) -> list:
+    """
+    Named body params matching approved Meta templates:
+    patient_name, appointment_date, appointment_time, service_name,
+    clinic_address (confirmed / rescheduled only — center address or Meet).
+
+    Reminder / no-show use positional {{1}}…{{4}} ({{4}} = address or Meet).
+    """
+    _ = previous_start_datetime  # Meta reschedule template shows new slot only
+    if event_type in POSITIONAL_SESSION_EVENT_TYPES:
+        return build_positional_session_parameters(appointment)
+    return build_named_lifecycle_parameters(appointment)[event_type]

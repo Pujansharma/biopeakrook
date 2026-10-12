@@ -38,4 +38,54 @@ docs {
   Do not send operational_status on create; default is operational. Use PATCH to change.
   Do not send code; server generates EQ-{center_code}-{seq} (e.g. EQ-CT-0001-0001).
   equipment_type_id and room_id must be active for this center; inactive → 400.
+  Name unique per center, case-insensitive. Duplicate → 400 name: "An equipment with this name already exists."
+}
+
+example {
+  name: 400 Duplicate name
+
+  request: {
+    url: {{baseURL}}/centers/{{center_id}}/v2/equipments/
+    method: POST
+    mode: json
+    headers: {
+      X-Center-ID: {{center_id}}
+      Content-Type: application/json
+    }
+
+    body:json: {
+      {
+        "name": "DEXA-001",
+        "equipment_type_id": "{{equipment_type_id}}",
+        "serial_number": "SN-001",
+        "setup_time": 5,
+        "cooldown_time": 5,
+        "requires_technician": false
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "detail": {
+            "name": [
+              "An equipment with this name already exists."
+            ]
+          }
+        }
+      '''
+    }
+  }
 }

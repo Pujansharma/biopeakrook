@@ -75,7 +75,7 @@ class AssessmentServiceDetailView(BaseRetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         try:
             super().perform_destroy(instance)
-        except ProtectedError, RestrictedError:
+        except (ProtectedError, RestrictedError):
             self.raise_bad_request("This service cannot be deleted")
 
 

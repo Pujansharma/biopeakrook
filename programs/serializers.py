@@ -94,9 +94,18 @@ class ServiceField(BaseSerializer):
     sessions_count = serializers.IntegerField(min_value=1, required=True)
 
 
+class RedemptionHistoryAppointmentSerializer(BaseSerializer):
+    id = serializers.UUIDField(source="pk", read_only=True)
+    code = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    start = serializers.DateTimeField(source="start_datetime", read_only=True)
+    end = serializers.DateTimeField(source="end_datetime", read_only=True)
+
+
 class ProgramServiceRedemptionHistorySerializer(BaseModelSerializer):
     redeem_center = MinimumCenterSerializer(read_only=True)
     redeemed_by = BaseUserSerializer(read_only=True)
+    appointment = RedemptionHistoryAppointmentSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = RedemptionHistory
@@ -108,5 +117,6 @@ class ProgramServiceRedemptionHistorySerializer(BaseModelSerializer):
             "redeemed_at",
             "quantity",
             "redeemed_by",
+            "appointment",
         ]
         read_only_fields = fields

@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.urls import path, include
+from django.urls import include, path
 from django.views.generic import RedirectView
 from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -37,6 +37,8 @@ urlpatterns = [
     path("external/", include("external.urls")),
     # Centers
     path("centers/", include("accounts.centers.urls")),
+    # Customer appointments (not center-scoped)
+    path("appointments/", include("appointments.customer_urls")),
     # Associates
     path("associates/", include("accounts.associates.urls")),
     path("admins/", include("accounts.admins.urls")),
@@ -50,6 +52,9 @@ urlpatterns = [
     path("services/", include("programs.services.urls")),
     path("leads/", include("leads.urls")),
     path("google-calendar/", include("integrations.google_calendar.urls")),
+    path("app/", include("integrations.communications.urls")),
     path("webhooks/", include("webhooks.urls")),
+    path("devices/", include("wearables.device_urls")),
+    path("health/", include("wearables.health_urls")),
     path("pre-consultation/", include("pre_consultation.urls")),
 ]

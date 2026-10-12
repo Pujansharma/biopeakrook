@@ -1,3 +1,4 @@
+import ipaddress
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -17,11 +18,24 @@ def response_format(detail, data=None):
     return context
 
 
+def normalize_ip_address(value):
+    if not value:
+        return None
+    candidate = value.strip().strip("[]")
+    if not candidate:
+        return None
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return None
+
+
 def get_request_ip_address(request: Request):
+    """Client IP behind a trusted proxy (ALB appends the real hop last)."""
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
+        return normalize_ip_address(forwarded_for.split(",")[-1])
+    return normalize_ip_address(request.META.get("REMOTE_ADDR"))
 
 
 def get_request_user_agent(request: Request):

@@ -54,6 +54,7 @@ from core.utils.views.main import (
     BaseListCreateAPIView, BaseGenericAPIView,
 )
 from leads.models import Lead
+from products.models import DocumentCategory, DocumentCategoryAssignment
 from programs.services.models import ServiceDocument
 from programs.services.utils.constants import get_module_category_document_types
 
@@ -82,8 +83,27 @@ class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
     serializer_class = CustomerServiceDocumentSerializer
     permission_classes = [IsAdminUser | IsAssociateUser | IsCustomerUser]
 
+    @staticmethod
+    def _get_document_category_conditions(document_category_id):
+        conditions = Q(pk__in=[])
+        document_category = DocumentCategory.objects.filter(
+            pk__iexact=document_category_id
+        ).first()
+        if not document_category:
+            return conditions
+        assignments = DocumentCategoryAssignment.objects.filter(
+            category=document_category
+        ).values_list("document_type", "document_categories")
+        for document_type, document_categories in assignments:
+            conditions |= Q(
+                result__document_type=document_type,
+                document_category__in=document_categories,
+            )
+        return conditions
+
     def get_queryset(self):
         search = Q()
+        document_category_conditions = Q()
         customer_profile = self.get_customer_profile()
         filter_kwargs = {
             "result__program_service__program__customer_profile": customer_profile,
@@ -92,6 +112,7 @@ class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
         active_query = self.request.query_params.get("active")
         document_type = self.request.query_params.get("document_type")
         document_category = self.request.query_params.get("document_category")
+        document_category_id = self.request.query_params.get("document_category_id")
         module_category = self.request.query_params.get("module_category")
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
@@ -109,6 +130,10 @@ class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
             filter_kwargs["result__document_type"] = document_type
         if document_category:
             filter_kwargs["document_category"] = document_category
+        if document_category_id is not None:
+            document_category_conditions = self._get_document_category_conditions(
+                document_category_id
+            )
         if module_category:
             filter_kwargs["result__document_type__in"] = (
                 get_module_category_document_types(module_category)
@@ -130,7 +155,7 @@ class CustomerProfileDocumentsListView(BaseListAPIView, CustomerProfileMeta):
                 "result__program_service__program__composite_program__composite_template",
                 "result__program_service__service",
             )
-            .filter(search, **filter_kwargs)
+            .filter(search, document_category_conditions, **filter_kwargs)
             .order_by("-created_at")
         )
 

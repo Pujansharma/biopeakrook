@@ -94,8 +94,15 @@ EMPTY_PATIENT_BASELINE_V2_PAYLOAD = {
     "dob": None,
     "gender": None,
     "email_address": "",
+    "height": None,
+    "weight": None,
     "address": EMPTY_PATIENT_BASELINE_ADDRESS,
 }
+
+PATIENT_BASELINE_HEIGHT_CM_MIN = 30.0
+PATIENT_BASELINE_HEIGHT_CM_MAX = 300.0
+PATIENT_BASELINE_WEIGHT_KG_MIN = 1.0
+PATIENT_BASELINE_WEIGHT_KG_MAX = 500.0
 
 
 class PatientBaselineV2RequestSerializer(serializers.Serializer):
@@ -106,6 +113,18 @@ class PatientBaselineV2RequestSerializer(serializers.Serializer):
     dob = serializers.DateField()
     gender = serializers.ChoiceField(choices=PatientBaselineGender.choices)
     email_address = serializers.EmailField()
+    height = serializers.FloatField(
+        min_value=PATIENT_BASELINE_HEIGHT_CM_MIN,
+        max_value=PATIENT_BASELINE_HEIGHT_CM_MAX,
+        required=False,
+        allow_null=True,
+    )
+    weight = serializers.FloatField(
+        min_value=PATIENT_BASELINE_WEIGHT_KG_MIN,
+        max_value=PATIENT_BASELINE_WEIGHT_KG_MAX,
+        required=False,
+        allow_null=True,
+    )
     address = PatientBaselineAddressSerializer(required=False)
 
 
@@ -119,6 +138,8 @@ class PatientBaselineV2ResponseSerializer(serializers.Serializer):
         required=False,
     )
     email_address = serializers.EmailField(allow_blank=True, default="")
+    height = serializers.FloatField(allow_null=True, required=False)
+    weight = serializers.FloatField(allow_null=True, required=False)
     address = PatientBaselineAddressResponseSerializer()
 
 
@@ -168,6 +189,8 @@ def customer_profile_to_payload_v2(customer_profile: CustomerProfile) -> dict:
         "dob": customer_profile.date_of_birth,
         "gender": profile_gender_to_baseline_gender(customer_profile.gender),
         "email_address": contact_email,
+        "height": customer_profile.height_cm,
+        "weight": customer_profile.weight_kg,
         "address": customer_profile_address_to_payload(customer_profile),
     }
 
@@ -297,15 +320,20 @@ def persist_patient_baseline_v2_payload(
         customer_profile.last_name = validated_data["last_name"]
         customer_profile.date_of_birth = validated_data["dob"]
         customer_profile.gender = profile_gender
-        customer_profile.save(
-            update_fields=[
-                "first_name",
-                "last_name",
-                "date_of_birth",
-                "gender",
-                "updated_at",
-            ]
-        )
+        update_fields = [
+            "first_name",
+            "last_name",
+            "date_of_birth",
+            "gender",
+            "updated_at",
+        ]
+        if "height" in validated_data:
+            customer_profile.height_cm = validated_data["height"]
+            update_fields.append("height_cm")
+        if "weight" in validated_data:
+            customer_profile.weight_kg = validated_data["weight"]
+            update_fields.append("weight_kg")
+        customer_profile.save(update_fields=update_fields)
 
         customer = customer_profile.customer
         customer.contact_email = validated_data["email_address"]

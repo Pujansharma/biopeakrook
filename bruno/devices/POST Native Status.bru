@@ -1,0 +1,33 @@
+meta {
+  name: POST Native Status
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseURL}}/devices/native-status/
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+  X-Correlation-ID: {{$uuid}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "data_source": "Apple Health",
+    "sdk_linked": true,
+    "permission_status": "granted",
+    "capabilities": ["sleep", "activity", "heart", "recovery", "body", "workouts"],
+    "timezone_name": "Asia/Kolkata",
+    "historical_days": 29
+  }
+}
+
+docs {
+  Called by the mobile app after the ROOK SDK reports native connection and
+  permission state. Android may use Health Connect or Samsung Health.
+}

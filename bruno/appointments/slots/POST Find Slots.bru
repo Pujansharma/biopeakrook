@@ -73,14 +73,16 @@ settings {
 
 docs {
   POST /centers/{{center_id}}/appointments/slots/
-  Auth: inherit (collection pre-request sets Bearer). Run Login Phone Direct first.
+  Auth: staff JWT — preferred REQUIRED. Customer JWT — preferred FORBIDDEN (use
+  POST Find Slots Customer Auto). Empty preferred after strip → 400 for staff.
 
   Required body:
   - customer_profile_id — UUID, active profile assigned to this center
   - service_id — UUID, active service assigned to this center
   - modality — virtual | in_person (not both)
   - date — YYYY-MM-DD today or future (env slot_date). Past date → 400 "Date cannot be in the past."
-  - preferred — REQUIRED. Staff+room+equipment from preferred only (no leftover auto-fill).
+    Customer JWT (see POST Find Slots Customer Auto): tomorrow … today+7 only.
+  - preferred — REQUIRED for staff. Staff+room+equipment from preferred only (no leftover auto-fill).
 
   preferred keys (omit empty UUIDs — pre-request strips blanks; only keys present in body):
   - care_team_id XOR doctor_id / specialty_id

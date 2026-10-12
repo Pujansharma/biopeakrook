@@ -3,14 +3,25 @@ from django.db.models import ProtectedError, RestrictedError, Q
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser
 from core.utils.exceptions import get_object_or_404
 from core.utils.views.main import (
+    BaseCreateAPIView,
     BaseGenericAPIView,
+    BaseListAPIView,
     BaseListCreateAPIView,
     BaseRetrieveUpdateDestroyAPIView,
 )
-from products.models import Product
-from products.serializers import ProductSerializer
+from products.models import DocumentCategory, DocumentCategoryAssignment, Product
+from products.serializers import (
+    DocumentCategoryAssignmentLinkSerializer,
+    DocumentCategoryAssignmentSerializer,
+    DocumentCategoryDetailSerializer,
+    DocumentCategorySerializer,
+    ProductSerializer,
+)
 from products.utils.db import update_provider_products_count
-from products.utils.documents import get_allowed_document_types
+from products.utils.documents import (
+    get_allowed_document_types,
+    get_available_document_types,
+)
 
 
 class ProductsView(BaseListCreateAPIView):
@@ -51,7 +62,7 @@ class ProductDetailView(BaseRetrieveUpdateDestroyAPIView):
         provider = instance.provider
         try:
             super().perform_destroy(instance)
-        except ProtectedError, RestrictedError:
+        except (ProtectedError, RestrictedError):
             self.raise_bad_request("This product cannot be deleted")
         update_provider_products_count(provider.pk)
 
@@ -71,3 +82,66 @@ class ProductAllowedDocumentsView(BaseGenericAPIView):
             product.callback,
         )
         return self.send_response("Allowed document types retrieved.", data)
+
+
+class DocumentCategoryView(BaseListCreateAPIView):
+    serializer_class = DocumentCategorySerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        search = Q()
+        search_params = self.request.query_params.get("search", "").strip()
+        if search_params:
+            search |= Q(name__istartswith=search_params)
+            search |= Q(name__icontains=search_params)
+        return DocumentCategory.objects.select_related("created_by").filter(search)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class DocumentCategoryDetailView(BaseRetrieveUpdateDestroyAPIView):
+    serializer_class = DocumentCategoryDetailSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return DocumentCategory.objects.select_related("created_by").prefetch_related(
+            "assignments"
+        )
+
+
+class DocumentCategoryAssignmentListView(BaseListAPIView):
+    serializer_class = DocumentCategoryAssignmentSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return DocumentCategoryAssignment.objects.filter(category_id=self.kwargs["pk"])
+
+
+class DocumentCategoryAvailableDocumentTypesView(BaseGenericAPIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, *args, **kwargs):
+        category = get_object_or_404(
+            DocumentCategory.objects.all(),
+            "Document category not found.",
+            pk=self.kwargs["pk"],
+        )
+        assigned_document_types = set(
+            category.assignments.values_list("document_type", flat=True)
+        )
+        data = get_available_document_types(assigned_document_types)
+        return self.send_response("Available document types retrieved.", data)
+
+
+class DocumentCategoryAssignmentLinkView(BaseCreateAPIView):
+    serializer_class = DocumentCategoryAssignmentLinkSerializer
+    permission_classes = [IsAdminUser]
+
+    def perform_create(self, serializer):
+        category = get_object_or_404(
+            DocumentCategory.objects.all(),
+            "Document category not found.",
+            pk=self.kwargs["pk"],
+        )
+        serializer.save(category=category)

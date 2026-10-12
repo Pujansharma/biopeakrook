@@ -93,7 +93,13 @@ LOGGING = {
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = [*default_headers, "x-center-id", "idempotency-key"]
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "x-center-id",
+    "idempotency-key",
+    "x-customer-profile-id",
+    "x-correlation-id",
+]
 
 # Other
 
@@ -131,12 +137,39 @@ WHATSAPP_API_VERSION = config("STG_WHATSAPP_API_VERSION", "v23.0")
 WHATSAPP_WABA_ID = config("STG_WHATSAPP_WABA_ID", None)
 WHATSAPP_APP_ID = config("STG_WHATSAPP_APP_ID", None)
 WHATSAPP_TEMPLATE_LANGUAGE = config("STG_WHATSAPP_TEMPLATE_LANGUAGE", "en")
-WHATSAPP_TEMPLATE_CONFIRMED = config(
-    "STG_WHATSAPP_TEMPLATE_CONFIRMED", "appointment_confirmed"
+
+# Wearables / ROOK
+WEARABLES_ENABLED = config("STG_WEARABLES_ENABLED", False, cast=bool)
+WEARABLES_REQUIRE_PROFILE_FEATURE = config(
+    "STG_WEARABLES_REQUIRE_PROFILE_FEATURE", True, cast=bool
 )
-WHATSAPP_TEMPLATE_CANCELLED = config(
-    "STG_WHATSAPP_TEMPLATE_CANCELLED", "appointment_cancelled"
+TIMELINE_ENABLED = config("STG_TIMELINE_ENABLED", False, cast=bool)
+RECOVERY_DOMAIN_ENABLED = config("STG_RECOVERY_DOMAIN_ENABLED", True, cast=bool)
+BODY_DOMAIN_ENABLED = config("STG_BODY_DOMAIN_ENABLED", True, cast=bool)
+ROOK_ENVIRONMENT = config("STG_ROOK_ENVIRONMENT", "sandbox")
+ROOK_BASE_URL = config("STG_ROOK_BASE_URL", "https://api.rook-connect.review")
+ROOK_CLIENT_UUID = config("STG_ROOK_CLIENT_UUID", "")
+ROOK_SECRET_KEY = config("STG_ROOK_SECRET_KEY", "")
+ROOK_WEBHOOK_HASH_KEY = config("STG_ROOK_WEBHOOK_HASH_KEY", "")
+ROOK_SDK_CLIENT_UUID = config("STG_ROOK_SDK_CLIENT_UUID", "")
+ROOK_SDK_SECRET = config("STG_ROOK_SDK_SECRET", "")
+ROOK_HISTORICAL_DAYS = config("STG_ROOK_HISTORICAL_DAYS", 29, cast=int)
+ROOK_SYNC_DELAY_HOURS = config("STG_ROOK_SYNC_DELAY_HOURS", 48, cast=int)
+ROOK_CONNECT_TIMEOUT_SECONDS = config(
+    "STG_ROOK_CONNECT_TIMEOUT_SECONDS", 5, cast=int
 )
-WHATSAPP_TEMPLATE_RESCHEDULED = config(
-    "STG_WHATSAPP_TEMPLATE_RESCHEDULED", "appointment_rescheduled"
+ROOK_READ_TIMEOUT_SECONDS = config("STG_ROOK_READ_TIMEOUT_SECONDS", 12, cast=int)
+ROOK_ALLOW_UNSIGNED_WEBHOOKS = config(
+    "STG_ROOK_ALLOW_UNSIGNED_WEBHOOKS", False, cast=bool
+)
+ROOK_AUTHORIZATION_ALLOWED_HOSTS = config(
+    "STG_ROOK_AUTHORIZATION_ALLOWED_HOSTS",
+    "",
+    cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
+)
+HEALTH_TREND_MINIMUM_OBSERVATIONS = config(
+    "STG_HEALTH_TREND_MINIMUM_OBSERVATIONS", 7, cast=int
+)
+HEALTH_HISTORICAL_GAP_DAYS = config(
+    "STG_HEALTH_HISTORICAL_GAP_DAYS", 7, cast=int
 )

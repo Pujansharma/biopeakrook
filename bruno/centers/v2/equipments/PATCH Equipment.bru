@@ -31,4 +31,5 @@ docs {
   operational_status: operational | maintenance | downtime (mutually exclusive).
   Read-only is_in_maintenance / is_downtime derived on GET responses.
   Optional equipment_type_id / room_id must be active for this center; inactive → 400.
+  Name unique per center, case-insensitive. Same row may keep its name. Duplicate → 400 name: "An equipment with this name already exists."
 }

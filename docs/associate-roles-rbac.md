@@ -24,6 +24,8 @@ Defines a named role with a set of features. Scoped to a specific center.
 | `is_system` | BooleanField | System-generated role (not editable) |
 | `summary` | JSONField | Denormalized permission cache (future) |
 
+Constraint: `UniqueConstraint(center, Lower(name), condition=center IS NOT NULL)` — role name unique per center (case-insensitive). Same name allowed across centers. System roles (`center=NULL`) excluded.
+
 ### AssociateRolePermission (Future)
 
 Granular per-feature ability. Not used in permission checks yet.

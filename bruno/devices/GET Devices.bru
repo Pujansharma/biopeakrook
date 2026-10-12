@@ -1,0 +1,20 @@
+meta {
+  name: GET Devices
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/devices/?refresh=false
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+}
+
+docs {
+  Returns all provider connections and backend-owned status/action metadata.
+  Set refresh=true only when an authoritative ROOK authorization refresh is needed.
+}

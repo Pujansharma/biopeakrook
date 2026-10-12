@@ -8,9 +8,12 @@ auth {
 }
 
 docs {
-  POST /centers/{{center_id}}/appointments/slots/
+  POST /centers/{{center_id}}/appointments/slots/ — unified.
+  Staff: preferred required (pin staff/room/equipment).
+  Customer: no preferred → least-busy auto-assign from service maps.
   preferred keys: room_id, equipment_id, care_team_id, doctor_id, specialty_id.
   care_team_id XOR doctor_id/specialty_id. in_person needs room_id.
   equipment_id required when that room has ≥1 bookable unit.
   Slot response: nested care_team/doctor/specialty/room/equipment; omit absent.
+  Auto-assign: specialty may be object or array; no care_team.
 }

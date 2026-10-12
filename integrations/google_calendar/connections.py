@@ -6,6 +6,16 @@ from accounts.associates.models import Associate
 from integrations.models import GoogleCalendarConnection
 
 
+def connection_is_shared_organizer(connection):
+    calendar_id = getattr(settings, "GOOGLE_CALENDAR_ID", None)
+    return bool(
+        calendar_id
+        and connection is not None
+        and connection.google_email
+        and connection.google_email.lower() == calendar_id.lower()
+    )
+
+
 def user_has_active_google_calendar_owner_profile(user):
     if Admin.objects.filter(pk=user.pk, is_active=True).exists():
         return True

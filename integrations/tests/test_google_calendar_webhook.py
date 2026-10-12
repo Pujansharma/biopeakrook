@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import requests
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
@@ -158,6 +158,16 @@ class EnsureWatchChannelActiveTests(TestCase):
 
         self.assertEqual(calls, ["start", "stop"])
         mock_stop.assert_called_once_with(self.connection, "chan-1", "res-1")
+
+    @override_settings(GOOGLE_CALENDAR_ID="care@biopeak.health")
+    @patch("integrations.google_calendar.webhook_channel.start_watch_channel")
+    def test_shared_organizer_is_never_watched(self, mock_start):
+        self.connection.google_email = "care@biopeak.health"
+        self.connection.save()
+
+        ensure_watch_channel_active(self.connection)
+
+        mock_start.assert_not_called()
 
     @patch("integrations.google_calendar.webhook_channel.stop_channel_at_google")
     @patch("integrations.google_calendar.webhook_channel.start_watch_channel")

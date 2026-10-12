@@ -64,6 +64,33 @@ class EquipmentSerializer(BaseModelSerializer):
             "room": {"read_only": True},
         }
 
+    def validate_name(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        name = attrs.get("name")
+        if name is None and self.instance is not None:
+            name = self.instance.name
+        if name:
+            center_id = self._resolve_center_id()
+            if center_id is not None:
+                clash = Equipment.objects.filter(center_id=center_id, name__iexact=name)
+                if self.instance is not None:
+                    clash = clash.exclude(pk=self.instance.pk)
+                if clash.exists():
+                    raise serializers.ValidationError(
+                        {"name": ["An equipment with this name already exists."]}
+                    )
+        return attrs
+
+    def _resolve_center_id(self):
+        if self.instance is not None:
+            return self.instance.center_id
+        request = self.context.get("request")
+        if request is None:
+            return None
+        return getattr(request, "center_id", None)
+
     @staticmethod
     def validate_room(center_id, room_id):
         if room_id is None:

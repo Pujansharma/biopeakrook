@@ -208,6 +208,13 @@ class Equipment(BaseUUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                "center",
+                Lower("name"),
+                name="uniq_equipment_center_name",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["center", "operational_status", "is_active"],

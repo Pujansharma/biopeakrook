@@ -6,7 +6,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.associates.models import Associate, AssociateRole
+from accounts.centers.serializers import MinimumCenterSerializer
 from accounts.customers.models import CustomerProfile
+from accounts.utils.constants import UserType
+from accounts.utils.db import get_user_account_type
 from appointments.models import (
     Appointment,
     AppointmentAssociate,
@@ -15,6 +18,7 @@ from appointments.models import (
     AppointmentIdempotencyKey,
 )
 from appointments.utils.codes import generate_appointment_code
+from appointments.utils.calendar import center_local_date
 from appointments.utils.constants import (
     AppointmentAuditAction,
     AppointmentStatus,
@@ -27,9 +31,20 @@ from appointments.utils.exceptions import (
 from appointments.utils.scheduling import (
     HEALTH_COACH_ID_REJECT_MESSAGE,
     PREFERRED_REQUIRED_MESSAGE,
+    SPECIALTY_ID_DUPLICATE_MESSAGE,
+    SPECIALTY_ID_EMPTY_MESSAGE,
+    SPECIALTY_ID_TYPE_MESSAGE,
     compute_exclusive_bounds,
     get_center_service_assignment,
     validate_preferred_combo,
+)
+from appointments.utils.redemption import (
+    cancel_appointment_redemption,
+    complete_appointment_redemption,
+    ensure_customer_slot_within_therapy_programs,
+    ensure_program_covers_appointment_date,
+    resolve_bookable_therapy_program_service,
+    schedule_appointment_redemption,
 )
 from appointments.utils.transitions import (
     apply_status_change,
@@ -41,6 +56,7 @@ from core.utils.serializers import BaseSerializer
 from integrations.communications import (
     schedule_queue_appointment_cancelled,
     schedule_queue_appointment_confirmed,
+    schedule_queue_appointment_no_show,
     schedule_queue_appointment_rescheduled,
 )
 from programs.services.models import Service
@@ -53,6 +69,69 @@ BOOKING_RESOURCE_KEYS = (
     "room_id",
     "equipment_id",
 )
+CUSTOMER_PROFILE_NOT_OWNED_MESSAGE = (
+    "Customer profile does not belong to this account."
+)
+CUSTOMER_PREFERRED_FORBIDDEN_MESSAGE = (
+    "Customers cannot send preferred. Slots are auto-assigned."
+)
+CUSTOMER_PROGRAM_SERVICE_REQUIRED_MESSAGE = (
+    "program_service_id is required for customers."
+)
+STAFF_PROGRAM_SERVICE_FORBIDDEN_MESSAGE = (
+    "program_service_id is not allowed when booking as staff."
+)
+PROGRAM_SERVICE_MISMATCH_MESSAGE = (
+    "program_service_id does not match this appointment."
+)
+CUSTOMER_BOOKING_WINDOW_DAYS = 7
+CUSTOMER_BOOKING_DATE_MESSAGE = (
+    "Date must be between tomorrow and 7 days from today."
+)
+
+
+def ensure_customer_booking_date(slot_date, center, field_name="date"):
+    """Customer slots/book/reschedule: tomorrow .. today+7 (center local date)."""
+    today = center_local_date(center)
+    min_date = today + timedelta(days=1)
+    max_date = today + timedelta(days=CUSTOMER_BOOKING_WINDOW_DAYS)
+    if slot_date < min_date or slot_date > max_date:
+        raise serializers.ValidationError(
+            {field_name: [CUSTOMER_BOOKING_DATE_MESSAGE]}
+        )
+
+
+class SpecialtyIdField(serializers.Field):
+    """Book/reschedule only: one UUID or a non-empty UUID array → list[str]."""
+
+    def to_internal_value(self, data):
+        if data is None:
+            return None
+        uuid_field = serializers.UUIDField()
+        if isinstance(data, list):
+            if not data:
+                raise serializers.ValidationError(SPECIALTY_ID_EMPTY_MESSAGE)
+            specialty_ids = []
+            for item in data:
+                specialty_ids.append(str(uuid_field.to_internal_value(item)))
+            if len(specialty_ids) != len(set(specialty_ids)):
+                raise serializers.ValidationError(SPECIALTY_ID_DUPLICATE_MESSAGE)
+            return specialty_ids
+        try:
+            return [str(uuid_field.to_internal_value(data))]
+        except serializers.ValidationError as error:
+            if isinstance(data, (dict, tuple)):
+                raise serializers.ValidationError(SPECIALTY_ID_TYPE_MESSAGE)
+            raise error
+
+    def to_representation(self, value):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            if len(value) == 1:
+                return value[0]
+            return value
+        return value
 
 LIFECYCLE_AUDIT_MAP = {
     "check-in": AppointmentAuditAction.CHECK_IN,
@@ -81,6 +160,20 @@ def resolve_center_customer_profile(center, customer_profile_id):
             {"customer_profile_id": ["Invalid customer profile for this center."]}
         )
     return customer_profile
+
+
+def ensure_request_owns_customer_profile(request, customer_profile):
+    if request is None:
+        return
+    if get_user_account_type(request.user) != UserType.CUSTOMER:
+        return
+    if (
+        not hasattr(request.user, "customer")
+        or customer_profile.customer_id != request.user.pk
+    ):
+        raise serializers.ValidationError(
+            {"customer_profile_id": [CUSTOMER_PROFILE_NOT_OWNED_MESSAGE]}
+        )
 
 
 def resolve_center_service(center, service_id):
@@ -160,6 +253,7 @@ def create_appointment_record(
         code=generate_appointment_code(center),
         customer_profile=validated_data["customer_profile"],
         service=validated_data["service"],
+        program_service=validated_data.get("program_service"),
         modality=validated_data["modality"],
         start_datetime=start,
         end_datetime=end,
@@ -182,6 +276,7 @@ def create_appointment_record(
         exclusive_end,
     )
     create_audit_log(appointment, actor, AppointmentAuditAction.CREATE)
+    schedule_appointment_redemption(appointment, actor)
     return appointment
 
 
@@ -203,7 +298,8 @@ class AppointmentSlotFindSerializer(BaseSerializer):
     service_id = serializers.UUIDField()
     modality = serializers.ChoiceField(choices=AppointmentModes.choices)
     date = serializers.DateField()
-    preferred = AppointmentPreferredSerializer(required=True)
+    program_service_id = serializers.UUIDField(required=False, allow_null=True)
+    preferred = AppointmentPreferredSerializer(required=False, allow_null=True)
 
     def validate_modality(self, value):
         if value == AppointmentModes.BOTH:
@@ -219,19 +315,49 @@ class AppointmentSlotFindSerializer(BaseSerializer):
 
     def validate(self, attrs):
         center = self.context["center"]
+        request = self.context.get("request")
         customer_profile = resolve_center_customer_profile(
             center, attrs["customer_profile_id"]
         )
+        ensure_request_owns_customer_profile(request, customer_profile)
         service = resolve_center_service(center, attrs["service_id"])
         attrs["customer_profile"] = customer_profile
         attrs["service"] = service
         attrs["center"] = center
+
+        account_type = (
+            get_user_account_type(request.user)
+            if request is not None
+            else None
+        )
+        preferred_in_payload = (
+            isinstance(self.initial_data, dict) and "preferred" in self.initial_data
+        )
+        if account_type == UserType.CUSTOMER:
+            if preferred_in_payload:
+                raise serializers.ValidationError(
+                    {"preferred": [CUSTOMER_PREFERRED_FORBIDDEN_MESSAGE]}
+                )
+            ensure_customer_booking_date(
+                attrs["date"], attrs["center"], field_name="date"
+            )
+            ensure_customer_slot_within_therapy_programs(
+                customer_profile,
+                service,
+                attrs["date"],
+                program_service_id=attrs.get("program_service_id"),
+            )
+            attrs["preferred"] = None
+            attrs["auto_assign"] = True
+            return attrs
+
         preferred = normalize_preferred(
             attrs.get("preferred"),
             modality=attrs["modality"],
             required=True,
         )
         attrs["preferred"] = preferred
+        attrs["auto_assign"] = False
         return attrs
 
 
@@ -239,8 +365,12 @@ def preferred_from_booking_attrs(attrs):
     preferred = {}
     for key in BOOKING_RESOURCE_KEYS:
         value = attrs.get(key)
-        if value is not None:
-            preferred[key] = str(value)
+        if value is None:
+            continue
+        if key == "specialty_id" and isinstance(value, list):
+            preferred[key] = [str(item) for item in value]
+            continue
+        preferred[key] = str(value)
     return preferred
 
 
@@ -288,11 +418,12 @@ def normalize_preferred(preferred, modality=None, required=False):
 class AppointmentBookSerializer(BaseSerializer):
     customer_profile_id = serializers.UUIDField()
     service_id = serializers.UUIDField()
+    program_service_id = serializers.UUIDField(required=False, allow_null=True)
     modality = serializers.ChoiceField(choices=AppointmentModes.choices)
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()
     doctor_id = serializers.UUIDField(required=False, allow_null=True)
-    specialty_id = serializers.UUIDField(required=False, allow_null=True)
+    specialty_id = SpecialtyIdField(required=False, allow_null=True)
     care_team_id = serializers.UUIDField(required=False, allow_null=True)
     room_id = serializers.UUIDField(required=False, allow_null=True)
     equipment_id = serializers.UUIDField(required=False, allow_null=True)
@@ -310,15 +441,49 @@ class AppointmentBookSerializer(BaseSerializer):
             )
         return value
 
+    def apply_program_service_rules(self, attrs):
+        request = self.context.get("request")
+        program_service_id = attrs.get("program_service_id")
+        account_type = (
+            get_user_account_type(request.user)
+            if request is not None
+            else None
+        )
+        attrs["program_service"] = None
+        if account_type == UserType.CUSTOMER:
+            if program_service_id is None:
+                raise serializers.ValidationError(
+                    {"program_service_id": [CUSTOMER_PROGRAM_SERVICE_REQUIRED_MESSAGE]}
+                )
+            therapy_program_service = resolve_bookable_therapy_program_service(
+                program_service_id,
+                attrs["customer_profile"],
+                attrs["service"],
+                attrs["center"],
+                appointment_date=center_local_date(
+                    attrs["center"], attrs["start"]
+                ),
+            )
+            attrs["program_service"] = therapy_program_service.program_service
+        elif account_type in {UserType.ADMIN, UserType.ASSOCIATE}:
+            if program_service_id is not None:
+                raise serializers.ValidationError(
+                    {"program_service_id": [STAFF_PROGRAM_SERVICE_FORBIDDEN_MESSAGE]}
+                )
+        return attrs
+
     def validate(self, attrs):
         center = self.context["center"]
+        request = self.context.get("request")
         customer_profile = resolve_center_customer_profile(
             center, attrs["customer_profile_id"]
         )
+        ensure_request_owns_customer_profile(request, customer_profile)
         service = resolve_center_service(center, attrs["service_id"])
         attrs["customer_profile"] = customer_profile
         attrs["service"] = service
         attrs["center"] = center
+        attrs = self.apply_program_service_rules(attrs)
         preferred = preferred_from_booking_attrs(attrs)
         try:
             validate_preferred_combo(preferred, attrs["modality"])
@@ -333,6 +498,17 @@ class AppointmentBookSerializer(BaseSerializer):
         attrs["assignment"] = assignment
         if attrs["start"] < timezone.now():
             raise serializers.ValidationError("Date cannot be in the past.")
+        account_type = (
+            get_user_account_type(request.user)
+            if request is not None
+            else None
+        )
+        if account_type == UserType.CUSTOMER:
+            ensure_customer_booking_date(
+                center_local_date(center, attrs["start"]),
+                center,
+                field_name="start",
+            )
         return attrs
 
     def create(self, validated_data):
@@ -348,6 +524,7 @@ class AppointmentBookSerializer(BaseSerializer):
             "preferred",
             "customer_profile_id",
             "service_id",
+            "program_service_id",
             *BOOKING_RESOURCE_KEYS,
         ):
             validated_data.pop(key, None)
@@ -433,12 +610,14 @@ class AppointmentListSerializer(BaseSerializer):
     has_open_exception = serializers.BooleanField()
     customer = AppointmentCustomerNestedSerializer(source="customer_profile")
     service = AppointmentServiceNestedSerializer()
+    program_service_id = serializers.UUIDField(allow_null=True)
     care_team = AppointmentCareTeamNestedSerializer(allow_null=True)
     associates = AppointmentAssociateNestedSerializer(
         source="associate_links", many=True
     )
     room = AppointmentRoomNestedSerializer(allow_null=True)
     equipment = AppointmentEquipmentNestedSerializer(allow_null=True)
+    center = MinimumCenterSerializer()
     notes = serializers.CharField(allow_null=True)
     google_meet_link = serializers.URLField(allow_null=True)
 
@@ -489,6 +668,7 @@ class AppointmentCancelSerializer(BaseSerializer):
             instance.save(update_fields=["cancel_reason", "updated_at"])
             apply_status_change(instance, "cancel")
             instance.refresh_from_db()
+            cancel_appointment_redemption(instance, actor)
             resolve_exceptions_for_appointment(
                 instance,
                 ExceptionResolution.CANCELLED,
@@ -528,6 +708,46 @@ class AppointmentMarkLateSerializer(BaseSerializer):
 
 
 class AppointmentRescheduleSerializer(AppointmentBookSerializer):
+    def apply_program_service_rules(self, attrs):
+        request = self.context.get("request")
+        program_service_id = attrs.get("program_service_id")
+        account_type = (
+            get_user_account_type(request.user)
+            if request is not None
+            else None
+        )
+        attrs["program_service"] = None
+        appointment = self.context["appointment"]
+        linked_program = None
+        if account_type == UserType.CUSTOMER:
+            # Customer UI only lists therapy-linked appts (never staff walk-ins).
+            if program_service_id is None:
+                raise serializers.ValidationError(
+                    {"program_service_id": [CUSTOMER_PROGRAM_SERVICE_REQUIRED_MESSAGE]}
+                )
+            if (
+                appointment.program_service is None
+                or program_service_id != appointment.program_service.pk
+            ):
+                raise serializers.ValidationError(
+                    {"program_service_id": [PROGRAM_SERVICE_MISMATCH_MESSAGE]}
+                )
+            linked_program = appointment.program_service.program
+        elif account_type in {UserType.ADMIN, UserType.ASSOCIATE}:
+            if program_service_id is not None:
+                raise serializers.ValidationError(
+                    {"program_service_id": [STAFF_PROGRAM_SERVICE_FORBIDDEN_MESSAGE]}
+                )
+            if appointment.program_service is not None:
+                linked_program = appointment.program_service.program
+        if linked_program is not None:
+            ensure_program_covers_appointment_date(
+                linked_program,
+                center_local_date(attrs["center"], attrs["start"]),
+                field_name="start",
+            )
+        return attrs
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         appointment = self.context["appointment"]
@@ -550,7 +770,8 @@ class AppointmentRescheduleSerializer(AppointmentBookSerializer):
         care_team = validated_data.pop("care_team")
         actor = validated_data.pop("actor")
         validated_data.pop("preferred", None)
-        for key in ("customer_profile_id", "service_id", *BOOKING_RESOURCE_KEYS):
+        validated_data.pop("program_service", None)
+        for key in ("customer_profile_id", "service_id", "program_service_id", *BOOKING_RESOURCE_KEYS):
             validated_data.pop(key, None)
         notes = validated_data.pop("notes", None)
         if notes is None:
@@ -619,12 +840,24 @@ class AppointmentLifecycleSerializer(BaseSerializer):
         appointment = self.context["appointment"]
         action = self.context["action"]
         validate_transition(appointment.status, action)
+        if action == "complete" and appointment.program_service is not None:
+            ensure_program_covers_appointment_date(
+                appointment.program_service.program,
+                center_local_date(appointment.center, appointment.start_datetime),
+                field_name="program_service_id",
+            )
         return attrs
 
     def update(self, instance, validated_data):
         actor = validated_data.pop("actor")
         action = self.context["action"]
-        apply_status_change(instance, action)
-        instance.refresh_from_db()
-        create_audit_log(instance, actor, LIFECYCLE_AUDIT_MAP[action])
+        with transaction.atomic():
+            apply_status_change(instance, action)
+            instance.refresh_from_db()
+            if action == "complete":
+                complete_appointment_redemption(instance, actor)
+            elif action == "no-show":
+                cancel_appointment_redemption(instance, actor)
+                schedule_queue_appointment_no_show(instance)
+            create_audit_log(instance, actor, LIFECYCLE_AUDIT_MAP[action])
         return instance

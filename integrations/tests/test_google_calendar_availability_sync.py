@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from django.db import IntegrityError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
@@ -18,6 +18,8 @@ from appointments.serializers import (
 from appointments.utils.constants import AvailabilityOrigin, LeaveScope
 from integrations.google_calendar import availability_sync as sync
 from integrations.google_calendar.calendar_api import (
+    BIOPEAK_IS_APPOINTMENT_SHARED_KEY,
+    BIOPEAK_IS_APPOINTMENT_SHARED_VALUE,
     BIOPEAK_OUTBOUND_PRIVATE_KEY,
     BIOPEAK_OUTBOUND_PRIVATE_VALUE,
 )
@@ -165,6 +167,27 @@ class SpecBuildingTests(SimpleTestCase):
         )
         self.assertIsNone(sync.build_spec_from_event(event))
 
+    def test_appointment_events_are_skipped(self):
+        event = timed_event(
+            "Test appointment",
+            extendedProperties={
+                "shared": {
+                    BIOPEAK_IS_APPOINTMENT_SHARED_KEY: BIOPEAK_IS_APPOINTMENT_SHARED_VALUE,
+                }
+            },
+        )
+        self.assertIsNone(sync.build_spec_from_event(event))
+
+    @override_settings(GOOGLE_CALENDAR_ID="care@biopeak.health")
+    def test_events_organized_by_shared_calendar_are_skipped(self):
+        event = timed_event("Test old invite", organizer={"email": "Care@Biopeak.health"})
+        self.assertIsNone(sync.build_spec_from_event(event))
+
+    @override_settings(GOOGLE_CALENDAR_ID="care@biopeak.health")
+    def test_events_organized_by_someone_else_are_kept(self):
+        event = timed_event("Test meeting", organizer={"email": "friend@example.com"})
+        self.assertIsNotNone(sync.build_spec_from_event(event))
+
     def test_recurring_all_day_stays_a_block(self):
         event = all_day_event("Test all-day repeat", START_DAY, START_DAY, recurrence=rrule("FREQ=DAILY"))
         spec = sync.build_spec_from_event(event)
@@ -233,6 +256,13 @@ class SyncDatabaseTests(TestCase):
             associate=self.associate, center=center, is_active=True
         )
         return center
+
+    @override_settings(GOOGLE_CALENDAR_ID="care@biopeak.health")
+    def test_shared_organizer_connection_is_a_noop(self):
+        self.connection.google_email = "care@biopeak.health"
+        result = self.run_sync([timed_event()])
+        self.assertFalse(result["synced"])
+        self.assertFalse(self.active_blocks().exists())
 
     def test_no_associate_profile_is_a_noop(self):
         self.associate.is_active = False
@@ -417,6 +447,27 @@ class SyncDatabaseTests(TestCase):
         self.run_sync([timed_event("Test one-off")])
         self.assertEqual(self.counts([timed_event("Test one-off", transparency="transparent")]), (0, 0, 1))
 
+    def test_event_turning_into_appointment_is_removed(self):
+        self.run_sync([timed_event("Test invite")])
+        appointment = timed_event(
+            "Test invite",
+            extendedProperties={
+                "shared": {
+                    BIOPEAK_IS_APPOINTMENT_SHARED_KEY: BIOPEAK_IS_APPOINTMENT_SHARED_VALUE,
+                }
+            },
+        )
+        self.assertEqual(self.counts([appointment]), (0, 0, 1))
+        self.assertFalse(self.active_blocks("Test invite").exists())
+
+    @override_settings(GOOGLE_CALENDAR_ID="care@biopeak.health")
+    def test_event_organized_by_shared_calendar_is_removed(self):
+        self.connection.google_email = "staff@example.com"
+        self.run_sync([timed_event("Test invite")])
+        invite = timed_event("Test invite", organizer={"email": "care@biopeak.health"})
+        self.assertEqual(self.counts([invite]), (0, 0, 1))
+        self.assertFalse(self.active_blocks("Test invite").exists())
+
     def test_event_edited_to_unsupported_rule_keeps_imported_rows(self):
         weekly = timed_event("Test weekly", recurrence=rrule("FREQ=WEEKLY;BYDAY=TH"))
         self.run_sync([weekly])
@@ -582,7 +633,7 @@ class MalformedGoogleEventTests(SimpleTestCase):
                 event = timed_event()
                 event["start"]["dateTime"] = bad
                 self.assertIsNone(sync.build_spec_from_event(event))
-                self.assertFalse(sync.event_frees_time(event))
+                self.assertFalse(sync.should_skip_inbound(event))
 
     def test_bad_all_day_date_is_unreadable(self):
         event = {"id": "bad", "start": {"date": "2026-99-99"}, "end": {"date": "2026-10-01"}}

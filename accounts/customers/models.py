@@ -64,6 +64,16 @@ class CustomerProfile(BaseUUIDModel, AbstractUserProfile):
         related_name="created_customer_profiles",
     )
 
+    height_cm = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Height in centimeters.",
+    )
+    weight_kg = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Weight in kilograms.",
+    )
     centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     external_centers_count = models.PositiveBigIntegerField(default=0, editable=False)
     data = models.JSONField(default=dict, null=True, blank=True, editable=False)

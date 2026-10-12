@@ -1,0 +1,26 @@
+meta {
+  name: GET Timeline
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseURL}}/health/timeline/?limit=50&offset=0
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+}
+
+params:query {
+  ~start: 2026-09-01
+  ~end: 2026-10-01
+  ~domain: sleep
+}
+
+docs {
+  Chronological canonical observations with provider provenance. Optional domain
+  is one of the six health domains; limit maximum is 200.
+}

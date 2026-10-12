@@ -262,7 +262,7 @@ class ExternalUserProgramServiceRedemptionHistory(BaseListAPIView):
         therapy_program_service = self.get_therapy_program_service()
         return RedemptionHistory.objects.filter(
             therapy_program_service=therapy_program_service
-        ).select_related("redeemed_by", "redeem_center")
+        ).select_related("redeemed_by", "redeem_center", "appointment")
 
 
 class ExternalUserProgramServiceDetailView(BaseRetrieveAPIView):

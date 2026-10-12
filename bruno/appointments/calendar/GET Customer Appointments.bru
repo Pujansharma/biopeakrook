@@ -1,0 +1,34 @@
+meta {
+  name: GET Customer Appointments
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseURL}}/appointments/customer-appointments/{{customer_profile_id}}/
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~therapy_service_program: 1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Customer-only list for one owned customer_profile_id (all centers).
+  Sorted by status: in_progress → confirmed → checked_in →
+  completed → cancelled (then no_show), then start_datetime ascending.
+  Each list item includes nested center {id, code, name} (booked center).
+  Path UUID must belong to the authenticated customer → else 404.
+  Staff → 403. Use collection auth with customer JWT (customer_access_token).
+
+  Optional therapy_service_program=0|1:
+  - 1 → only appointments with program_service_id set (therapy program)
+  - 0 → only appointments without program_service_id (walk-in / non-program)
+  - omit or junk → all appointments
+}

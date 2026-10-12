@@ -1,0 +1,30 @@
+meta {
+  name: GET Customer Therapy Program Services
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/profiles/{{customer_profile_id}}/programs/therapy-programs/{{therapy_program_id}}/services/
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  List the services within one of a customer's therapy programs.
+  
+  Admin/associate: any customer profile / therapy program.
+  Customer (bearer token): read-only, and only their own profile + program —
+  404s otherwise (no phone param, identity comes from the JWT).
+  
+  Each row includes redeem_code and optional active_appointment (nested) when
+  an open apt (confirmed | checked_in | in_progress) is linked to that
+  program-service line. completed / cancelled / no_show → active_appointment null.
+  
+  Env: customer_profile_id, therapy_program_id. Auth: Login Phone Direct first.
+}

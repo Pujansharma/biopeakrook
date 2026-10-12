@@ -19,6 +19,18 @@ class AppointmentStatus(models.TextChoices):
     NO_SHOW = "no_show", "No Show"
 
 
+# Customer list sort: in_progress → confirmed → checked_in → completed → cancelled
+# (no_show last; not in the FE status strip).
+CUSTOMER_APPOINTMENT_STATUS_SORT_ORDER = (
+    AppointmentStatus.IN_PROGRESS,
+    AppointmentStatus.CONFIRMED,
+    AppointmentStatus.CHECKED_IN,
+    AppointmentStatus.COMPLETED,
+    AppointmentStatus.CANCELLED,
+    AppointmentStatus.NO_SHOW,
+)
+
+
 class AppointmentAuditAction(models.TextChoices):
     CREATE = "create", "Create"
     CHECK_IN = "check_in", "Check In"

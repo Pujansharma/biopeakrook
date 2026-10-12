@@ -1,6 +1,6 @@
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from accounts.associates.models import (
@@ -8,6 +8,13 @@ from accounts.associates.models import (
     AssociateCenterAssignment,
     AssociateRole,
 )
+
+ASSOCIATE_ROLE_CENTER_NAME_UNIQUE = "uniq_associate_role_center_name"
+ASSOCIATE_ROLE_NAME_CLASH = "A role with this name already exists at this center."
+
+
+def is_associate_role_center_name_unique_violation(error: IntegrityError) -> bool:
+    return ASSOCIATE_ROLE_CENTER_NAME_UNIQUE in str(error)
 from accounts.associates.utils.constants import AssociateTitle
 from accounts.associates.utils.db import (
     create_associate_user_account,
@@ -185,6 +192,49 @@ class AssociateRoleSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def validate_name(self, value):
+        return value.strip()
+
+    def validate(self, attrs):
+        name = attrs.get("name")
+        if name is None and self.instance is not None:
+            name = self.instance.name
+        if name:
+            center = self.context.get("center")
+            if center is None and self.instance is not None:
+                center = self.instance.center
+            if center is not None:
+                clash = AssociateRole.objects.filter(center=center, name__iexact=name)
+                if self.instance is not None:
+                    clash = clash.exclude(pk=self.instance.pk)
+                if clash.exists():
+                    raise serializers.ValidationError(
+                        {"name": [ASSOCIATE_ROLE_NAME_CLASH]}
+                    )
+        return attrs
+
+    def create(self, validated_data):
+        try:
+            with transaction.atomic():
+                return super().create(validated_data)
+        except IntegrityError as error:
+            if not is_associate_role_center_name_unique_violation(error):
+                raise
+            raise serializers.ValidationError(
+                {"name": [ASSOCIATE_ROLE_NAME_CLASH]}
+            ) from error
+
+    def update(self, instance, validated_data):
+        try:
+            with transaction.atomic():
+                return super().update(instance, validated_data)
+        except IntegrityError as error:
+            if not is_associate_role_center_name_unique_violation(error):
+                raise
+            raise serializers.ValidationError(
+                {"name": [ASSOCIATE_ROLE_NAME_CLASH]}
+            ) from error
 
 
 class BaseAssociateSerializer(AssociateValidationMixin, BaseModelSerializer):

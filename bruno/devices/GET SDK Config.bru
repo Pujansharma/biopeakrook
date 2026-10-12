@@ -1,0 +1,20 @@
+meta {
+  name: GET SDK Config
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseURL}}/devices/sdk-config/
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+}
+
+docs {
+  Returns the profile-specific ROOK user ID and mobile SDK credential. The SDK
+  secret is distinct from the server API secret.
+}

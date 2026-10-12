@@ -21,7 +21,9 @@ body:json {
     "last_name": "Rao",
     "dob": "1974-01-20",
     "gender": "male",
-    "email_address": "vikram.rao@example.com"
+    "email_address": "vikram.rao@example.com",
+    "height": 175.0,
+    "weight": 78.5
   }
 }
 
@@ -30,12 +32,13 @@ settings {
 }
 
 docs {
-  PUT /pre-consultation/session/patient_baseline/
+  PUT /pre-consultation/session/patient_baseline/v2/
   
   Moderate / Borderline — Priya Sharma (34F Mumbai). Cardiometabolic + PCOS; cluster probe likely (65–80).
   
   Sets profile for medical_history + sexual_health gating. Gender: male, female, other.
+  height = cm, weight = kg (optional; omit keeps, null clears). Persists to CustomerProfile.
   
   Returns 409 when session completed.
-  Reference: docs/pre_consultation/api-pre-consultation.md
+  Reference: docs/pre_consultation/api-pre-consultation-v2.md
 }

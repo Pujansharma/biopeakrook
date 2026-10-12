@@ -1,0 +1,29 @@
+meta {
+  name: PATCH Lead v2 (converted — onboarding sent only)
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseURL}}/leads/v2/{{lead_id}}/
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "is_onboarding_sent": true
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Use after convert-client when profile.is_converted=true. Only is_onboarding_sent is writable.
+}

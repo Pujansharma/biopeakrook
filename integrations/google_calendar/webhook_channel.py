@@ -10,6 +10,7 @@ from integrations.google_calendar import calendar_api
 from integrations.google_calendar.availability_sync import (
     sync_google_events_to_availability_blocks,
 )
+from integrations.google_calendar.connections import connection_is_shared_organizer
 from integrations.google_calendar.db import (
     clear_google_calendar_watch_channel,
     persist_google_calendar_watch_channel,
@@ -96,6 +97,9 @@ def personal_connections_needing_watch_renewal():
 
 
 def ensure_watch_channel_active(connection):
+    # The shared appointment calendar is never watched (same rule as the renewal job)
+    if connection_is_shared_organizer(connection):
+        return
     if not watch_channel_expires_soon(connection):
         return
     old_channel_id = connection.watch_channel_id

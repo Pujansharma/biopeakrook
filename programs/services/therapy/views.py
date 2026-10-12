@@ -84,7 +84,7 @@ class TherapyServicesDetailView(BaseRetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         try:
             super().perform_destroy(instance)
-        except ProtectedError, RestrictedError:
+        except (ProtectedError, RestrictedError):
             self.raise_bad_request("This service cannot be deleted")
 
 
@@ -135,8 +135,7 @@ class ProgramServiceRedemptionHistory(BaseListAPIView):
             RedemptionHistory.objects.filter(
                 therapy_program_service=therapy_program_service
             )
-            .select_related("redeemed_by", "redeem_center")
-            .prefetch_related()
+            .select_related("redeemed_by", "redeem_center", "appointment")
             .order_by("-redeemed_date", "-redeemed_at")
         )
         return qs

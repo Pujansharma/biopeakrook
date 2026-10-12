@@ -15,10 +15,13 @@ from accounts.customers.programs.serializers import (
     CustomerCompositeProgramServiceFilterSerializer,
     CustomerCompositeProgramServiceListSerializer,
     CustomerTherapyProgramSerializer,
+    CustomerTherapyProgramServiceSerializer,
 )
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from accounts.utils.permissions import IsAdminUser, IsAssociateUser, IsCustomerUser
+from appointments.models import Appointment
+from appointments.utils.redemption import OPEN_APPOINTMENT_STATUSES
 from core.utils.exceptions import get_object_or_404
 from core.utils.permissions import ReadOnly
 from core.utils.views.main import (
@@ -27,7 +30,8 @@ from core.utils.views.main import (
     BaseListCreateAPIView,
 )
 from programs.composites.views import CompositeProgramViewMeta
-from programs.models import ProgramService, TherapyProgram
+from programs.models import ProgramService, TherapyProgram, TherapyProgramService
+from programs.services.models import CenterServiceAssignment
 from programs.services.utils.constants import ServiceCategory
 from programs.utils.constants import ProgramType
 
@@ -153,6 +157,50 @@ class CustomerTherapyProgramsView(
         serializer.save(
             customer_profile=self.get_customer_profile(),
             created_by=self.request.user,
+        )
+
+
+class CustomerTherapyProgramServicesView(
+    BaseListAPIView,
+    CustomerProgramViewMeta,
+):
+    permission_classes = [IsAdminUser | IsAssociateUser | (IsCustomerUser & ReadOnly)]
+    serializer_class = CustomerTherapyProgramServiceSerializer
+
+    def get_therapy_program(self) -> TherapyProgram:
+        return get_object_or_404(
+            TherapyProgram.objects.filter(
+                program__customer_profile=self.get_customer_profile(),
+            ),
+            "Therapy program not found with this ID",
+            pk=self.kwargs["program_pk"],
+        )
+
+    def get_queryset(self):
+        therapy_program = self.get_therapy_program()
+        return (
+            TherapyProgramService.objects.filter(
+                program_service__program__therapy_program=therapy_program,
+            )
+            .select_related("program_service__service")
+            .defer("program_service__data")
+            .prefetch_related(
+                Prefetch(
+                    "program_service__service__center_assignments",
+                    queryset=CenterServiceAssignment.objects.filter(
+                        center__redeemable_programs__therapy_program=therapy_program,
+                        is_active=True,
+                    ).select_related("center"),
+                ),
+                Prefetch(
+                    "program_service__appointments",
+                    queryset=Appointment.objects.filter(
+                        status__in=OPEN_APPOINTMENT_STATUSES,
+                    ).select_related("center", "room"),
+                    to_attr="open_appointments",
+                ),
+            )
+            .order_by("-created_at")
         )
 
 

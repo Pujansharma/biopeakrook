@@ -8,3 +8,4 @@ class FeatureTabOptions(models.TextChoices):
     CARE_TEAM = "care_team", "Care Team"
     PERSONALISED_PLAN = "personalised_plan", "Personalised Guidebook"
     WELLNESS = "wellness", "Wellness"
+    WEARABLES = "wearables", "Wearables"

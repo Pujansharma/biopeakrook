@@ -60,7 +60,13 @@ MAILERS = {
 # Django CORS Headers
 
 CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = [*default_headers, "x-center-id", "idempotency-key"]
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "x-center-id",
+    "idempotency-key",
+    "x-customer-profile-id",
+    "x-correlation-id",
+]
 
 PASSWORD_BASE_URL = config("DEV_PASSWORD_BASE_URL", "")
 
@@ -97,12 +103,39 @@ WHATSAPP_API_VERSION = config("DEV_WHATSAPP_API_VERSION", "v23.0")
 WHATSAPP_WABA_ID = config("DEV_WHATSAPP_WABA_ID", None)
 WHATSAPP_APP_ID = config("DEV_WHATSAPP_APP_ID", None)
 WHATSAPP_TEMPLATE_LANGUAGE = config("DEV_WHATSAPP_TEMPLATE_LANGUAGE", "en")
-WHATSAPP_TEMPLATE_CONFIRMED = config(
-    "DEV_WHATSAPP_TEMPLATE_CONFIRMED", "appointment_confirmed"
+
+# Wearables / ROOK
+WEARABLES_ENABLED = config("DEV_WEARABLES_ENABLED", True, cast=bool)
+WEARABLES_REQUIRE_PROFILE_FEATURE = config(
+    "DEV_WEARABLES_REQUIRE_PROFILE_FEATURE", False, cast=bool
 )
-WHATSAPP_TEMPLATE_CANCELLED = config(
-    "DEV_WHATSAPP_TEMPLATE_CANCELLED", "appointment_cancelled"
+TIMELINE_ENABLED = config("DEV_TIMELINE_ENABLED", True, cast=bool)
+RECOVERY_DOMAIN_ENABLED = config("DEV_RECOVERY_DOMAIN_ENABLED", True, cast=bool)
+BODY_DOMAIN_ENABLED = config("DEV_BODY_DOMAIN_ENABLED", True, cast=bool)
+ROOK_ENVIRONMENT = config("DEV_ROOK_ENVIRONMENT", "sandbox")
+ROOK_BASE_URL = config("DEV_ROOK_BASE_URL", "https://api.rook-connect.review")
+ROOK_CLIENT_UUID = config("DEV_ROOK_CLIENT_UUID", "")
+ROOK_SECRET_KEY = config("DEV_ROOK_SECRET_KEY", "")
+ROOK_WEBHOOK_HASH_KEY = config("DEV_ROOK_WEBHOOK_HASH_KEY", "")
+ROOK_SDK_CLIENT_UUID = config("DEV_ROOK_SDK_CLIENT_UUID", "")
+ROOK_SDK_SECRET = config("DEV_ROOK_SDK_SECRET", "")
+ROOK_HISTORICAL_DAYS = config("DEV_ROOK_HISTORICAL_DAYS", 29, cast=int)
+ROOK_SYNC_DELAY_HOURS = config("DEV_ROOK_SYNC_DELAY_HOURS", 48, cast=int)
+ROOK_CONNECT_TIMEOUT_SECONDS = config(
+    "DEV_ROOK_CONNECT_TIMEOUT_SECONDS", 5, cast=int
 )
-WHATSAPP_TEMPLATE_RESCHEDULED = config(
-    "DEV_WHATSAPP_TEMPLATE_RESCHEDULED", "appointment_rescheduled"
+ROOK_READ_TIMEOUT_SECONDS = config("DEV_ROOK_READ_TIMEOUT_SECONDS", 12, cast=int)
+ROOK_ALLOW_UNSIGNED_WEBHOOKS = config(
+    "DEV_ROOK_ALLOW_UNSIGNED_WEBHOOKS", False, cast=bool
+)
+ROOK_AUTHORIZATION_ALLOWED_HOSTS = config(
+    "DEV_ROOK_AUTHORIZATION_ALLOWED_HOSTS",
+    "",
+    cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
+)
+HEALTH_TREND_MINIMUM_OBSERVATIONS = config(
+    "DEV_HEALTH_TREND_MINIMUM_OBSERVATIONS", 7, cast=int
+)
+HEALTH_HISTORICAL_GAP_DAYS = config(
+    "DEV_HEALTH_HISTORICAL_GAP_DAYS", 7, cast=int
 )

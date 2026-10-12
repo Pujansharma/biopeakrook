@@ -21,6 +21,7 @@ from integrations.google_calendar.availability_sync import (
     sync_google_events_to_availability_blocks,
 )
 from integrations.google_calendar.connections import (
+    connection_is_shared_organizer,
     get_google_calendar_connection_for_user,
     google_calendar_connection_is_connected,
     google_calendar_connection_matches_email,
@@ -302,6 +303,12 @@ class GoogleCalendarSyncView(BaseGenericAPIView):
         connection = get_google_calendar_connection_for_user(request.user)
         if not google_calendar_connection_is_connected(connection):
             self.raise_bad_request("Connect Google Calendar before syncing.")
+        if connection_is_shared_organizer(connection):
+            self.raise_bad_request(
+                "This account is the shared Google Calendar connection used "
+                "for appointment sync across all centers. It cannot also be "
+                "used for personal calendar sync."
+            )
 
         ensure_watch_channel_active_or_log(connection)
 
@@ -328,11 +335,7 @@ class GoogleCalendarDisconnectView(BaseGenericAPIView):
         if not google_calendar_connection_is_connected(connection):
             return self.send_response("No Google Calendar connection to disconnect.")
 
-        is_shared_organizer = (
-            GOOGLE_CALENDAR_ID
-            and connection.google_email
-            and connection.google_email.lower() == GOOGLE_CALENDAR_ID.lower()
-        )
+        is_shared_organizer = connection_is_shared_organizer(connection)
         if is_shared_organizer and not user_can_disconnect_shared_organizer(
             request.user
         ):

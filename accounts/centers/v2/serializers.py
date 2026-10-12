@@ -412,6 +412,17 @@ class EquipmentV2Serializer(BaseModelSerializer):
             )
         if "room_id" in attrs:
             attrs["room"] = self._resolve_room(center, attrs.pop("room_id"))
+        name = attrs.get("name")
+        if name is None and self.instance is not None:
+            name = self.instance.name
+        if name:
+            clash = Equipment.objects.filter(center=center, name__iexact=name)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"name": ["An equipment with this name already exists."]}
+                )
         return attrs
 
     def _resolve_equipment_type(self, center, equipment_type_id):

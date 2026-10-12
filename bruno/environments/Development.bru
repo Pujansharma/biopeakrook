@@ -10,6 +10,7 @@ vars {
   product_id: 
   test_kit_provider_id: 
   customer_profile_id: 019e2117-5baf-71bc-ad9e-5619f1dc8dba
+  therapy_program_id: 019ecf76-01ab-76bb-a148-8a63a172deac
   lead_id: 
   home_center_id: 
   center_id: 019e1545-6159-748f-808c-a7b8e2dd1a09
@@ -27,6 +28,7 @@ vars {
   equipment_block_id: 
   equipment_downtime_id: 
   service_id: 019f5162-217e-732e-b8ae-755ca13ae346
+  program_service_id:
   care_team_id: 01a09517-459d-76a2-b2d3-eabf3d628d76
   care_team_block_id: 
   doctor_id: 01a09517-4387-7357-a4fe-28c72874221e
@@ -45,6 +47,8 @@ vars {
   idempotency_key: {{$uuid}}
   whatsapp_webhook_verify_token: 
   whatsapp_hub_signature: 
+  rook_user_id: 
+  rook_webhook_hash: 
 }
 vars:secret [
   access_token,
@@ -52,4 +56,5 @@ vars:secret [
   orange_webhook_secret,
   whatsapp_webhook_verify_token,
   whatsapp_hub_signature
+  rook_webhook_hash
 ]

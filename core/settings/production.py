@@ -103,7 +103,13 @@ LOGGING = {
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://[\w-]+\.biopeak\.com$",
 ]
-CORS_ALLOW_HEADERS = [*default_headers, "x-center-id", "idempotency-key"]
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "x-center-id",
+    "idempotency-key",
+    "x-customer-profile-id",
+    "x-correlation-id",
+]
 
 # Other
 
@@ -141,12 +147,37 @@ WHATSAPP_API_VERSION = config("PRD_WHATSAPP_API_VERSION", "v23.0")
 WHATSAPP_WABA_ID = config("PRD_WHATSAPP_WABA_ID", None)
 WHATSAPP_APP_ID = config("PRD_WHATSAPP_APP_ID", None)
 WHATSAPP_TEMPLATE_LANGUAGE = config("PRD_WHATSAPP_TEMPLATE_LANGUAGE", "en")
-WHATSAPP_TEMPLATE_CONFIRMED = config(
-    "PRD_WHATSAPP_TEMPLATE_CONFIRMED", "appointment_confirmed"
+
+# Wearables / ROOK
+WEARABLES_ENABLED = config("PRD_WEARABLES_ENABLED", False, cast=bool)
+WEARABLES_REQUIRE_PROFILE_FEATURE = config(
+    "PRD_WEARABLES_REQUIRE_PROFILE_FEATURE", True, cast=bool
 )
-WHATSAPP_TEMPLATE_CANCELLED = config(
-    "PRD_WHATSAPP_TEMPLATE_CANCELLED", "appointment_cancelled"
+TIMELINE_ENABLED = config("PRD_TIMELINE_ENABLED", False, cast=bool)
+RECOVERY_DOMAIN_ENABLED = config("PRD_RECOVERY_DOMAIN_ENABLED", True, cast=bool)
+BODY_DOMAIN_ENABLED = config("PRD_BODY_DOMAIN_ENABLED", True, cast=bool)
+ROOK_ENVIRONMENT = config("PRD_ROOK_ENVIRONMENT", "production")
+ROOK_BASE_URL = config("PRD_ROOK_BASE_URL", "https://api.rook-connect.com")
+ROOK_CLIENT_UUID = config("PRD_ROOK_CLIENT_UUID", "")
+ROOK_SECRET_KEY = config("PRD_ROOK_SECRET_KEY", "")
+ROOK_WEBHOOK_HASH_KEY = config("PRD_ROOK_WEBHOOK_HASH_KEY", "")
+ROOK_SDK_CLIENT_UUID = config("PRD_ROOK_SDK_CLIENT_UUID", "")
+ROOK_SDK_SECRET = config("PRD_ROOK_SDK_SECRET", "")
+ROOK_HISTORICAL_DAYS = config("PRD_ROOK_HISTORICAL_DAYS", 29, cast=int)
+ROOK_SYNC_DELAY_HOURS = config("PRD_ROOK_SYNC_DELAY_HOURS", 48, cast=int)
+ROOK_CONNECT_TIMEOUT_SECONDS = config(
+    "PRD_ROOK_CONNECT_TIMEOUT_SECONDS", 5, cast=int
 )
-WHATSAPP_TEMPLATE_RESCHEDULED = config(
-    "PRD_WHATSAPP_TEMPLATE_RESCHEDULED", "appointment_rescheduled"
+ROOK_READ_TIMEOUT_SECONDS = config("PRD_ROOK_READ_TIMEOUT_SECONDS", 12, cast=int)
+ROOK_ALLOW_UNSIGNED_WEBHOOKS = False
+ROOK_AUTHORIZATION_ALLOWED_HOSTS = config(
+    "PRD_ROOK_AUTHORIZATION_ALLOWED_HOSTS",
+    "",
+    cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
+)
+HEALTH_TREND_MINIMUM_OBSERVATIONS = config(
+    "PRD_HEALTH_TREND_MINIMUM_OBSERVATIONS", 7, cast=int
+)
+HEALTH_HISTORICAL_GAP_DAYS = config(
+    "PRD_HEALTH_HISTORICAL_GAP_DAYS", 7, cast=int
 )

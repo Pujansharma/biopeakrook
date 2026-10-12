@@ -1,0 +1,45 @@
+meta {
+  name: PATCH Profile
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseURL}}/profiles/{{customer_profile_id}}/
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Center-ID: {{center_id}}
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "is_onboarding_completed": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Admin or associate. PATCH customer profile at a center (pk = CustomerProfile UUID).
+  Center from X-Center-ID (or ?center_id=).
+
+  Writable onboarding flags (CustomerProfile):
+  - is_onboarding_sent
+  - is_onboarding_completed
+
+  Center home/list serializers still expose is_onboarding_completed read-only.
+  Pre-consult complete also sets is_onboarding_completed.
+
+  Other writable fields (partial): contact_email, phone, first_name, last_name,
+  gender, date_of_birth, image, is_active.
+
+  Auth: bearer {{access_token}}. Env: customer_profile_id, center_id.
+}

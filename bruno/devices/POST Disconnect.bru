@@ -1,0 +1,28 @@
+meta {
+  name: POST Disconnect
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseURL}}/devices/disconnect/
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Customer-Profile-ID: {{customer_profile_id}}
+  X-Correlation-ID: {{$uuid}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "data_source": "Garmin"
+  }
+}
+
+docs {
+  Disconnects and queues upstream revocation when applicable. Stored health
+  history is intentionally retained.
+}

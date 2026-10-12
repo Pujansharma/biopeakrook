@@ -323,10 +323,9 @@ DEV_WHATSAPP_API_VERSION=v23.0
 DEV_WHATSAPP_WABA_ID=
 DEV_WHATSAPP_APP_ID=
 DEV_WHATSAPP_TEMPLATE_LANGUAGE=en
-DEV_WHATSAPP_TEMPLATE_CONFIRMED=appointment_confirmed
-DEV_WHATSAPP_TEMPLATE_CANCELLED=appointment_cancelled
-DEV_WHATSAPP_TEMPLATE_RESCHEDULED=appointment_rescheduled
 ```
+
+Template **names** live in code (`integrations.utils.constants.WHATSAPP_TEMPLATE_BY_EVENT`), not env.
 
 ### Staging / Production
 
@@ -339,19 +338,25 @@ Same keys with `STG_` / `PRD_` prefixes.
 3. Subscribe field: `messages` (delivery / read statuses)
 4. App secret: `*_WHATSAPP_APP_SECRET` (validates `X-Hub-Signature-256`)
 
-Approved Utility templates must match the `*_WHATSAPP_TEMPLATE_*` names and language.
-Templates use **named** body variables. Backend sends `parameter_name` + `text`.
+Approved Utility templates must match `WHATSAPP_TEMPLATE_BY_EVENT` names and `*_WHATSAPP_TEMPLATE_LANGUAGE`.
 
-| Template                | Named params                                                                             |
+Lifecycle Meta names: `appointment_confirmed_template`, `appointment_cancelled_template`, `appointment_rescheduled_template`.
+Reminder / no-show: `therapy_session_reminder`, `therapy_session_no_show`.
+
+Confirmed / cancelled / rescheduled use **named** body variables (`parameter_name` + `text`).
+Reminder / no-show use **positional** `{{1}}`…`{{4}}`.
+
+| Template | Params |
 | ----------------------- | ---------------------------------------------------------------------------------------- |
-| confirmed / rescheduled | `patient_name`, `appointment_date`, `appointment_time`, `service_name`, `clinic_address` |
-| cancelled               | `patient_name`, `appointment_date`, `appointment_time`, `service_name`                   |
+| confirmed / rescheduled | named: `patient_name`, `appointment_date`, `appointment_time`, `service_name`, `clinic_address` |
+| cancelled               | named: `patient_name`, `appointment_date`, `appointment_time`, `service_name` |
+| `therapy_session_reminder` / `therapy_session_no_show` | positional: name, start datetime, service name, clinic address (in person) or Meet link (virtual; fallback text if Meet link missing) |
 
 `clinic_address` value format: `{center.name}, {address lines/city/state/pincode}`.
 
 Retry pending/failed sends: `uv run manage.py process_communication_outbox`
 
-Book / cancel / reschedule enqueue **WhatsApp + Google Calendar** outbox rows. Google is desired-state from the live appointment (insert / patch / delete). Max 2 attempts. Wake: optional SQS (`*_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL`) — one message per enqueue that has work; FIFO queue uses `MessageGroupId=communication-outbox` and 60s dedup. Unset URL = no-op (local: run the management command). User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
+Book / cancel / reschedule enqueue **WhatsApp + Google Calendar** outbox rows. Reminder / no-show are **WhatsApp only**. Google is desired-state from the live appointment (insert / patch / delete). Max 2 attempts. Wake: optional SQS (`*_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL`) — one message per API enqueue that has work; FIFO queue uses `MessageGroupId=communication-outbox` and 60s dedup. Reminder enqueue from the 15‑min sweep does **not** wake SQS (same sweep drains outbox). Unset URL = no-op (local: run the management command). User owns DB migrations for `CommunicationOutbox` / `CommunicationWebhookEvent`.
 
 ```env
 DEV_COMMUNICATION_OUTBOX_WAKE_QUEUE_URL=
@@ -367,13 +372,15 @@ Not in `deploy-aws.yml` (image/service only).
 | Trigger                        | Command                                         | Purpose                                          |
 | ------------------------------ | ----------------------------------------------- | ------------------------------------------------ |
 | SQS wake (on outbox insert)    | `uv run manage.py process_communication_outbox` | First try WhatsApp send + Google Calendar sync   |
-| EventBridge `rate(10 minutes)` | `assets/scripts/sweep_jobs.sh`                  | Retry outbox (attempt 2) + drain exception scans |
+| EventBridge `rate(15 minutes)` | `assets/scripts/sweep_jobs.sh`                  | Reminder enqueue + outbox drain/retry + exception scans + Google watch renewal |
 
 Cap concurrent ECS RunTasks at 1 for the wake consumer. Sweep script:
 
 ```bash
+python manage.py enqueue_appointment_reminders
 python manage.py process_communication_outbox
 python manage.py process_appointment_exception_scans
+python manage.py process_google_calendar_channel_expiry_renewal
 ```
 
 Without the outbox worker/sweep, WhatsApp and Google Calendar rows stay `PENDING`. Without the exception-scan drain, care-team / roster / block writes enqueue scans that never run.

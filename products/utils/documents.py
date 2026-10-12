@@ -163,3 +163,13 @@ def get_allowed_document_type_choices(provider_code: str, product_code: str):
 def get_allowed_document_types(provider_code: str, product_code: str):
     document_types = get_allowed_document_type_choices(provider_code, product_code)
     return list(map(_serialize_document_type, document_types))
+
+
+def get_available_document_types(assigned_document_types: set[str]):
+    return [
+        {
+            **_serialize_document_type(document_type),
+            "exists": document_type.value in assigned_document_types,
+        }
+        for document_type in ServiceDocumentType
+    ]

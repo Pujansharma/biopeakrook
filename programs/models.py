@@ -55,6 +55,8 @@ class Program(BaseUUIDModel):
 
 
 class ProgramService(BaseUUIDModel):
+    data = models.JSONField(default=dict, blank=True, editable=False)
+
     program = models.ForeignKey(
         Program, related_name="program_services", on_delete=models.CASCADE
     )
@@ -219,6 +221,13 @@ class RedemptionHistory(BaseUUIDModel):
     redeem_center = models.ForeignKey(
         "centers.Center", on_delete=models.PROTECT, related_name="redemptions"
     )
+    appointment = models.OneToOneField(
+        "appointments.Appointment",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="redemption_history",
+    )
     redeemed_at = models.DateTimeField(editable=False)
     redeemed_date = models.DateField(default=timezone.localdate)
     quantity = models.PositiveIntegerField(default=0)
@@ -237,6 +246,12 @@ class RedemptionHistory(BaseUUIDModel):
     class Meta:
         ordering = ["-created_at"]
         verbose_name_plural = "Redemption Histories"
+        indexes = [
+            models.Index(
+                fields=["therapy_program_service", "redemption_type"],
+                name="redemption_tps_type_idx",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.pk}"

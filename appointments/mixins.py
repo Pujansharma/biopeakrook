@@ -2,6 +2,7 @@ from django.db.models import Prefetch
 
 from accounts.associates.models import Associate, AssociateCenterAssignment
 from accounts.centers.models import Center
+from accounts.customers.models import CustomerCenterAssignment
 from accounts.utils.constants import UserType
 from accounts.utils.db import get_user_account_type
 from appointments.models import Appointment, CenterCareTeam, CenterCareTeamMember
@@ -109,6 +110,16 @@ class CenterAppointmentsMixin:
                 centers = centers.filter(
                     pk__in=active_assignments.values_list("center_id", flat=True)
                 )
+        elif account_type == UserType.CUSTOMER:
+            if not hasattr(self.request.user, "customer"):
+                centers = centers.none()
+            else:
+                centers = centers.filter(
+                    pk__in=CustomerCenterAssignment.objects.filter(
+                        customer_profile__customer=self.request.user.customer,
+                        is_active=True,
+                    ).values_list("center_id", flat=True)
+                )
         return get_object_or_404(
             centers.distinct(),
             "No valid center found with the given ID.",
@@ -131,6 +142,12 @@ class CenterAppointmentsMixin:
                 "associate_links__role",
             )
         )
+
+    def get_customer_owned_appointment_queryset(self):
+        queryset = self.get_appointment_queryset()
+        if get_user_account_type(self.request.user) != UserType.CUSTOMER:
+            return queryset
+        return queryset.filter(customer_profile__customer_id=self.request.user.pk)
 
 
 class AvailabilityExceptionHooksMixin:

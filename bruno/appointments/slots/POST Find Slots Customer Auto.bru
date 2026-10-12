@@ -1,0 +1,62 @@
+meta {
+  name: POST Find Slots Customer Auto
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseURL}}/centers/{{center_id}}/appointments/slots/
+  body: json
+  auth: inherit
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "customer_profile_id": "{{customer_profile_id}}",
+    "service_id": "{{service_id}}",
+    "modality": "in_person",
+    "date": "{{slot_date}}"
+  }
+}
+
+script:pre-request {
+  let body = req.getBody();
+  if (typeof body === 'string') {
+    body = JSON.parse(body);
+  }
+  body = body || {};
+
+  const customerProfileId = (bru.getEnvVar('customer_profile_id') || '').trim();
+  const serviceId = (bru.getEnvVar('service_id') || '').trim();
+  if (customerProfileId) body.customer_profile_id = customerProfileId;
+  if (serviceId) body.service_id = serviceId;
+  const slotDate = (bru.getEnvVar('slot_date') || '').trim();
+  if (slotDate) body.date = slotDate;
+
+  delete body.preferred;
+  req.setBody(body);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 30000
+}
+
+docs {
+  Same URL as staff Find Slots. Use customer JWT (customer_access_token).
+  Do NOT send preferred — key present → 400 "Customers cannot send preferred…".
+  Server least-busy auto-assigns doctor/specialty/room/equipment from service maps.
+  Own customer_profile_id only. Cap 200/day.
+  date window (customer only, rolling local): tomorrow … today+7
+  (e.g. today 6 Oct → 7–13 Oct). Outside → 400
+  "Date must be between tomorrow and 7 days from today."
+  Optional program_service_id: when set, that therapy line's package expiry must be
+  on/after date. When omitted, same check against matching active therapy lines for
+  customer+service (blocks only if every line expires before date).
+  Error: "This package expires on <D Mon YYYY>. Please choose a date on or before it."
+  Response specialty may be object or array; book with specialty_id UUID | UUID[].
+}

@@ -1,0 +1,54 @@
+meta {
+  name: GET App Download Redirect
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseURL}}/app/?src={{app_download_src}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  src: {{app_download_src}}
+  ~campaign: {{app_download_campaign}}
+  ~platform: ios
+}
+
+headers {
+  Accept: text/html,application/xhtml+xml
+  ~User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15
+}
+
+settings {
+  encodeUrl: true
+  followRedirects: false
+}
+
+docs {
+  Public QR / store redirect.
+
+  Method: GET
+  Path: /app/
+  Source: integrations.communications.app_download.AppDownloadRedirectView
+  Auth: none
+  Throttle: app_download 60/min (anon IP)
+
+  Query:
+  - src (optional) — QR placement / attribution
+  - campaign (optional)
+  - platform (optional) — `android` | `ios` overrides UA (chooser badges use this)
+
+  Behavior:
+  - Android UA → 302 Play Store (`entry=ua`)
+  - iOS UA (iphone/ipad/ipod or macintosh+mobile) → 302 App Store (`entry=ua`)
+  - Missing / unknown UA → 200 HTML chooser (`entry=chooser`; store hrefs re-hit /app/?platform=…)
+  - Badge re-hit with platform=ios|android → 302 store (`entry=platform_query`)
+  - Best-effort AppDownloadClick insert before redirect/HTML (DB fail still redirects)
+  - Bot/crawler UAs skip insert (still redirect/HTML)
+  - Throttle key = last X-Forwarded-For hop (ALB); LocMem soft limit (no Redis)
+  - Shipped QR https://biopeak.app/scan must land on this /app/ (no BE /scan)
+
+  Tip: set User-Agent header to test platform branch; keep followRedirects false to inspect Location.
+}

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, time, timedelta
 from typing import NamedTuple
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -19,6 +20,7 @@ from appointments.utils.exceptions import (
 from appointments.utils.operations import invalidate_operations_cache
 from core.utils.log import logger
 from integrations.google_calendar import calendar_api
+from integrations.google_calendar.connections import connection_is_shared_organizer
 from integrations.google_calendar.tokens import get_valid_access_token
 
 SYNC_WINDOW_DAYS = 30
@@ -146,17 +148,33 @@ def _is_leave_event(event: dict):
     return event.get("eventType") == "outOfOffice" or "date" in event.get("start", {})
 
 
-def event_frees_time(event: dict):
-    # True when Google itself says the event no longer blocks the person's time
+def _google_marks_free(event: dict):
+    # Google itself says the event no longer blocks the person's time
     return (
         event.get("status") == "cancelled"
         or event.get("transparency") == "transparent"
-        or calendar_api.event_is_biopeak_outbound(event)
         or _is_declined_by_self(event)
     )
 
+
+def _is_biopeak_event(event: dict):
+    return (
+        calendar_api.event_is_biopeak_outbound(event)
+        or calendar_api.event_is_appointment(event)
+        or calendar_api.event_is_organized_by(
+            event, getattr(settings, "GOOGLE_CALENDAR_ID", None)
+        )
+    )
+
+
+def should_skip_inbound(event: dict):
+    # Skipped events take the "gone" path in sync, so rows imported from them
+    # earlier are removed. Unreadable events are different: they keep their rows.
+    return _google_marks_free(event) or _is_biopeak_event(event)
+
+
 def build_spec_from_event(event: dict):
-    if event_frees_time(event):
+    if should_skip_inbound(event):
         return None
 
     bounds = _event_bounds(event)
@@ -456,6 +474,9 @@ def _sync_kind(
 
 
 def sync_google_events_to_availability_blocks(user, connection):
+    if connection_is_shared_organizer(connection):
+        return {"synced": False, "reason": "The shared appointment calendar is never synced as availability"}
+
     associate = Associate.objects.filter(pk=user.pk, is_active=True).first()
     if associate is None:
         return {"synced": False, "reason": "No active associate profile to sync availability for."}
@@ -479,7 +500,7 @@ def sync_google_events_to_availability_blocks(user, connection):
         spec = build_spec_from_event(event)
         if spec is not None:
             specs_by_kind[spec["kind"]][spec["google_event_id"]] = spec
-        elif not event_frees_time(event):
+        elif not should_skip_inbound(event):
             unreadable_event_ids.add(event["id"])
 
     created = replaced = removed = 0

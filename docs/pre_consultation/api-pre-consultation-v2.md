@@ -38,7 +38,7 @@ Remixes order and merges symptom into concern probe. Shared layers keep v1 GET p
 
 | v2-only / branched endpoint | Diff vs v1 |
 |---|---|
-| `patient_baseline/v2` | No address / emergency contact; PUT → `patient_goals_priorities` |
+| `patient_baseline/v2` | Height/weight optional (cm/kg); address optional; PUT → `patient_goals_priorities` |
 | `patient_goals_priorities/v2` | GET omits `previous_layer`; PUT → `patient_category` |
 | `PUT patient_concern/v2` | Same body as v1; PUT → `patient_concern_probe` (skip symptom) |
 | `patient_concern_probe/v2` | Merged symptom + probe GET/PUT; PUT → `patient_medical_history_context` |
@@ -120,7 +120,7 @@ Same as v1. One session per user. Starts or resumes.
 
 ### GET `/session/patient_baseline/v2/`
 
-Demographics only. No address. No emergency contact.
+Demographics + height/weight (cm / kg). Address optional on response. No emergency contact.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -129,10 +129,18 @@ Demographics only. No address. No emergency contact.
 | `dob` | date \| null | `YYYY-MM-DD` |
 | `gender` | string \| null | `male`, `female`, `other` |
 | `email_address` | string | |
+| `height` | number \| null | centimeters |
+| `weight` | number \| null | kilograms |
+| `address` | object | may be empty |
 
 ### PUT `/session/patient_baseline/v2/`
 
-All fields required except `last_name` (default `""`). Does not write address or emergency contact. Advances `current_layer` to `patient_goals_priorities`.
+All fields required except `last_name` (default `""`), `address` (optional), and `height` / `weight` (optional). Units fixed: `height` = cm, `weight` = kg. Omit → keep stored value; `null` → clear. Persists to `CustomerProfile.height_cm` / `weight_kg`. Advances `current_layer` to `patient_goals_priorities`.
+
+| Field | Type | Constraints |
+|---|---|---|
+| `height` | number \| null | optional; 30–300 cm when set; omit keeps; `null` clears |
+| `weight` | number \| null | optional; 1–500 kg when set; omit keeps; `null` clears |
 
 | Status | Body |
 |---|---|

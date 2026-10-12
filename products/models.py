@@ -5,6 +5,7 @@ from accounts.utils import get_user_model
 from core.utils.fields import PhoneNumberField
 from core.utils.models import BaseUUIDModel, BaseModel
 from products.utils.constants import ProviderCallbackFunction, ProductCallbackFunction
+from programs.services.utils.constants import ServiceDocumentType, ServiceDocumentCategory
 
 User = get_user_model()
 
@@ -89,4 +90,45 @@ class Product(BaseUUIDModel):
         ordering = ["-created_at"]
 
     def __str__(self):
+        return f"{self.pk}"
+
+
+class DocumentCategory(BaseUUIDModel):
+    name = models.CharField()
+    description = models.TextField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_document_categories",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.pk}"
+
+
+class DocumentCategoryAssignment(BaseUUIDModel):
+    category = models.ForeignKey(
+        DocumentCategory, on_delete=models.CASCADE, related_name="assignments"
+    )
+    document_type = models.CharField(choices=ServiceDocumentType)
+    document_categories = ArrayField(
+        base_field=models.CharField(choices=ServiceDocumentCategory),
+        size=len(ServiceDocumentCategory),
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category", "document_type"],
+                name="document_category_assignment_unique_category_document_type",
+            ),
+        ]
+
+    def __str__(self) -> str:
         return f"{self.pk}"
